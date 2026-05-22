@@ -323,7 +323,7 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
     // Agentic loop: Claude may call web_search one or more times before replying
     const loopMessages = [...allMessages];
     let response = await client.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-opus-4-7",
       max_tokens: 2048,
       system: systemPrompt,
       messages: loopMessages,
@@ -376,7 +376,7 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
       });
 
       response = await client.messages.create({
-        model: "claude-opus-4-5",
+        model: "claude-opus-4-7",
         max_tokens: 2048,
         system: systemPrompt,
         messages: loopMessages,
