@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "AI Gaming Companion"
+version = "1.0.0"
+id = "artifacts/gaming-companion"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20618
+
+[services.development]
+run = "pnpm --filter @workspace/gaming-companion run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/gaming-companion", "run", "build" ]
+publicDir = "artifacts/gaming-companion/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20618"
+BASE_PATH = "/"

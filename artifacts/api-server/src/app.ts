@@ -1,8 +1,10 @@
 import express, { type Express } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
-import router from "./routes";
-import { logger } from "./lib/logger";
+import router from "./routes/index.js";
+import { logger } from "./lib/logger.js";
+import { loadConfig } from "./lib/config.js";
+import { startAutoCapture } from "./lib/screenshot-state.js";
 
 const app: Express = express();
 
@@ -26,9 +28,18 @@ app.use(
   }),
 );
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
+
+const config = loadConfig();
+if (config.autoCapture) {
+  startAutoCapture(config.screenshotInterval);
+  logger.info(
+    { interval: config.screenshotInterval },
+    "Auto screenshot capture started"
+  );
+}
 
 export default app;

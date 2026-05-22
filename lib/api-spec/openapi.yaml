@@ -3,13 +3,21 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: API specification for AI Gaming Companion
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: game
+    description: Game detection operations
+  - name: screenshot
+    description: Screenshot capture operations
+  - name: chat
+    description: AI chat operations
+  - name: settings
+    description: App settings operations
 paths:
   /healthz:
     get:
@@ -24,6 +32,119 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /game/detect:
+    get:
+      operationId: detectGame
+      tags: [game]
+      summary: Detect running game
+      description: Reads running processes and returns the detected game name
+      responses:
+        "200":
+          description: Game detection result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GameDetection"
+
+  /screenshot/capture:
+    post:
+      operationId: captureScreenshot
+      tags: [screenshot]
+      summary: Capture a screenshot
+      description: Takes a screenshot of the primary monitor and returns it as base64
+      responses:
+        "200":
+          description: Screenshot captured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Screenshot"
+        "500":
+          description: Failed to capture screenshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /screenshot/latest:
+    get:
+      operationId: getLatestScreenshot
+      tags: [screenshot]
+      summary: Get the latest auto-captured screenshot
+      description: Returns the most recently auto-captured screenshot stored in memory
+      responses:
+        "200":
+          description: Latest screenshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Screenshot"
+
+  /chat/message:
+    post:
+      operationId: sendChatMessage
+      tags: [chat]
+      summary: Send a chat message to the AI assistant
+      description: Sends a user message along with game context and optional screenshot to Claude
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatMessageInput"
+      responses:
+        "200":
+          description: AI response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatResponse"
+        "400":
+          description: Bad request (e.g. missing API key)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: AI API error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get current settings
+      description: Returns current app settings (API key is masked)
+      responses:
+        "200":
+          description: Current settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    post:
+      operationId: saveSettings
+      tags: [settings]
+      summary: Save settings
+      description: Saves API key and screenshot interval to local config file
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsInput"
+      responses:
+        "200":
+          description: Settings saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +155,103 @@ components:
       required:
         - status
 
+    GameDetection:
+      type: object
+      properties:
+        detected:
+          type: boolean
+        gameName:
+          type: ["string", "null"]
+        processName:
+          type: ["string", "null"]
+        confidence:
+          type: string
+          enum: [high, medium, low, none]
+      required:
+        - detected
+        - gameName
+        - processName
+        - confidence
+
+    Screenshot:
+      type: object
+      properties:
+        imageData:
+          type: ["string", "null"]
+          description: Base64 encoded PNG image data
+        capturedAt:
+          type: ["string", "null"]
+          description: ISO timestamp when screenshot was taken
+        available:
+          type: boolean
+      required:
+        - imageData
+        - capturedAt
+        - available
+
+    ChatMessageInput:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 1
+        gameName:
+          type: ["string", "null"]
+          description: Currently detected game name for context
+        includeScreenshot:
+          type: boolean
+          description: Whether to attach the latest screenshot to the message
+      required:
+        - message
+
+    ChatResponse:
+      type: object
+      properties:
+        reply:
+          type: string
+        model:
+          type: string
+        tokensUsed:
+          type: integer
+      required:
+        - reply
+        - model
+        - tokensUsed
+
+    Settings:
+      type: object
+      properties:
+        hasApiKey:
+          type: boolean
+          description: Whether a Claude API key is configured (never returns the actual key)
+        screenshotInterval:
+          type: integer
+          description: Auto-screenshot interval in seconds
+        autoCapture:
+          type: boolean
+          description: Whether auto screenshot capture is enabled
+      required:
+        - hasApiKey
+        - screenshotInterval
+        - autoCapture
+
+    SettingsInput:
+      type: object
+      properties:
+        apiKey:
+          type: ["string", "null"]
+          description: Claude API key (pass null to keep existing)
+        screenshotInterval:
+          type: ["integer", "null"]
+          description: Auto-screenshot interval in seconds (10-300)
+        autoCapture:
+          type: ["boolean", "null"]
+      required: []
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
