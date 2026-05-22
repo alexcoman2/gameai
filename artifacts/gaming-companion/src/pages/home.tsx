@@ -57,8 +57,7 @@ export default function Home() {
   const historyLoadedRef = useRef<Set<string>>(new Set());
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [watchMode, setWatchMode] = useState(false);
-  const [watchInsight, setWatchInsight] = useState<string | null>(null);
-  const [watchLoading, setWatchLoading] = useState(false);
+  const [watchScreenshot, setWatchScreenshot] = useState<string | null>(null);
   const [watchInterval, setWatchInterval] = useState<10 | 30 | 60>(30);
 
   const isElectron = !!(window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron;
@@ -211,44 +210,29 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [isElectron, settings?.autoCapture, settings?.screenshotInterval]);
 
-  // Watch mode: silently scan the screen every 30s and surface insights
+  // Watch mode: silently refresh a screenshot on interval — no AI calls,
+  // no notifications. The captured frame is attached automatically when
+  // the user sends their next message.
   useEffect(() => {
     if (!isElectron || !watchMode || !electronAPI?.captureScreenshot) return;
     const INTERVAL_MS = watchInterval * 1000;
     let active = true;
 
-    const runScan = async () => {
+    const capture = async () => {
       if (!active) return;
-      setWatchLoading(true);
       try {
         const dataUrl = await electronAPI.captureScreenshot!();
-        if (!dataUrl || !active) return;
-        const gameName =
-          (window as Window & { __gameNameOverride__?: string }).__gameNameOverride__ ||
-          undefined;
-        const res = await fetch("/api/chat/watch", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageData: dataUrl, gameName }),
-        });
-        if (!res.ok || !active) return;
-        const data = (await res.json()) as { insight: string | null; hasInsight: boolean };
-        if (data.hasInsight && data.insight) {
-          setWatchInsight(data.insight);
-        }
+        if (dataUrl && active) setWatchScreenshot(dataUrl);
       } catch {
-        // Silent fail — network error or capture denied
-      } finally {
-        if (active) setWatchLoading(false);
+        // Silent fail — screen capture may be denied
       }
     };
 
-    runScan();
-    const timer = setInterval(runScan, INTERVAL_MS);
+    capture();
+    const timer = setInterval(capture, INTERVAL_MS);
     return () => {
       active = false;
       clearInterval(timer);
-      setWatchLoading(false);
     };
   }, [isElectron, watchMode, watchInterval]);
 
@@ -387,10 +371,10 @@ export default function Home() {
 
     // Electron: use IPC-captured screenshot; Web: fall back to server-side capture
     const latestImgData = isElectron
-      ? electronAutoScreenshot
+      ? (watchMode && watchScreenshot ? watchScreenshot : electronAutoScreenshot)
       : (latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : null);
-    // Auto-include latest screenshot when auto-capture is on, or when user manually toggled
-    const autoCapturing = settings?.autoCapture && !!latestImgData;
+    // Auto-include latest screenshot when auto-capture/watch is on, or when user manually toggled
+    const autoCapturing = (settings?.autoCapture || (isElectron && watchMode)) && !!latestImgData;
     const sentScreenshot = (includeScreenshot || autoCapturing) ? (pendingScreenshot || latestImgData) : null;
     const shouldSendScreenshot = !!(includeScreenshot || autoCapturing);
 
@@ -644,9 +628,7 @@ export default function Home() {
                       : "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10"
                   }`}
                 >
-                  {watchLoading ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : watchMode ? (
+                  {watchMode ? (
                     <Radio className="w-3 h-3 animate-pulse" />
                   ) : (
                     <Eye className="w-3 h-3" />
@@ -711,21 +693,6 @@ export default function Home() {
             )}
           </div>
         </div>
-
-        {watchInsight && (
-          <div className="mx-4 mt-3 flex items-start gap-3 p-3 bg-amber-400/5 border border-amber-400/40 font-mono text-xs">
-            <Radio className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5 animate-pulse" />
-            <span className="text-amber-300/90 flex-1 leading-relaxed tracking-wide">{watchInsight}</span>
-            <button
-              type="button"
-              onClick={() => setWatchInsight(null)}
-              className="text-amber-400/50 hover:text-amber-400 transition-colors shrink-0"
-              title="Dismiss"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
 
         <div
           ref={scrollRef}
