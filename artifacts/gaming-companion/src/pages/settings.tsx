@@ -4,17 +4,15 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { useGetSettings, getGetSettingsQueryKey, useSaveSettings } from "@workspace/api-client-react";
-import { Loader2, Save, Terminal, ShieldAlert, Zap } from "lucide-react";
+import { Loader2, Save, Terminal, Zap } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 const settingsSchema = z.object({
-  apiKey: z.string().optional(),
   screenshotInterval: z.number().min(10).max(300),
   autoCapture: z.boolean(),
 });
@@ -34,16 +32,14 @@ export default function Settings() {
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
-      apiKey: "",
-      screenshotInterval: 60,
-      autoCapture: false,
+      screenshotInterval: 30,
+      autoCapture: true,
     },
   });
 
   useEffect(() => {
     if (settings) {
       form.reset({
-        apiKey: "",
         screenshotInterval: settings.screenshotInterval,
         autoCapture: settings.autoCapture,
       });
@@ -52,29 +48,19 @@ export default function Settings() {
 
   const onSubmit = async (data: SettingsFormValues) => {
     try {
-      const payload: any = {
-        screenshotInterval: data.screenshotInterval,
-        autoCapture: data.autoCapture,
-      };
-      
-      if (data.apiKey && data.apiKey.trim() !== "") {
-        payload.apiKey = data.apiKey;
-      }
-
-      await saveMutation.mutateAsync({ data: payload });
-      
+      await saveMutation.mutateAsync({
+        data: {
+          screenshotInterval: data.screenshotInterval,
+          autoCapture: data.autoCapture,
+        }
+      });
       queryClient.invalidateQueries({ queryKey: getGetSettingsQueryKey() });
-      
       toast({
         title: "SYSTEM UPDATED",
         description: "Configuration parameters saved successfully.",
         className: "bg-card border-primary/50 font-mono text-primary",
       });
-      
-      // Clear the api key field after saving
-      form.setValue("apiKey", "");
-      
-    } catch (error) {
+    } catch {
       toast({
         title: "UPDATE FAILED",
         description: "Unable to write configuration to memory.",
@@ -104,108 +90,73 @@ export default function Settings() {
           <div className="absolute top-0 left-0 w-1 h-full bg-primary/80"></div>
           <CardHeader>
             <CardTitle className="font-mono flex items-center gap-2 text-lg">
-              <ShieldAlert className="w-5 h-5 text-muted-foreground" />
-              AUTHENTICATION
+              <Zap className="w-5 h-5 text-muted-foreground" />
+              TELEMETRY MODULE
             </CardTitle>
             <CardDescription className="font-mono text-xs uppercase tracking-wider">
-              AI Core Access Credentials
+              Screen capture settings for AI context
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                <div className="space-y-6">
-                  <FormField
-                    control={form.control}
-                    name="apiKey"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="font-mono text-xs uppercase tracking-widest text-primary/80">Claude API Key</FormLabel>
-                        <FormControl>
-                          <Input 
-                            type="password"
-                            placeholder={settings?.hasApiKey ? "•••••••••••••••••••••••• (Configured)" : "ENTER API KEY..."} 
-                            className="font-mono rounded-none bg-background border-border focus-visible:border-primary placeholder:text-muted-foreground/50 h-12"
-                            {...field} 
-                          />
-                        </FormControl>
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                <FormField
+                  control={form.control}
+                  name="autoCapture"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-row items-center justify-between rounded-none border border-border p-4 bg-background/50">
+                      <div className="space-y-1">
+                        <FormLabel className="font-mono text-sm tracking-widest text-foreground">AUTO-CAPTURE VISUALS</FormLabel>
                         <FormDescription className="font-mono text-[10px] uppercase">
-                          {settings?.hasApiKey 
-                            ? "Status: ACTIVE. Leave blank to retain current key."
-                            : "Status: UNAUTHORIZED. Key required for operation."}
+                          Periodically capture screen state for AI context
                         </FormDescription>
-                        <FormMessage className="font-mono text-xs" />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                      </div>
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          className="data-[state=checked]:bg-primary"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
 
-                <div className="w-full h-px bg-border my-8"></div>
-
-                <div className="space-y-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Zap className="w-5 h-5 text-muted-foreground" />
-                    <h3 className="font-mono text-lg font-semibold tracking-tight">TELEMETRY MODULE</h3>
-                  </div>
-
-                  <FormField
-                    control={form.control}
-                    name="autoCapture"
-                    render={({ field }) => (
-                      <FormItem className="flex flex-row items-center justify-between rounded-none border border-border p-4 bg-background/50">
+                <FormField
+                  control={form.control}
+                  name="screenshotInterval"
+                  render={({ field }) => (
+                    <FormItem className={`space-y-4 rounded-none border border-border p-4 bg-background/50 transition-opacity ${!form.watch("autoCapture") ? "opacity-50 pointer-events-none" : ""}`}>
+                      <div className="flex items-center justify-between">
                         <div className="space-y-1">
-                          <FormLabel className="font-mono text-sm tracking-widest text-foreground">AUTO-CAPTURE VISUALS</FormLabel>
+                          <FormLabel className="font-mono text-sm tracking-widest">CAPTURE INTERVAL</FormLabel>
                           <FormDescription className="font-mono text-[10px] uppercase">
-                            Periodically capture screen state for AI context
+                            Delay between automatic captures
                           </FormDescription>
                         </div>
-                        <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            className="data-[state=checked]:bg-primary"
-                          />
-                        </FormControl>
-                      </FormItem>
-                    )}
-                  />
-
-                  <FormField
-                    control={form.control}
-                    name="screenshotInterval"
-                    render={({ field }) => (
-                      <FormItem className={`space-y-4 rounded-none border border-border p-4 bg-background/50 transition-opacity ${!form.watch("autoCapture") ? 'opacity-50 pointer-events-none' : ''}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-1">
-                            <FormLabel className="font-mono text-sm tracking-widest">CAPTURE INTERVAL</FormLabel>
-                            <FormDescription className="font-mono text-[10px] uppercase">
-                              Delay between automatic captures
-                            </FormDescription>
-                          </div>
-                          <div className="font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-3 py-1">
-                            {field.value}s
-                          </div>
+                        <div className="font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-3 py-1">
+                          {field.value}s
                         </div>
-                        <FormControl>
-                          <Slider
-                            min={10}
-                            max={300}
-                            step={10}
-                            value={[field.value]}
-                            onValueChange={(vals) => field.onChange(vals[0])}
-                            disabled={!form.watch("autoCapture")}
-                            className="py-4"
-                          />
-                        </FormControl>
-                        <FormMessage className="font-mono text-xs" />
-                      </FormItem>
-                    )}
-                  />
-                </div>
+                      </div>
+                      <FormControl>
+                        <Slider
+                          min={10}
+                          max={300}
+                          step={10}
+                          value={[field.value]}
+                          onValueChange={(vals) => field.onChange(vals[0])}
+                          disabled={!form.watch("autoCapture")}
+                          className="py-4"
+                        />
+                      </FormControl>
+                      <FormMessage className="font-mono text-xs" />
+                    </FormItem>
+                  )}
+                />
 
                 <div className="pt-4 flex justify-end">
-                  <Button 
-                    type="submit" 
+                  <Button
+                    type="submit"
                     disabled={saveMutation.isPending}
                     className="font-mono rounded-none uppercase tracking-widest h-12 px-8 bg-primary text-primary-foreground hover:bg-primary/90"
                   >

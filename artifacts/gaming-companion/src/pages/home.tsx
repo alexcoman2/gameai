@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect } from "react";
-import { Link } from "wouter";
 import { 
   useDetectGame, getDetectGameQueryKey,
   useCaptureScreenshot,
@@ -9,10 +8,10 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Camera, Send, AlertCircle, Loader2, Maximize2, X, MessageSquare } from "lucide-react";
+import { Camera, Send, Loader2, Maximize2, X, MessageSquare } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
@@ -26,7 +25,7 @@ export default function Home() {
   
   const scrollRef = useRef<HTMLDivElement>(null);
   
-  const { data: settings, isLoading: isLoadingSettings } = useGetSettings({
+  const { data: settings } = useGetSettings({
     query: { queryKey: getGetSettingsQueryKey() }
   });
 
@@ -122,38 +121,6 @@ export default function Home() {
       });
     }
   };
-
-  if (isLoadingSettings) {
-    return (
-      <div className="flex-1 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (settings && !settings.hasApiKey) {
-    return (
-      <div className="flex-1 flex items-center justify-center p-6">
-        <Card className="max-w-md w-full border-destructive/50 bg-destructive/10">
-          <CardContent className="pt-6 text-center space-y-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-destructive/20 text-destructive mb-4">
-              <AlertCircle className="w-8 h-8" />
-            </div>
-            <h2 className="text-2xl font-mono text-destructive tracking-tight">API KEY REQUIRED</h2>
-            <p className="text-muted-foreground text-sm font-mono leading-relaxed">
-              The AI core cannot be accessed without proper authorization. 
-              Please provide a valid Claude API key in the settings panel to establish connection.
-            </p>
-            <Link href="/settings" className="block">
-              <Button className="w-full font-mono uppercase tracking-widest bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-none border border-destructive-foreground/20">
-                Configure Settings
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="flex-1 flex flex-col p-4 md:p-6 gap-4 h-[calc(100vh-73px)]">

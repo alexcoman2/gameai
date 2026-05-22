@@ -3,7 +3,6 @@ import path from "path";
 import os from "os";
 
 export interface AppConfig {
-  apiKey: string | null;
   screenshotInterval: number;
   autoCapture: boolean;
 }
@@ -12,7 +11,6 @@ const CONFIG_DIR = path.join(os.homedir(), ".gaming-companion");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
 const DEFAULT_CONFIG: AppConfig = {
-  apiKey: null,
   screenshotInterval: 30,
   autoCapture: true,
 };
@@ -23,7 +21,6 @@ export function loadConfig(): AppConfig {
       const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
       const parsed = JSON.parse(raw) as Partial<AppConfig>;
       return {
-        apiKey: parsed.apiKey ?? null,
         screenshotInterval:
           typeof parsed.screenshotInterval === "number"
             ? Math.max(10, Math.min(300, parsed.screenshotInterval))
@@ -43,7 +40,6 @@ export function loadConfig(): AppConfig {
 export function saveConfig(updates: Partial<AppConfig>): AppConfig {
   const current = loadConfig();
   const next: AppConfig = {
-    apiKey: updates.apiKey !== undefined ? updates.apiKey : current.apiKey,
     screenshotInterval:
       updates.screenshotInterval !== undefined
         ? Math.max(10, Math.min(300, updates.screenshotInterval))

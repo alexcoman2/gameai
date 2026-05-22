@@ -1,6 +1,5 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { loadConfig } from "../lib/config.js";
 import { getLatestScreenshot } from "../lib/screenshot-state.js";
 
 const router = Router();
@@ -17,18 +16,13 @@ router.post("/chat/message", async (req, res) => {
     return;
   }
 
-  const config = loadConfig();
-  if (!config.apiKey) {
-    res
-      .status(400)
-      .json({
-        error:
-          "Claude API key is not configured. Please go to Settings to add your API key.",
-      });
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: "AI service is not configured on the server." });
     return;
   }
 
-  const client = new Anthropic({ apiKey: config.apiKey });
+  const client = new Anthropic({ apiKey });
 
   const gameContext = gameName
     ? `The user is currently playing: ${gameName}.`
