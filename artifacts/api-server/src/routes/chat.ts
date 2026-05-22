@@ -261,7 +261,7 @@ HOW YOU GIVE ADVICE:
 
 SPOILERS: Warn before revealing story spoilers and check if the player wants them. Gameplay spoilers (enemy locations, shortcuts, item locations) are fair game — that's what the player is here for.
 
-SOUL / PROGRESSION AWARENESS: For games with scarce resources (souls, currency, limited items), factor current resource levels from the watch log into your advice. If the player is low on health with a lot to lose, say so.`;
+RESOURCE AWARENESS: Factor the player's current state from the watch log into your advice — health, stamina, currency, ammo, cooldowns, or whatever resource matters in this game. If they're in a risky state (low health, about to lose progress, insufficient resources for the next challenge), flag it and advise accordingly before they walk into trouble.`;
 
 
   try {
