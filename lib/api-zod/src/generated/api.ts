@@ -68,7 +68,11 @@ export const SendChatMessageBody = zod.object({
   "history": zod.array(zod.object({
   "role": zod.enum(['user', 'assistant']),
   "content": zod.string()
-}).describe('A single turn in the conversation history (text only, no images)')).optional().describe('Full conversation history — when provided the hosted server is stateless (no disk writes)')
+}).describe('A single turn in the conversation history (text only, no images)')).optional().describe('Full conversation history — when provided the hosted server is stateless (no disk writes)'),
+  "watchLog": zod.array(zod.object({
+  "time": zod.string().describe('Formatted time string (e.g. \"10:32 PM\")'),
+  "note": zod.string().describe('One-sentence description of game state at this moment')
+}).describe('A single passive observation recorded by watch mode')).optional().describe('Passive screen observations collected by watch mode — injected into the system prompt so Claude knows what happened between messages')
 })
 
 export const SendChatMessageResponse = zod.object({

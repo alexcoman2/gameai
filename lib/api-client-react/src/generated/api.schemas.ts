@@ -76,6 +76,16 @@ export interface HistoryEntry {
   content: string;
 }
 
+/**
+ * A single passive observation recorded by watch mode
+ */
+export interface WatchLogEntry {
+  /** Formatted time string (e.g. "10:32 PM") */
+  time: string;
+  /** One-sentence description of game state at this moment */
+  note: string;
+}
+
 export interface ChatMessageInput {
   /** @minLength 1 */
   message: string;
@@ -98,6 +108,8 @@ export interface ChatMessageInput {
   sessionId?: string | null;
   /** Full conversation history — when provided the hosted server is stateless (no disk writes) */
   history?: HistoryEntry[];
+  /** Passive screen observations collected by watch mode — injected into the system prompt so Claude knows what happened between messages */
+  watchLog?: WatchLogEntry[];
 }
 
 export interface ChatResponse {

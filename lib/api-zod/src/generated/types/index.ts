@@ -25,3 +25,4 @@ export * from './sessionMessages';
 export * from './sessionUpdate';
 export * from './settings';
 export * from './settingsInput';
+export * from './watchLogEntry';
