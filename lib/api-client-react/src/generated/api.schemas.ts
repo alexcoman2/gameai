@@ -128,6 +128,7 @@ export interface Session {
   messageCount: number;
   /** @nullable */
   gameContext: string | null;
+  diskUsageBytes: number;
 }
 
 export interface SessionInput {

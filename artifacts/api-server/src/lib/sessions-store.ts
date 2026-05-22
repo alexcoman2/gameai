@@ -24,6 +24,7 @@ export type SessionMeta = {
   updatedAt: string;
   messageCount: number;
   gameContext: string | null;
+  diskUsageBytes: number;
 };
 
 const DATA_DIR = path.join(os.homedir(), ".gaming-companion");
@@ -31,6 +32,7 @@ const SESSIONS_DIR = path.join(DATA_DIR, "sessions");
 const INDEX_FILE = path.join(SESSIONS_DIR, "index.json");
 
 const MAX_SCREENSHOTS_PER_SESSION = 10;
+export const MAX_SESSION_MESSAGE_PAIRS = 50;
 
 function getScreenshotsDir(sessionId: string): string {
   return path.join(SESSIONS_DIR, sessionId, "screenshots");
@@ -69,6 +71,31 @@ function loadScreenshotFile(sessionId: string, messageId: string): string | null
     }
   } catch {}
   return null;
+}
+
+function computeSessionDiskUsage(sessionId: string): number {
+  let total = 0;
+  const sessionDir = path.join(SESSIONS_DIR, sessionId);
+  const filesToCheck = [
+    path.join(sessionDir, "history.json"),
+    path.join(sessionDir, "messages.json"),
+  ];
+  for (const f of filesToCheck) {
+    try {
+      if (fs.existsSync(f)) total += fs.statSync(f).size;
+    } catch {}
+  }
+  const screenshotsDir = getScreenshotsDir(sessionId);
+  try {
+    if (fs.existsSync(screenshotsDir)) {
+      for (const f of fs.readdirSync(screenshotsDir)) {
+        try {
+          total += fs.statSync(path.join(screenshotsDir, f)).size;
+        } catch {}
+      }
+    }
+  } catch {}
+  return total;
 }
 
 function ensureDirs(sessionId?: string): void {
@@ -112,6 +139,7 @@ export function createSession(name: string): SessionMeta {
     updatedAt: now,
     messageCount: 0,
     gameContext: null,
+    diskUsageBytes: 0,
   };
   ensureDirs(id);
   const sessions = listSessions();
@@ -131,7 +159,8 @@ export function updateSession(
   const sessions = listSessions();
   const idx = sessions.findIndex((s) => s.id === id);
   if (idx === -1) return null;
-  sessions[idx] = { ...sessions[idx], ...updates };
+  const diskUsageBytes = computeSessionDiskUsage(id);
+  sessions[idx] = { ...sessions[idx], ...updates, diskUsageBytes };
   saveIndex(sessions);
   return sessions[idx];
 }
@@ -210,7 +239,12 @@ export function appendSessionMessages(
   newMessages: DisplayMessage[]
 ): void {
   const existing = loadSessionMessagesRaw(sessionId);
-  saveSessionMessages(sessionId, [...existing, ...newMessages]);
+  let combined = [...existing, ...newMessages];
+  const maxMessages = MAX_SESSION_MESSAGE_PAIRS * 2;
+  if (combined.length > maxMessages) {
+    combined = combined.slice(combined.length - maxMessages);
+  }
+  saveSessionMessages(sessionId, combined);
 }
 
 function removeScreenshotsDir(sessionId: string): void {

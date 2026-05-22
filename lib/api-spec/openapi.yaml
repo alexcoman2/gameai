@@ -434,6 +434,8 @@ components:
           type: integer
         gameContext:
           type: ["string", "null"]
+        diskUsageBytes:
+          type: integer
       required:
         - id
         - name
@@ -441,6 +443,7 @@ components:
         - updatedAt
         - messageCount
         - gameContext
+        - diskUsageBytes
 
     SessionInput:
       type: object

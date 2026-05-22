@@ -112,7 +112,8 @@ export const ListSessionsResponseItem = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "messageCount": zod.number(),
-  "gameContext": zod.string().nullable()
+  "gameContext": zod.string().nullable(),
+  "diskUsageBytes": zod.number()
 })
 export const ListSessionsResponse = zod.array(ListSessionsResponseItem)
 
@@ -131,7 +132,8 @@ export const CreateSessionResponse = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "messageCount": zod.number(),
-  "gameContext": zod.string().nullable()
+  "gameContext": zod.string().nullable(),
+  "diskUsageBytes": zod.number()
 })
 
 
@@ -176,7 +178,8 @@ export const RenameSessionResponse = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "messageCount": zod.number(),
-  "gameContext": zod.string().nullable()
+  "gameContext": zod.string().nullable(),
+  "diskUsageBytes": zod.number()
 })
 
 

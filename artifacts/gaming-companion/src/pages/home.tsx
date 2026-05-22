@@ -28,6 +28,13 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useChat } from "@/context/chat-context";
 
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function Home() {
   const queryClient = useQueryClient();
   const {
@@ -447,6 +454,9 @@ export default function Home() {
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[9px] text-muted-foreground/50 uppercase tracking-wider">
                               {session.messageCount} msg{session.messageCount !== 1 ? "s" : ""}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground/40 uppercase tracking-wider">
+                              · {formatBytes(session.diskUsageBytes)}
                             </span>
                             {session.gameContext && (
                               <span className="text-[9px] text-primary/50 uppercase tracking-wider truncate max-w-[80px]">
