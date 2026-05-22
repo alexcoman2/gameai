@@ -31,6 +31,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [includeScreenshot, setIncludeScreenshot] = useState(false);
   const [pendingScreenshot, setPendingScreenshot] = useState<string | null>(null);
+  const [gameNameOverride, setGameNameOverride] = useState("");
   
   const scrollRef = useRef<HTMLDivElement>(null);
   
@@ -63,11 +64,14 @@ export default function Home() {
     }
   }, [messages, sendMutation.isPending]);
 
+  const toDataUrl = (base64: string) =>
+    base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`;
+
   const handleCapture = async () => {
     try {
       const result = await captureMutation.mutateAsync();
       if (result.imageData) {
-        setPendingScreenshot(result.imageData);
+        setPendingScreenshot(toDataUrl(result.imageData));
         setIncludeScreenshot(true);
       }
     } catch (e) {
@@ -79,8 +83,8 @@ export default function Home() {
     e.preventDefault();
     if (!input.trim() || sendMutation.isPending) return;
 
-    // The backend handles fetching the screenshot, but we need to show it in the UI history
-    const sentScreenshot = includeScreenshot ? (pendingScreenshot || latestScreenshot?.imageData) : null;
+    const latestImgData = latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : null;
+    const sentScreenshot = includeScreenshot ? (pendingScreenshot || latestImgData) : null;
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -103,7 +107,7 @@ export default function Home() {
       const response = await sendMutation.mutateAsync({
         data: {
           message: messageContent,
-          gameName: gameDetection?.gameName || gameDetection?.processName,
+          gameName: gameNameOverride.trim() || gameDetection?.gameName || gameDetection?.processName,
           includeScreenshot: currentIncludeScreenshot
         }
       });
@@ -237,7 +241,7 @@ export default function Home() {
         {(pendingScreenshot || latestScreenshot?.imageData) && includeScreenshot && (
           <div className="flex items-center gap-3 p-3 bg-card border border-primary/30 font-mono text-sm">
             <div className="w-12 h-8 bg-secondary border border-border flex items-center justify-center overflow-hidden">
-               <img src={(pendingScreenshot || latestScreenshot?.imageData)!} alt="thumb" className="w-full h-full object-cover opacity-70" />
+               <img src={pendingScreenshot || (latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : "")} alt="thumb" className="w-full h-full object-cover opacity-70" />
             </div>
             <span className="text-primary tracking-widest uppercase flex-1">
               Visual data attached {pendingScreenshot ? '(Manual)' : '(Auto)'}
@@ -269,7 +273,7 @@ export default function Home() {
           </Button>
         </form>
 
-        <div className="flex items-center justify-between p-3 bg-card/50 border border-border">
+        <div className="flex flex-col gap-2 p-3 bg-card/50 border border-border">
           <div className="flex items-center gap-4">
             <Button
               type="button"
@@ -297,6 +301,16 @@ export default function Home() {
                 Attach to next message
               </Label>
             </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground whitespace-nowrap">Game Override:</span>
+            <Input
+              value={gameNameOverride}
+              onChange={(e) => setGameNameOverride(e.target.value)}
+              placeholder={gameDetection?.gameName || gameDetection?.processName || "Auto-detect active..."}
+              className="h-7 text-xs font-mono rounded-none bg-background border-border focus-visible:border-primary placeholder:text-muted-foreground/40 placeholder:text-[10px]"
+            />
           </div>
         </div>
       </div>

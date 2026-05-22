@@ -57,11 +57,8 @@ export default function Settings() {
         autoCapture: data.autoCapture,
       };
       
-      // Only send API key if it was modified
       if (data.apiKey && data.apiKey.trim() !== "") {
         payload.apiKey = data.apiKey;
-      } else {
-        payload.apiKey = null;
       }
 
       await saveMutation.mutateAsync({ data: payload });
