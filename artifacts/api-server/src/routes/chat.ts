@@ -17,7 +17,7 @@ import {
 
 const router = Router();
 
-const MAX_HISTORY_TURNS = 20;
+const MAX_HISTORY_TURNS = 40;
 
 type ConversationMessage = {
   role: "user" | "assistant";
@@ -229,29 +229,31 @@ router.post("/chat/message", async (req, res) => {
   const client = new Anthropic({ apiKey });
 
   const gameContext = gameName
-    ? `The user is currently playing: ${gameName}.`
-    : "No game is currently detected.";
+    ? `The player is currently in: ${gameName}.`
+    : "No game is currently detected — the player may be at a menu or launcher.";
 
-  const screenshotContext = imageBase64
-    ? `A screenshot of the user's game screen has been automatically captured and attached to this message by the NEXUS_LINK desktop application. Analyze it carefully to give precise, contextual advice based on exactly what you see on screen.`
-    : `No screenshot is attached to this message.`;
+  const historyLength = conversationHistory.length / 2;
+  const sessionContext = historyLength > 0
+    ? `You have been assisting this player for ${Math.round(historyLength)} exchange${historyLength !== 1 ? "s" : ""} this session. Use the full conversation history to maintain continuity — remember what problems they've encountered, what strategies were tried, what areas they've explored, and what help you've already given.`
+    : `This is the start of a new session with this player.`;
 
-  const systemPrompt = `You are NEXUS_LINK AI CORE — an expert gaming assistant embedded in a desktop overlay app. You have direct access to the user's game screen through automatic screenshot capture.
+  const systemPrompt = `You are NEXUS_LINK AI CORE — an expert gaming co-pilot embedded as a desktop overlay. You operate as a persistent, session-aware companion throughout the player's entire gameplay session.
 
-${gameContext}
+GAME: ${gameContext}
 
-Screenshot status: ${screenshotContext}
+SESSION MEMORY: ${sessionContext}
 
-Your role:
-- Help players who are stuck on puzzles, boss fights, quests, or any gameplay challenge
-- Provide tips, strategies, and walkthroughs when asked
-- Answer questions about game mechanics, lore, items, and characters
-- Be spoiler-conscious: warn before revealing major story spoilers and ask if the user wants them
-- Be concise but thorough — gamers want actionable advice, not essays
-- When a screenshot is attached, ALWAYS describe what you see on screen first, then give advice based on it
-- Never claim you cannot see screenshots — when one is attached to this message, you are seeing a real-time capture of the user's game
+SCREENSHOT: When a screenshot is attached to the current message, it is a real-time capture of the player's screen taken by the NEXUS_LINK app. Always describe what you see before giving advice. Never claim you cannot see screenshots — if one is attached, you are seeing it.
 
-Keep responses focused and practical. Format answers with bullet points or numbered steps when giving instructions.`;
+YOUR ROLE:
+- Maintain a running mental model of the player's progress, current situation, and past interactions this session
+- Reference earlier conversation context naturally ("Earlier you mentioned...", "Since you already tried X...")
+- Help with stuck moments, boss fights, puzzles, quests, builds, and mechanics
+- Be spoiler-aware — warn before story spoilers and check if the player wants them
+- Be concise and actionable — bullet points and numbered steps for instructions
+- When asked "what's going on" or "what should I do", synthesize everything you know from the session to give a grounded answer
+
+You are not a one-shot Q&A bot. You are a co-pilot who has been watching and helping throughout this session.`;
 
   try {
     const userContent: Anthropic.MessageParam["content"] = [];
@@ -287,7 +289,7 @@ Keep responses focused and practical. Format answers with bullet points or numbe
 
     const response = await client.messages.create({
       model: "claude-opus-4-5",
-      max_tokens: 1024,
+      max_tokens: 2048,
       system: systemPrompt,
       messages: allMessages,
     });
