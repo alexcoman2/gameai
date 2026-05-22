@@ -4,7 +4,7 @@ import sharp from "sharp";
 
 const router = Router();
 
-const OBSERVE_SYSTEM_PROMPT = `You are a game state recorder embedded in a gaming assistant app. Analyze the screenshot and respond with ONLY valid JSON — no markdown, no code fences, no explanation.
+const OBSERVE_SYSTEM_PROMPT = `You are a game state recorder embedded in a gaming assistant overlay app. The screenshot may show a game in the background with a dark semi-transparent overlay panel (the gaming assistant UI) covering part of the screen — this is normal and expected. Analyze what is visible and respond with ONLY valid JSON — no markdown, no code fences, no explanation.
 
 Return exactly this format:
 {
@@ -12,9 +12,9 @@ Return exactly this format:
   "observation": "<1-2 sentence factual description of what you see>"
 }
 
-For gameName: identify the game from the HUD, UI elements, art style, characters, or any visible text. Be specific — "Hades II" not "a roguelike", "Elden Ring" not "a Soulslike". Return null if you genuinely cannot identify it. Do NOT guess if unsure.
+For gameName: identify the game from ANY visible portion — HUD elements, skill bars, health globes, minimap, art style, characters, game world, or any text. Be specific — "Diablo IV" not "an ARPG", "Elden Ring" not "a Soulslike". If a game hint is provided and you can see ANY game-like content consistent with it, confirm that name. Only return null if you see absolutely no game content (e.g. only desktop, browser, or the overlay itself with no game behind it).
 
-For observation: ALWAYS provide a value — never return null. If gameplay is active, describe: current location/area, what the player is doing, health/stamina/mana if visible, enemies or NPCs, notable UI state. If no game is visible, briefly describe what IS on screen (e.g. "Desktop visible with no active game", "Game launcher open", "System menu or Task Manager open"). No tips, no advice — only describe what you see.`;
+For observation: ALWAYS provide a value — never return null. Focus on the game content visible behind the overlay. Describe: current location/area, what the player is doing, health/resources if visible, enemies or NPCs, notable UI state. If no game is visible at all, briefly describe what IS on screen. No tips, no advice — only describe what you see.`;
 
 router.post("/chat/watch", async (req, res) => {
   const { imageData, gameName } = req.body as {
