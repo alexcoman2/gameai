@@ -74,12 +74,11 @@ async function startServer(): Promise<void> {
       PORT: String(SERVER_PORT),
       NODE_ENV: "production",
       STATIC_DIR: staticDir,
-      // Injected at build time — points to the hosted Replit API server.
-      // When set the local server acts as a proxy for chat and never needs
-      // an Anthropic API key.
-      ...(process.env.NEXUS_LINK_API_URL
-        ? { NEXUS_LINK_API_URL: process.env.NEXUS_LINK_API_URL }
-        : {}),
+      // Points to the hosted Replit API server. The local server acts as a
+      // proxy for chat and never needs an Anthropic API key.
+      NEXUS_LINK_API_URL:
+        process.env.NEXUS_LINK_API_URL ||
+        "https://game-companion-ai.replit.app",
     },
     stdio: "pipe",
   });
