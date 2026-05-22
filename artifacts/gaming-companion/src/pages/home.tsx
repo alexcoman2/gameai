@@ -20,7 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import {
   Camera, Send, Loader2, Maximize2, X, MessageSquare,
-  Plus, Trash2, Pencil, Check, MessagesSquare, ChevronRight,
+  Plus, Trash2, Pencil, Check, MessagesSquare, ChevronRight, Pin, PinOff,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
@@ -45,8 +45,26 @@ export default function Home() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [sessionInitialized, setSessionInitialized] = useState(false);
+  const [alwaysOnTop, setAlwaysOnTop] = useState(false);
+
+  const isElectron = !!(window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron;
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isElectron) return;
+    const api = (window as Window & { electronAPI?: { getAlwaysOnTop?: () => Promise<boolean> } }).electronAPI;
+    api?.getAlwaysOnTop?.().then(setAlwaysOnTop).catch(() => {});
+  }, [isElectron]);
+
+  const handleToggleAlwaysOnTop = async () => {
+    const api = (window as Window & { electronAPI?: { toggleAlwaysOnTop?: () => Promise<boolean> } }).electronAPI;
+    try {
+      const next = await api?.toggleAlwaysOnTop?.();
+      if (typeof next === "boolean") setAlwaysOnTop(next);
+    } catch {
+    }
+  };
 
   const { data: settings } = useGetSettings({
     query: { queryKey: getGetSettingsQueryKey() }
@@ -456,23 +474,47 @@ export default function Home() {
             </SheetContent>
           </Sheet>
 
-          {messages.length > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={handleClearSession}
-              disabled={clearSessionMutation.isPending}
-              className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-none h-7 px-2 gap-1.5"
-            >
-              {clearSessionMutation.isPending ? (
-                <Loader2 className="w-3 h-3 animate-spin" />
-              ) : (
-                <X className="w-3 h-3" />
-              )}
-              Clear
-            </Button>
-          )}
+          <div className="flex items-center gap-1">
+            {isElectron && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleToggleAlwaysOnTop}
+                title={alwaysOnTop ? "Always-on-top: ON" : "Always-on-top: OFF"}
+                className={`font-mono text-[10px] uppercase tracking-widest rounded-none h-7 px-2 gap-1.5 ${
+                  alwaysOnTop
+                    ? "text-primary bg-primary/10 hover:bg-primary/20 hover:text-primary"
+                    : "text-muted-foreground hover:text-primary hover:bg-primary/10"
+                }`}
+              >
+                {alwaysOnTop ? (
+                  <Pin className="w-3 h-3" />
+                ) : (
+                  <PinOff className="w-3 h-3" />
+                )}
+                {alwaysOnTop ? "On Top" : "On Top"}
+              </Button>
+            )}
+
+            {messages.length > 0 && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={handleClearSession}
+                disabled={clearSessionMutation.isPending}
+                className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-none h-7 px-2 gap-1.5"
+              >
+                {clearSessionMutation.isPending ? (
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                ) : (
+                  <X className="w-3 h-3" />
+                )}
+                Clear
+              </Button>
+            )}
+          </div>
         </div>
 
         <div
