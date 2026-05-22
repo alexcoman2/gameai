@@ -8,12 +8,12 @@ const OBSERVE_SYSTEM_PROMPT = `You are a game state recorder embedded in a gamin
 Return exactly this format:
 {
   "gameName": "<the specific game being played, or null if you cannot identify it>",
-  "observation": "<1-2 sentence factual description of what is happening, or null if no gameplay is visible>"
+  "observation": "<1-2 sentence factual description of what you see>"
 }
 
 For gameName: identify the game from the HUD, UI elements, art style, characters, or any visible text. Be specific — "Hades II" not "a roguelike", "Elden Ring" not "a Soulslike". Return null if you genuinely cannot identify it. Do NOT guess if unsure.
 
-For observation: include current location/area, what the player is doing, health/stamina/mana if visible, enemies or NPCs present, notable UI state (inventory open, cutscene, pause menu, etc). No tips, no advice — only describe what you see.`;
+For observation: ALWAYS provide a value — never return null. If gameplay is active, describe: current location/area, what the player is doing, health/stamina/mana if visible, enemies or NPCs, notable UI state. If no game is visible, briefly describe what IS on screen (e.g. "Desktop visible with no active game", "Game launcher open", "System menu or Task Manager open"). No tips, no advice — only describe what you see.`;
 
 router.post("/chat/watch", async (req, res) => {
   const { imageData, gameName } = req.body as {
