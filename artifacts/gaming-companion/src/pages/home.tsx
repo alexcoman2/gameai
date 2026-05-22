@@ -59,6 +59,7 @@ export default function Home() {
   const [watchMode, setWatchMode] = useState(false);
   const [watchScreenshot, setWatchScreenshot] = useState<string | null>(null);
   const [watchLog, setWatchLog] = useState<{ time: string; note: string }[]>([]);
+  const [visionDetectedGame, setVisionDetectedGame] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
 
   const isElectron = !!(window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron;
@@ -244,13 +245,16 @@ export default function Home() {
               body: JSON.stringify({ imageData: dataUrl, gameName }),
             });
             if (res.ok && active) {
-              const data = (await res.json()) as { observation: string | null };
+              const data = (await res.json()) as { observation: string | null; gameName: string | null };
               if (data.observation) {
                 const entry = {
                   time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                   note: data.observation,
                 };
                 setWatchLog((prev) => [...prev.slice(-14), entry]);
+              }
+              if (data.gameName) {
+                setVisionDetectedGame(data.gameName);
               }
             }
           } catch {
@@ -431,7 +435,7 @@ export default function Home() {
       const response = await sendMutation.mutateAsync({
         data: {
           message: messageContent,
-          gameName: gameNameOverride.trim() || gameDetection?.gameName || gameDetection?.processName,
+          gameName: gameNameOverride.trim() || visionDetectedGame || gameDetection?.gameName || gameDetection?.processName,
           // In Electron, send the screenshot image directly so the server never
           // needs to do a local capture lookup. On web, rely on includeScreenshot.
           ...(isElectron && sentScreenshot
@@ -653,7 +657,10 @@ export default function Home() {
                   variant="ghost"
                   size="sm"
                   onClick={() => {
-                    setWatchMode((v) => !v);
+                    setWatchMode((v) => {
+                      if (v) { setVisionDetectedGame(null); }
+                      return !v;
+                    });
                     setWatchInsight(null);
                   }}
                   title={watchMode ? "Watch mode: ON — scanning every 2s, observing every 90s" : "Watch mode: OFF"}
@@ -884,7 +891,7 @@ export default function Home() {
               <Input
                 value={gameNameOverride}
                 onChange={(e) => setGameNameOverride(e.target.value)}
-                placeholder={gameDetection?.gameName || gameDetection?.processName || "Auto-detect active..."}
+                placeholder={visionDetectedGame || gameDetection?.gameName || gameDetection?.processName || "Auto-detect active..."}
                 className="h-7 text-xs font-mono rounded-none bg-background border-border focus-visible:border-primary placeholder:text-muted-foreground/40 placeholder:text-[10px] pr-6"
               />
               {gameNameOverride.trim() && (
@@ -898,7 +905,15 @@ export default function Home() {
                 </button>
               )}
             </div>
-            {gameDetection?.detected && gameDetection.source && (
+            {visionDetectedGame && !gameNameOverride.trim() && (
+              <span
+                className="shrink-0 font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 border text-violet-400/80 border-violet-400/30 bg-violet-400/5"
+                title={`Identified via screen vision: "${visionDetectedGame}"`}
+              >
+                Vision
+              </span>
+            )}
+            {!visionDetectedGame && gameDetection?.detected && gameDetection.source && (
               <span
                 className={`shrink-0 font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 border ${
                   gameDetection.source === "local"

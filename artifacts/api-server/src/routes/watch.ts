@@ -3,17 +3,17 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const router = Router();
 
-const OBSERVE_SYSTEM_PROMPT = `You are a game state recorder embedded in a gaming assistant app. Your only job is to describe what you see in the screenshot in 1-2 sentences — factual, specific, no advice.
+const OBSERVE_SYSTEM_PROMPT = `You are a game state recorder embedded in a gaming assistant app. Analyze the screenshot and respond with ONLY valid JSON — no markdown, no code fences, no explanation.
 
-Include: current location or area (if identifiable), what the player appears to be doing, health/stamina/mana if visible, any enemies or NPCs present, any notable UI elements (quest markers, timers, low resources).
+Return exactly this format:
+{
+  "gameName": "<the specific game being played, or null if you cannot identify it>",
+  "observation": "<1-2 sentence factual description of what is happening, or null if no gameplay is visible>"
+}
 
-Examples of good observations:
-- "Player is in a dark cave area with ~40% health, facing two skeleton archers near a locked gate."
-- "Inventory screen open showing 3 empty slots; player appears to be managing equipment."
-- "Cutscene playing — no gameplay visible."
-- "Player is running through a forest area at full health, no enemies visible."
+For gameName: identify the game from the HUD, UI elements, art style, characters, or any visible text. Be specific — "Hades II" not "a roguelike", "Elden Ring" not "a Soulslike". Return null if you genuinely cannot identify it. Do NOT guess if unsure.
 
-Be factual and brief. No tips, no warnings, no suggestions. Just describe what you see.`;
+For observation: include current location/area, what the player is doing, health/stamina/mana if visible, enemies or NPCs present, notable UI state (inventory open, cutscene, pause menu, etc). No tips, no advice — only describe what you see.`;
 
 router.post("/chat/watch", async (req, res) => {
   const { imageData, gameName } = req.body as {
@@ -45,7 +45,7 @@ router.post("/chat/watch", async (req, res) => {
   }
 
   if (!imageData) {
-    res.json({ observation: null });
+    res.json({ observation: null, gameName: null });
     return;
   }
 
@@ -53,14 +53,14 @@ router.post("/chat/watch", async (req, res) => {
     const client = new Anthropic({ apiKey });
 
     const gameContext = gameName
-      ? `Game: ${gameName}.`
-      : "Game unknown.";
+      ? `The user believes they are playing: ${gameName}. Confirm or correct this in the gameName field.`
+      : "Game is unknown — identify it if possible.";
 
     const imageBase64 = imageData.replace(/^data:image\/\w+;base64,/, "");
 
     const response = await client.messages.create({
       model: "claude-3-5-haiku-20241022",
-      max_tokens: 120,
+      max_tokens: 200,
       system: OBSERVE_SYSTEM_PROMPT,
       messages: [
         {
@@ -70,16 +70,29 @@ router.post("/chat/watch", async (req, res) => {
               type: "image",
               source: { type: "base64", media_type: "image/png", data: imageBase64 },
             },
-            { type: "text", text: `${gameContext} Describe what you see.` },
+            { type: "text", text: `${gameContext} Respond with JSON only.` },
           ],
         },
       ],
     });
 
-    const observation =
-      response.content[0]?.type === "text" ? response.content[0].text.trim() : null;
+    const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : null;
 
-    res.json({ observation });
+    if (!raw) {
+      res.json({ observation: null, gameName: null });
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as { observation?: string | null; gameName?: string | null };
+      res.json({
+        observation: parsed.observation ?? null,
+        gameName: parsed.gameName ?? null,
+      });
+    } catch {
+      // Model returned non-JSON — treat the whole text as an observation, no game name
+      res.json({ observation: raw, gameName: null });
+    }
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
       res.status(500).json({ error: `Claude API error: ${err.message}` });
