@@ -1,0 +1,148 @@
+Building Windows NSIS installer...
+(node:18048) [DEP0190] DeprecationWarning: Passing args to a child process with shell option true can lead to security vulnerabilities, as the arguments are not escaped, only concatenated.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+  • electron-builder  version=25.1.8 os=10.0.19045
+  • loaded configuration  file=D:\gameai-main\artifacts\electron-app\electron-builder.yml
+  • writing effective config  file=dist-release\builder-effective-config.yaml
+  • executing @electron/rebuild  electronVersion=36.9.5 arch=x64 buildFromSource=false appDir=./
+  • installing native dependencies  arch=x64
+  • completed installing native dependencies
+  • packaging       platform=win32 arch=x64 electron=36.9.5 appOutDir=dist-release\win-unpacked
+  • downloading     url=https://github.com/electron/electron/releases/download/v36.9.5/electron-v36.9.5-win32-x64.zip size=122 MB parts=8
+  • downloaded      url=https://github.com/electron/electron/releases/download/v36.9.5/electron-v36.9.5-win32-x64.zip duration=2.741s
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • asar usage is disabled — this is strongly not recommended  solution=enable asar and use asarUnpack to unpack files that must be externally available
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=818ms
+  ⨯ cannot execute  cause=exit status 2
+                    out=
+    7-Zip (a) 21.07 (x64) : Copyright (c) 1999-2021 Igor Pavlov : 2021-12-26
+
+    Scanning the drive for archives:
+    1 file, 5635384 bytes (5504 KiB)
+
+    Extracting archive: C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\276743723.7z
+    --
+    Path = C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\276743723.7z
+    Type = 7z
+    Physical Size = 5635384
+    Headers Size = 1492
+    Method = LZMA2:24m LZMA:20 BCJ2
+    Solid = +
+    Blocks = 2
+
+
+    Sub items Errors: 2
+
+    Archives with Errors: 1
+
+    Sub items Errors: 2
+
+                    errorOut=ERROR: Cannot create symbolic link : A required privilege is not held by the client. : C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\276743723\darwin\10.12\lib\libcrypto.dylib
+    ERROR: Cannot create symbolic link : A required privilege is not held by the client. : C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\276743723\darwin\10.12\lib\libssl.dylib
+
+                    command='D:\gameai-main\node_modules\.pnpm\7zip-bin@5.2.0\node_modules\7zip-bin\win\x64\7za.exe' x -snld -bd 'C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\276743723.7z' '-oC:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\276743723'
+                    workingDir=C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign
+  • Above command failed, retrying 3 more times
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=659ms
+  ⨯ cannot execute  cause=exit status 2
+                    out=
+    7-Zip (a) 21.07 (x64) : Copyright (c) 1999-2021 Igor Pavlov : 2021-12-26
+
+    Scanning the drive for archives:
+    1 file, 5635384 bytes (5504 KiB)
+
+    Extracting archive: C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\865406811.7z
+    --
+    Path = C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\865406811.7z
+    Type = 7z
+    Physical Size = 5635384
+    Headers Size = 1492
+    Method = LZMA2:24m LZMA:20 BCJ2
+    Solid = +
+    Blocks = 2
+
+
+    Sub items Errors: 2
+
+    Archives with Errors: 1
+
+    Sub items Errors: 2
+
+                    errorOut=ERROR: Cannot create symbolic link : A required privilege is not held by the client. : C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\865406811\darwin\10.12\lib\libcrypto.dylib
+    ERROR: Cannot create symbolic link : A required privilege is not held by the client. : C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\865406811\darwin\10.12\lib\libssl.dylib
+
+                    command='D:\gameai-main\node_modules\.pnpm\7zip-bin@5.2.0\node_modules\7zip-bin\win\x64\7za.exe' x -snld -bd 'C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\865406811.7z' '-oC:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\865406811'
+                    workingDir=C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign
+  • Above command failed, retrying 3 more times
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=651ms
+  ⨯ cannot execute  cause=exit status 2
+                    out=
+    7-Zip (a) 21.07 (x64) : Copyright (c) 1999-2021 Igor Pavlov : 2021-12-26
+
+    Scanning the drive for archives:
+    1 file, 5635384 bytes (5504 KiB)
+
+    Extracting archive: C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\426266087.7z
+    --
+    Path = C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\426266087.7z
+    Type = 7z
+    Physical Size = 5635384
+    Headers Size = 1492
+    Method = LZMA2:24m LZMA:20 BCJ2
+    Solid = +
+    Blocks = 2
+
+
+    Sub items Errors: 2
+
+    Archives with Errors: 1
+
+    Sub items Errors: 2
+
+                    errorOut=ERROR: Cannot create symbolic link : A required privilege is not held by the client. : C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\426266087\darwin\10.12\lib\libcrypto.dylib
+    ERROR: Cannot create symbolic link : A required privilege is not held by the client. : C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\426266087\darwin\10.12\lib\libssl.dylib
+
+                    command='D:\gameai-main\node_modules\.pnpm\7zip-bin@5.2.0\node_modules\7zip-bin\win\x64\7za.exe' x -snld -bd 'C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\426266087.7z' '-oC:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\426266087'
+                    workingDir=C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign
+  • Above command failed, retrying 3 more times
+  • downloading     url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z size=5.6 MB parts=1
+  • downloaded      url=https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z duration=633ms
+  ⨯ cannot execute  cause=exit status 2
+                    out=
+    7-Zip (a) 21.07 (x64) : Copyright (c) 1999-2021 Igor Pavlov : 2021-12-26
+
+    Scanning the drive for archives:
+    1 file, 5635384 bytes (5504 KiB)
+
+    Extracting archive: C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\790277735.7z
+    --
+    Path = C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\790277735.7z
+    Type = 7z
+    Physical Size = 5635384
+    Headers Size = 1492
+    Method = LZMA2:24m LZMA:20 BCJ2
+    Solid = +
+    Blocks = 2
+
+
+    Sub items Errors: 2
+
+    Archives with Errors: 1
+
+    Sub items Errors: 2
+
+                    errorOut=ERROR: Cannot create symbolic link : A required privilege is not held by the client. : C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\790277735\darwin\10.12\lib\libcrypto.dylib
+    ERROR: Cannot create symbolic link : A required privilege is not held by the client. : C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\790277735\darwin\10.12\lib\libssl.dylib
+
+                    command='D:\gameai-main\node_modules\.pnpm\7zip-bin@5.2.0\node_modules\7zip-bin\win\x64\7za.exe' x -snld -bd 'C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\790277735.7z' '-oC:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign\790277735'
+                    workingDir=C:\Users\Stepan\AppData\Local\electron-builder\Cache\winCodeSign
+  • Above command failed, retrying 3 more times
+
+✗ electron-builder failed (exit code 1)
+[ELIFECYCLE] Command failed with exit code 1.
+D:\gameai-main\artifacts\electron-app:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @workspace/electron-app@1.0.0 package: `pnpm run build-all && pnpm run dist`
+Exit status 1
