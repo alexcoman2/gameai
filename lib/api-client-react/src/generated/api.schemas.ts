@@ -19,6 +19,19 @@ export const GameDetectionConfidence = {
   none: 'none',
 } as const;
 
+/**
+ * Which detection method identified the game
+ * @nullable
+ */
+export type GameDetectionSource = typeof GameDetectionSource[keyof typeof GameDetectionSource] | null;
+
+
+export const GameDetectionSource = {
+  local: 'local',
+  'steam-store': 'steam-store',
+  'steam-api': 'steam-api',
+} as const;
+
 export interface GameDetection {
   detected: boolean;
   /** @nullable */
@@ -26,6 +39,11 @@ export interface GameDetection {
   /** @nullable */
   processName: string | null;
   confidence: GameDetectionConfidence;
+  /**
+     * Which detection method identified the game
+     * @nullable
+     */
+  source: GameDetectionSource;
 }
 
 export interface Screenshot {

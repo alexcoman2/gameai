@@ -36,6 +36,30 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     gameDetection.confidence === 'medium' ? 'bg-yellow-400' : 'bg-gray-500'
                   }`} />
                   <span className="text-foreground">{gameDetection.gameName || gameDetection.processName}</span>
+                  {gameDetection.source && (
+                    <span
+                      className={`px-1 py-px text-[9px] border leading-none ${
+                        gameDetection.source === 'local'
+                          ? 'text-emerald-400/80 border-emerald-400/30'
+                          : gameDetection.source === 'steam-api'
+                          ? 'text-sky-400/80 border-sky-400/30'
+                          : 'text-blue-400/80 border-blue-400/30'
+                      }`}
+                      title={
+                        gameDetection.source === 'local'
+                          ? 'Identified from local game process table'
+                          : gameDetection.source === 'steam-api'
+                          ? 'Identified via Steam Web API'
+                          : 'Identified via Steam Store search'
+                      }
+                    >
+                      {gameDetection.source === 'local'
+                        ? 'LOCAL'
+                        : gameDetection.source === 'steam-api'
+                        ? 'STEAM API'
+                        : 'STEAM'}
+                    </span>
+                  )}
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5">

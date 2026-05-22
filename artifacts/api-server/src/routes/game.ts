@@ -283,7 +283,7 @@ function similarity(a: string, b: string): number {
 }
 
 // In-memory cache for Steam store search results (keyed by query, expires after 10 min)
-const steamSearchCache = new Map<string, { result: string | null; expiry: number }>();
+const steamSearchCache = new Map<string, { result: string | null; source: "steam-store" | "steam-api" | null; expiry: number }>();
 const SEARCH_CACHE_TTL_MS = 10 * 60 * 1000;
 
 // In-memory cache for the full Steam app list (fetched at most once per 6 hours)
@@ -306,18 +306,22 @@ const STEAM_APP_LIST_TTL_MS = 6 * 60 * 60 * 1000;
 async function lookupOnSteam(
   processName: string,
   steamApiKey: string
-): Promise<string | null> {
+): Promise<{ gameName: string; source: "steam-store" | "steam-api" } | null> {
   const query = processToSearchQuery(processName);
   if (query.length < 3) return null;
 
   const cached = steamSearchCache.get(query);
-  if (cached && Date.now() < cached.expiry) return cached.result;
+  if (cached && Date.now() < cached.expiry) {
+    return cached.result && cached.source ? { gameName: cached.result, source: cached.source } : null;
+  }
 
   let gameName: string | null = null;
+  let source: "steam-store" | "steam-api" | null = null;
 
   try {
     if (steamApiKey) {
       gameName = await lookupInSteamAppList(query, steamApiKey);
+      if (gameName) source = "steam-api";
     }
 
     if (!gameName) {
@@ -329,6 +333,7 @@ async function lookupOnSteam(
         const best = result.items[0];
         if (similarity(query, best.name) >= 0.6) {
           gameName = best.name;
+          source = "steam-store";
         }
       }
     }
@@ -336,8 +341,8 @@ async function lookupOnSteam(
     // Network unavailable — silently fall through
   }
 
-  steamSearchCache.set(query, { result: gameName, expiry: Date.now() + SEARCH_CACHE_TTL_MS });
-  return gameName;
+  steamSearchCache.set(query, { result: gameName, source, expiry: Date.now() + SEARCH_CACHE_TTL_MS });
+  return gameName && source ? { gameName, source } : null;
 }
 
 async function lookupInSteamAppList(
@@ -420,6 +425,7 @@ router.get("/game/detect", async (_req, res) => {
   let matchedGame: string | null = null;
   let matchedProcess: string | null = null;
   let confidence: "high" | "medium" | "low" | "none" = "none";
+  let source: "local" | "steam-store" | "steam-api" | null = null;
 
   // Pass 1: exact match against the local lookup table (high confidence)
   for (const proc of processes) {
@@ -431,6 +437,7 @@ router.get("/game/detect", async (_req, res) => {
       matchedGame = GAME_PROCESS_MAP[gameKey] ?? null;
       matchedProcess = proc;
       confidence = "high";
+      source = "local";
       break;
     }
   }
@@ -445,6 +452,7 @@ router.get("/game/detect", async (_req, res) => {
           matchedGame = game;
           matchedProcess = proc;
           confidence = "medium";
+          source = "local";
           break;
         }
       }
@@ -471,11 +479,12 @@ router.get("/game/detect", async (_req, res) => {
     for (const proc of candidates) {
       if (Date.now() - pass3Start > PASS3_BUDGET_MS) break;
 
-      const gameName = await lookupOnSteam(proc, config.steamApiKey);
-      if (gameName) {
-        matchedGame = gameName;
+      const steamResult = await lookupOnSteam(proc, config.steamApiKey);
+      if (steamResult) {
+        matchedGame = steamResult.gameName;
         matchedProcess = proc;
         confidence = "medium";
+        source = steamResult.source;
         break;
       }
     }
@@ -486,6 +495,7 @@ router.get("/game/detect", async (_req, res) => {
     gameName: matchedGame,
     processName: matchedProcess,
     confidence,
+    source,
   });
 });
 

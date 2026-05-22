@@ -13,6 +13,7 @@ export * from './displayMessageRole';
 export * from './errorResponse';
 export * from './gameDetection';
 export * from './gameDetectionConfidence';
+export * from './gameDetectionSource';
 export * from './healthStatus';
 export * from './okResponse';
 export * from './screenshot';

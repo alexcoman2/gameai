@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { GameDetectionConfidence } from './gameDetectionConfidence';
+import type { GameDetectionSource } from './gameDetectionSource';
 
 export interface GameDetection {
   detected: boolean;
@@ -14,4 +15,9 @@ export interface GameDetection {
   /** @nullable */
   processName: string | null;
   confidence: GameDetectionConfidence;
+  /**
+     * Which detection method identified the game
+     * @nullable
+     */
+  source: GameDetectionSource;
 }

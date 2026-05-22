@@ -25,7 +25,8 @@ export const DetectGameResponse = zod.object({
   "detected": zod.boolean(),
   "gameName": zod.string().nullable(),
   "processName": zod.string().nullable(),
-  "confidence": zod.enum(['high', 'medium', 'low', 'none'])
+  "confidence": zod.enum(['high', 'medium', 'low', 'none']),
+  "source": zod.union([zod.literal('local'),zod.literal('steam-store'),zod.literal('steam-api'),zod.literal(null)]).nullable().describe('Which detection method identified the game')
 })
 
 

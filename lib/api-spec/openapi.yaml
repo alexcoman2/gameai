@@ -311,11 +311,16 @@ components:
         confidence:
           type: string
           enum: [high, medium, low, none]
+        source:
+          type: ["string", "null"]
+          enum: [local, steam-store, steam-api, null]
+          description: Which detection method identified the game
       required:
         - detected
         - gameName
         - processName
         - confidence
+        - source
 
     Screenshot:
       type: object

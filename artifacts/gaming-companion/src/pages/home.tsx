@@ -658,6 +658,30 @@ export default function Home() {
               placeholder={gameDetection?.gameName || gameDetection?.processName || "Auto-detect active..."}
               className="h-7 text-xs font-mono rounded-none bg-background border-border focus-visible:border-primary placeholder:text-muted-foreground/40 placeholder:text-[10px]"
             />
+            {gameDetection?.detected && gameDetection.source && (
+              <span
+                className={`shrink-0 font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 border ${
+                  gameDetection.source === "local"
+                    ? "text-emerald-400/80 border-emerald-400/30 bg-emerald-400/5"
+                    : gameDetection.source === "steam-api"
+                    ? "text-sky-400/80 border-sky-400/30 bg-sky-400/5"
+                    : "text-blue-400/80 border-blue-400/30 bg-blue-400/5"
+                }`}
+                title={
+                  gameDetection.source === "local"
+                    ? "Identified from local game process table"
+                    : gameDetection.source === "steam-api"
+                    ? "Identified via Steam Web API"
+                    : "Identified via Steam Store search"
+                }
+              >
+                {gameDetection.source === "local"
+                  ? "Local"
+                  : gameDetection.source === "steam-api"
+                  ? "Steam API"
+                  : "Steam"}
+              </span>
+            )}
           </div>
         </div>
       </div>
