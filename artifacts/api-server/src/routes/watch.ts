@@ -92,6 +92,8 @@ router.post("/chat/watch", async (req, res) => {
 
     const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : null;
 
+    console.log(`[watch] raw model output: ${raw}`);
+
     if (!raw) {
       res.json({ observation: null, gameName: null });
       return;
@@ -99,12 +101,14 @@ router.post("/chat/watch", async (req, res) => {
 
     try {
       const parsed = JSON.parse(raw) as { observation?: string | null; gameName?: string | null };
+      console.log(`[watch] parsed => gameName="${parsed.gameName}" observation="${parsed.observation?.slice(0, 80)}"`);
       res.json({
         observation: parsed.observation ?? null,
         gameName: parsed.gameName ?? null,
       });
     } catch {
       // Model returned non-JSON — treat the whole text as an observation, no game name
+      console.log(`[watch] non-JSON response, using as raw observation`);
       res.json({ observation: raw, gameName: null });
     }
   } catch (err) {
