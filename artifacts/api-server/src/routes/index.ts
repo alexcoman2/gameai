@@ -4,6 +4,7 @@ import gameRouter from "./game.js";
 import screenshotRouter from "./screenshot.js";
 import chatRouter from "./chat.js";
 import settingsRouter from "./settings.js";
+import sessionsRouter from "./sessions.js";
 
 const router: IRouter = Router();
 
@@ -12,5 +13,6 @@ router.use(gameRouter);
 router.use(screenshotRouter);
 router.use(chatRouter);
 router.use(settingsRouter);
+router.use(sessionsRouter);
 
 export default router;

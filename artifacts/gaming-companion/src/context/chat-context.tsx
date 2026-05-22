@@ -10,8 +10,11 @@ export interface Message {
 
 interface ChatContextValue {
   messages: Message[];
+  setMessages: (msgs: Message[]) => void;
   addMessage: (msg: Message) => void;
   clearMessages: () => void;
+  activeSessionId: string | null;
+  setActiveSessionId: (id: string | null) => void;
   gameNameOverride: string;
   setGameNameOverride: (name: string) => void;
 }
@@ -20,13 +23,25 @@ const ChatContext = createContext<ChatContextValue | null>(null);
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [messages, setMessages] = useState<Message[]>([]);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [gameNameOverride, setGameNameOverride] = useState("");
 
   const addMessage = (msg: Message) => setMessages((prev) => [...prev, msg]);
   const clearMessages = () => setMessages([]);
 
   return (
-    <ChatContext.Provider value={{ messages, addMessage, clearMessages, gameNameOverride, setGameNameOverride }}>
+    <ChatContext.Provider
+      value={{
+        messages,
+        setMessages,
+        addMessage,
+        clearMessages,
+        activeSessionId,
+        setActiveSessionId,
+        gameNameOverride,
+        setGameNameOverride,
+      }}
+    >
       {children}
     </ChatContext.Provider>
   );

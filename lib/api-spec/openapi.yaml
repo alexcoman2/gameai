@@ -18,6 +18,8 @@ tags:
     description: AI chat operations
   - name: settings
     description: App settings operations
+  - name: sessions
+    description: Conversation session operations
 paths:
   /healthz:
     get:
@@ -145,6 +147,148 @@ paths:
               schema:
                 $ref: "#/components/schemas/Settings"
 
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: List all sessions
+      description: Returns all saved conversation sessions sorted by most recently updated
+      responses:
+        "200":
+          description: Session list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Session"
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Create a new session
+      description: Creates a new named conversation session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionInput"
+      responses:
+        "200":
+          description: Created session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /sessions/{sessionId}/messages:
+    get:
+      operationId: getSessionMessages
+      tags: [sessions]
+      summary: Get session messages
+      description: Returns the display messages for a session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Session with messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionMessages"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{sessionId}:
+    patch:
+      operationId: renameSession
+      tags: [sessions]
+      summary: Rename a session
+      description: Updates the name of a session
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionUpdate"
+      responses:
+        "200":
+          description: Updated session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteSession
+      tags: [sessions]
+      summary: Delete a session
+      description: Permanently deletes a session and all its messages
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /sessions/{sessionId}/clear:
+    post:
+      operationId: clearSession
+      tags: [sessions]
+      summary: Clear session messages
+      description: Clears all messages in a session but keeps the session itself
+      parameters:
+        - name: sessionId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OkResponse"
+        "404":
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -204,6 +348,9 @@ components:
         imageData:
           type: ["string", "null"]
           description: Base64 PNG screenshot to attach (overrides includeScreenshot lookup)
+        sessionId:
+          type: ["string", "null"]
+          description: Session ID to associate this message with
       required:
         - message
 
@@ -258,3 +405,85 @@ components:
           type: string
       required:
         - error
+
+    OkResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+      required:
+        - ok
+
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        messageCount:
+          type: integer
+        gameContext:
+          type: ["string", "null"]
+      required:
+        - id
+        - name
+        - createdAt
+        - updatedAt
+        - messageCount
+        - gameContext
+
+    SessionInput:
+      type: object
+      properties:
+        name:
+          type: string
+      required:
+        - name
+
+    SessionUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+      required:
+        - name
+
+    DisplayMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        timestamp:
+          type: string
+        screenshot:
+          type: ["string", "null"]
+      required:
+        - id
+        - role
+        - content
+        - timestamp
+        - screenshot
+
+    SessionMessages:
+      type: object
+      properties:
+        id:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/DisplayMessage"
+      required:
+        - id
+        - messages

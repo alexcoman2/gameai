@@ -25,7 +25,12 @@ import type {
   ErrorResponse,
   GameDetection,
   HealthStatus,
+  OkResponse,
   Screenshot,
+  Session,
+  SessionInput,
+  SessionMessages,
+  SessionUpdate,
   Settings,
   SettingsInput
 } from './api.schemas';
@@ -567,5 +572,448 @@ export const useSaveSettings = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getSaveSettingsMutationOptions(options));
+    }
+
+export const getListSessionsUrl = () => {
+
+
+
+
+  return `/api/sessions`
+}
+
+/**
+ * Returns all saved conversation sessions sorted by most recently updated
+ * @summary List all sessions
+ */
+export const listSessions = async ( options?: RequestInit): Promise<Session[]> => {
+
+  return customFetch<Session[]>(getListSessionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListSessionsQueryKey = () => {
+    return [
+    `/api/sessions`
+    ] as const;
+    }
+
+
+export const getListSessionsQueryOptions = <TData = Awaited<ReturnType<typeof listSessions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListSessionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listSessions>>> = ({ signal }) => listSessions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listSessions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListSessionsQueryResult = NonNullable<Awaited<ReturnType<typeof listSessions>>>
+export type ListSessionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List all sessions
+ */
+
+export function useListSessions<TData = Awaited<ReturnType<typeof listSessions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListSessionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getCreateSessionUrl = () => {
+
+
+
+
+  return `/api/sessions`
+}
+
+/**
+ * Creates a new named conversation session
+ * @summary Create a new session
+ */
+export const createSession = async (sessionInput: SessionInput, options?: RequestInit): Promise<Session> => {
+
+  return customFetch<Session>(getCreateSessionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      sessionInput,)
+  }
+);}
+
+
+
+
+export const getCreateSessionMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSession>>, TError,{data: BodyType<SessionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSession>>, TError,{data: BodyType<SessionInput>}, TContext> => {
+
+const mutationKey = ['createSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSession>>, {data: BodyType<SessionInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSession(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSessionMutationResult = NonNullable<Awaited<ReturnType<typeof createSession>>>
+    export type CreateSessionMutationBody = BodyType<SessionInput>
+    export type CreateSessionMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a new session
+ */
+export const useCreateSession = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSession>>, TError,{data: BodyType<SessionInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createSession>>,
+        TError,
+        {data: BodyType<SessionInput>},
+        TContext
+      > => {
+      return useMutation(getCreateSessionMutationOptions(options));
+    }
+
+export const getGetSessionMessagesUrl = (sessionId: string,) => {
+
+
+
+
+  return `/api/sessions/${sessionId}/messages`
+}
+
+/**
+ * Returns the display messages for a session
+ * @summary Get session messages
+ */
+export const getSessionMessages = async (sessionId: string, options?: RequestInit): Promise<SessionMessages> => {
+
+  return customFetch<SessionMessages>(getGetSessionMessagesUrl(sessionId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSessionMessagesQueryKey = (sessionId: string,) => {
+    return [
+    `/api/sessions/${sessionId}/messages`
+    ] as const;
+    }
+
+
+export const getGetSessionMessagesQueryOptions = <TData = Awaited<ReturnType<typeof getSessionMessages>>, TError = ErrorType<ErrorResponse>>(sessionId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSessionMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSessionMessagesQueryKey(sessionId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSessionMessages>>> = ({ signal }) => getSessionMessages(sessionId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: !!(sessionId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSessionMessages>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSessionMessagesQueryResult = NonNullable<Awaited<ReturnType<typeof getSessionMessages>>>
+export type GetSessionMessagesQueryError = ErrorType<ErrorResponse>
+
+
+/**
+ * @summary Get session messages
+ */
+
+export function useGetSessionMessages<TData = Awaited<ReturnType<typeof getSessionMessages>>, TError = ErrorType<ErrorResponse>>(
+ sessionId: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSessionMessages>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSessionMessagesQueryOptions(sessionId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getRenameSessionUrl = (sessionId: string,) => {
+
+
+
+
+  return `/api/sessions/${sessionId}`
+}
+
+/**
+ * Updates the name of a session
+ * @summary Rename a session
+ */
+export const renameSession = async (sessionId: string,
+    sessionUpdate: SessionUpdate, options?: RequestInit): Promise<Session> => {
+
+  return customFetch<Session>(getRenameSessionUrl(sessionId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      sessionUpdate,)
+  }
+);}
+
+
+
+
+export const getRenameSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameSession>>, TError,{sessionId: string;data: BodyType<SessionUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof renameSession>>, TError,{sessionId: string;data: BodyType<SessionUpdate>}, TContext> => {
+
+const mutationKey = ['renameSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof renameSession>>, {sessionId: string;data: BodyType<SessionUpdate>}> = (props) => {
+          const {sessionId,data} = props ?? {};
+
+          return  renameSession(sessionId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RenameSessionMutationResult = NonNullable<Awaited<ReturnType<typeof renameSession>>>
+    export type RenameSessionMutationBody = BodyType<SessionUpdate>
+    export type RenameSessionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Rename a session
+ */
+export const useRenameSession = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof renameSession>>, TError,{sessionId: string;data: BodyType<SessionUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof renameSession>>,
+        TError,
+        {sessionId: string;data: BodyType<SessionUpdate>},
+        TContext
+      > => {
+      return useMutation(getRenameSessionMutationOptions(options));
+    }
+
+export const getDeleteSessionUrl = (sessionId: string,) => {
+
+
+
+
+  return `/api/sessions/${sessionId}`
+}
+
+/**
+ * Permanently deletes a session and all its messages
+ * @summary Delete a session
+ */
+export const deleteSession = async (sessionId: string, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getDeleteSessionUrl(sessionId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSession>>, TError,{sessionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteSession>>, TError,{sessionId: string}, TContext> => {
+
+const mutationKey = ['deleteSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteSession>>, {sessionId: string}> = (props) => {
+          const {sessionId} = props ?? {};
+
+          return  deleteSession(sessionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteSessionMutationResult = NonNullable<Awaited<ReturnType<typeof deleteSession>>>
+
+    export type DeleteSessionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Delete a session
+ */
+export const useDeleteSession = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteSession>>, TError,{sessionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteSession>>,
+        TError,
+        {sessionId: string},
+        TContext
+      > => {
+      return useMutation(getDeleteSessionMutationOptions(options));
+    }
+
+export const getClearSessionUrl = (sessionId: string,) => {
+
+
+
+
+  return `/api/sessions/${sessionId}/clear`
+}
+
+/**
+ * Clears all messages in a session but keeps the session itself
+ * @summary Clear session messages
+ */
+export const clearSession = async (sessionId: string, options?: RequestInit): Promise<OkResponse> => {
+
+  return customFetch<OkResponse>(getClearSessionUrl(sessionId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getClearSessionMutationOptions = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearSession>>, TError,{sessionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof clearSession>>, TError,{sessionId: string}, TContext> => {
+
+const mutationKey = ['clearSession'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof clearSession>>, {sessionId: string}> = (props) => {
+          const {sessionId} = props ?? {};
+
+          return  clearSession(sessionId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClearSessionMutationResult = NonNullable<Awaited<ReturnType<typeof clearSession>>>
+
+    export type ClearSessionMutationError = ErrorType<ErrorResponse>
+
+    /**
+ * @summary Clear session messages
+ */
+export const useClearSession = <TError = ErrorType<ErrorResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof clearSession>>, TError,{sessionId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof clearSession>>,
+        TError,
+        {sessionId: string},
+        TContext
+      > => {
+      return useMutation(getClearSessionMutationOptions(options));
     }
 

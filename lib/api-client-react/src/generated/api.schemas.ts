@@ -57,6 +57,11 @@ export interface ChatMessageInput {
      * @nullable
      */
   imageData?: string | null;
+  /**
+     * Session ID to associate this message with
+     * @nullable
+     */
+  sessionId?: string | null;
 }
 
 export interface ChatResponse {
@@ -91,5 +96,50 @@ export interface SettingsInput {
 
 export interface ErrorResponse {
   error: string;
+}
+
+export interface OkResponse {
+  ok: boolean;
+}
+
+export interface Session {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  /** @nullable */
+  gameContext: string | null;
+}
+
+export interface SessionInput {
+  name: string;
+}
+
+export interface SessionUpdate {
+  /** @minLength 1 */
+  name: string;
+}
+
+export type DisplayMessageRole = typeof DisplayMessageRole[keyof typeof DisplayMessageRole];
+
+
+export const DisplayMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export interface DisplayMessage {
+  id: string;
+  role: DisplayMessageRole;
+  content: string;
+  timestamp: string;
+  /** @nullable */
+  screenshot: string | null;
+}
+
+export interface SessionMessages {
+  id: string;
+  messages: DisplayMessage[];
 }
 

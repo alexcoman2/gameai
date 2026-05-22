@@ -21,4 +21,9 @@ export interface ChatMessageInput {
      * @nullable
      */
   imageData?: string | null;
+  /**
+     * Session ID to associate this message with
+     * @nullable
+     */
+  sessionId?: string | null;
 }

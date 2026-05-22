@@ -6,6 +6,13 @@ import {
   saveHistory,
   clearHistory,
 } from "../lib/conversation-history.js";
+import {
+  getSession,
+  loadSessionHistory,
+  saveSessionHistory,
+  appendSessionMessages,
+  updateSession,
+} from "../lib/sessions-store.js";
 
 const router = Router();
 
@@ -16,10 +23,10 @@ type ConversationMessage = {
   content: Anthropic.MessageParam["content"];
 };
 
-let conversationHistory: ConversationMessage[] = loadHistory();
+let globalHistory: ConversationMessage[] = loadHistory();
 
 router.post("/chat/clear", async (_req, res) => {
-  conversationHistory = [];
+  globalHistory = [];
   clearHistory();
 
   const hostedUrl = process.env.NEXUS_LINK_API_URL;
@@ -35,12 +42,13 @@ router.post("/chat/clear", async (_req, res) => {
 });
 
 router.post("/chat/message", async (req, res) => {
-  const { message, gameName, includeScreenshot, imageData: reqImageData } =
+  const { message, gameName, includeScreenshot, imageData: reqImageData, sessionId } =
     req.body as {
       message: string;
       gameName?: string | null;
       includeScreenshot?: boolean;
       imageData?: string | null;
+      sessionId?: string | null;
     };
 
   if (!message || typeof message !== "string" || message.trim() === "") {
@@ -88,6 +96,12 @@ router.post("/chat/message", async (req, res) => {
       .json({ error: "AI service is not configured on the server." });
     return;
   }
+
+  const useSession = sessionId ? getSession(sessionId) !== null : false;
+
+  let conversationHistory: ConversationMessage[] = useSession
+    ? loadSessionHistory(sessionId!)
+    : globalHistory;
 
   const client = new Anthropic({ apiKey });
 
@@ -178,7 +192,39 @@ Keep responses focused and practical. Format answers with bullet points or numbe
       );
     }
 
-    saveHistory(conversationHistory);
+    if (useSession) {
+      saveSessionHistory(sessionId!, conversationHistory);
+
+      const now = new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      const messageCount = Math.floor(conversationHistory.length / 2);
+      appendSessionMessages(sessionId!, [
+        {
+          id: `${Date.now()}-user`,
+          role: "user",
+          content: message.trim(),
+          timestamp: now,
+          screenshot: null,
+        },
+        {
+          id: `${Date.now() + 1}-assistant`,
+          role: "assistant",
+          content: reply,
+          timestamp: now,
+          screenshot: null,
+        },
+      ]);
+      updateSession(sessionId!, {
+        updatedAt: new Date().toISOString(),
+        messageCount,
+        gameContext: gameName ?? null,
+      });
+    } else {
+      globalHistory = conversationHistory;
+      saveHistory(conversationHistory);
+    }
 
     res.json({
       reply,

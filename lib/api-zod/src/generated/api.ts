@@ -62,7 +62,8 @@ export const SendChatMessageBody = zod.object({
   "message": zod.string().min(1),
   "gameName": zod.string().nullish().describe('Currently detected game name for context'),
   "includeScreenshot": zod.boolean().optional().describe('Whether to attach the latest local screenshot to the message'),
-  "imageData": zod.string().nullish().describe('Base64 PNG screenshot to attach (overrides includeScreenshot lookup)')
+  "imageData": zod.string().nullish().describe('Base64 PNG screenshot to attach (overrides includeScreenshot lookup)'),
+  "sessionId": zod.string().nullish().describe('Session ID to associate this message with')
 })
 
 export const SendChatMessageResponse = zod.object({
@@ -97,6 +98,110 @@ export const SaveSettingsResponse = zod.object({
   "screenshotInterval": zod.number().describe('Auto-screenshot interval in seconds'),
   "autoCapture": zod.boolean().describe('Whether auto screenshot capture is enabled'),
   "hasSteamApiKey": zod.boolean().describe('Whether a Steam Web API key is configured')
+})
+
+
+/**
+ * Returns all saved conversation sessions sorted by most recently updated
+ * @summary List all sessions
+ */
+export const ListSessionsResponseItem = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "messageCount": zod.number(),
+  "gameContext": zod.string().nullable()
+})
+export const ListSessionsResponse = zod.array(ListSessionsResponseItem)
+
+
+/**
+ * Creates a new named conversation session
+ * @summary Create a new session
+ */
+export const CreateSessionBody = zod.object({
+  "name": zod.string()
+})
+
+export const CreateSessionResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "messageCount": zod.number(),
+  "gameContext": zod.string().nullable()
+})
+
+
+/**
+ * Returns the display messages for a session
+ * @summary Get session messages
+ */
+export const GetSessionMessagesParams = zod.object({
+  "sessionId": zod.coerce.string()
+})
+
+export const GetSessionMessagesResponse = zod.object({
+  "id": zod.string(),
+  "messages": zod.array(zod.object({
+  "id": zod.string(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "timestamp": zod.string(),
+  "screenshot": zod.string().nullable()
+}))
+})
+
+
+/**
+ * Updates the name of a session
+ * @summary Rename a session
+ */
+export const RenameSessionParams = zod.object({
+  "sessionId": zod.coerce.string()
+})
+
+
+
+
+export const RenameSessionBody = zod.object({
+  "name": zod.string().min(1)
+})
+
+export const RenameSessionResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "messageCount": zod.number(),
+  "gameContext": zod.string().nullable()
+})
+
+
+/**
+ * Permanently deletes a session and all its messages
+ * @summary Delete a session
+ */
+export const DeleteSessionParams = zod.object({
+  "sessionId": zod.coerce.string()
+})
+
+export const DeleteSessionResponse = zod.object({
+  "ok": zod.boolean()
+})
+
+
+/**
+ * Clears all messages in a session but keeps the session itself
+ * @summary Clear session messages
+ */
+export const ClearSessionParams = zod.object({
+  "sessionId": zod.coerce.string()
+})
+
+export const ClearSessionResponse = zod.object({
+  "ok": zod.boolean()
 })
 
 

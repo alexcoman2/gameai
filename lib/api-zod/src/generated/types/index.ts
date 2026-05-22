@@ -8,10 +8,17 @@
 
 export * from './chatMessageInput';
 export * from './chatResponse';
+export * from './displayMessage';
+export * from './displayMessageRole';
 export * from './errorResponse';
 export * from './gameDetection';
 export * from './gameDetectionConfidence';
 export * from './healthStatus';
+export * from './okResponse';
 export * from './screenshot';
+export * from './session';
+export * from './sessionInput';
+export * from './sessionMessages';
+export * from './sessionUpdate';
 export * from './settings';
 export * from './settingsInput';
