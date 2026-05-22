@@ -46,6 +46,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [includeScreenshot, setIncludeScreenshot] = useState(false);
   const [pendingScreenshot, setPendingScreenshot] = useState<string | null>(null);
+  const [electronAutoScreenshot, setElectronAutoScreenshot] = useState<string | null>(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [newSessionName, setNewSessionName] = useState("");
   const [creatingSession, setCreatingSession] = useState(false);
@@ -179,15 +180,55 @@ export default function Home() {
   const toDataUrl = (base64: string) =>
     base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`;
 
-  const handleCapture = async () => {
-    try {
-      const result = await captureMutation.mutateAsync();
-      if (result.imageData) {
-        setPendingScreenshot(toDataUrl(result.imageData));
-        setIncludeScreenshot(true);
+  type ElectronAPI = {
+    isElectron?: boolean;
+    captureScreenshot?: () => Promise<string>;
+    getAlwaysOnTop?: () => Promise<boolean>;
+    toggleAlwaysOnTop?: () => Promise<boolean>;
+  };
+  const electronAPI = (window as Window & { electronAPI?: ElectronAPI }).electronAPI;
+
+  // Electron auto-capture: run a timer in the frontend using desktopCapturer via IPC.
+  // This replaces the server-side screenshot-desktop approach entirely.
+  useEffect(() => {
+    if (!isElectron || !settings?.autoCapture || !electronAPI?.captureScreenshot) return;
+    const intervalMs = (settings.screenshotInterval || 30) * 1000;
+    const capture = async () => {
+      try {
+        const dataUrl = await electronAPI.captureScreenshot!();
+        if (dataUrl) setElectronAutoScreenshot(dataUrl);
+      } catch {
+        // Silent fail — screen capture may be denied
       }
-    } catch (e) {
-      console.error("Failed to capture screenshot", e);
+    };
+    capture(); // Capture immediately on enable
+    const timer = setInterval(capture, intervalMs);
+    return () => clearInterval(timer);
+  }, [isElectron, settings?.autoCapture, settings?.screenshotInterval]);
+
+  const handleCapture = async () => {
+    if (isElectron && electronAPI?.captureScreenshot) {
+      // Electron: use desktopCapturer via IPC — no server roundtrip needed
+      try {
+        const dataUrl = await electronAPI.captureScreenshot();
+        if (dataUrl) {
+          setPendingScreenshot(dataUrl);
+          setIncludeScreenshot(true);
+        }
+      } catch (e) {
+        console.error("Failed to capture screenshot via Electron", e);
+      }
+    } else {
+      // Web fallback: use server-side capture endpoint
+      try {
+        const result = await captureMutation.mutateAsync();
+        if (result.imageData) {
+          setPendingScreenshot(toDataUrl(result.imageData));
+          setIncludeScreenshot(true);
+        }
+      } catch (e) {
+        console.error("Failed to capture screenshot", e);
+      }
     }
   };
 
@@ -289,11 +330,14 @@ export default function Home() {
     e.preventDefault();
     if (!input.trim() || sendMutation.isPending) return;
 
-    const latestImgData = latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : null;
+    // Electron: use IPC-captured screenshot; Web: fall back to server-side capture
+    const latestImgData = isElectron
+      ? electronAutoScreenshot
+      : (latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : null);
     // Auto-include latest screenshot when auto-capture is on, or when user manually toggled
     const autoCapturing = settings?.autoCapture && !!latestImgData;
     const sentScreenshot = (includeScreenshot || autoCapturing) ? (pendingScreenshot || latestImgData) : null;
-    const shouldSendScreenshot = includeScreenshot || autoCapturing;
+    const shouldSendScreenshot = !!(includeScreenshot || autoCapturing);
 
     const userMessage = {
       id: Date.now().toString(),
@@ -315,7 +359,11 @@ export default function Home() {
         data: {
           message: messageContent,
           gameName: gameNameOverride.trim() || gameDetection?.gameName || gameDetection?.processName,
-          includeScreenshot: shouldSendScreenshot,
+          // In Electron, send the screenshot image directly so the server never
+          // needs to do a local capture lookup. On web, rely on includeScreenshot.
+          ...(isElectron && sentScreenshot
+            ? { imageData: sentScreenshot, includeScreenshot: false }
+            : { includeScreenshot: shouldSendScreenshot }),
           sessionId: activeSessionId,
         }
       });

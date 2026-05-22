@@ -2,6 +2,7 @@ import {
   app,
   BrowserWindow,
   ipcMain,
+  desktopCapturer,
   utilityProcess,
   type UtilityProcess,
 } from "electron";
@@ -149,6 +150,16 @@ app.on("before-quit", () => {
     serverProcess.kill();
     serverProcess = null;
   }
+});
+
+ipcMain.handle("capture-screenshot", async () => {
+  const sources = await desktopCapturer.getSources({
+    types: ["screen"],
+    thumbnailSize: { width: 1920, height: 1080 },
+  });
+  if (sources.length === 0) throw new Error("No screen sources found");
+  const dataUrl = sources[0].thumbnail.toDataURL();
+  return dataUrl;
 });
 
 ipcMain.handle("toggle-always-on-top", () => {

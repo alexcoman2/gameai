@@ -7,5 +7,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("get-always-on-top"),
   setAlwaysOnTop: (value: boolean): Promise<boolean> =>
     ipcRenderer.invoke("set-always-on-top", value),
+  captureScreenshot: (): Promise<string> =>
+    ipcRenderer.invoke("capture-screenshot"),
   isElectron: true as const,
 });
