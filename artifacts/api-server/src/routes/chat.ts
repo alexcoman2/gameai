@@ -1,6 +1,11 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { getLatestScreenshot } from "../lib/screenshot-state.js";
+import {
+  loadHistory,
+  saveHistory,
+  clearHistory,
+} from "../lib/conversation-history.js";
 
 const router = Router();
 
@@ -11,10 +16,11 @@ type ConversationMessage = {
   content: Anthropic.MessageParam["content"];
 };
 
-let conversationHistory: ConversationMessage[] = [];
+let conversationHistory: ConversationMessage[] = loadHistory();
 
 router.post("/chat/clear", (_req, res) => {
   conversationHistory = [];
+  clearHistory();
   res.json({ ok: true });
 });
 
@@ -115,6 +121,8 @@ Keep responses focused and practical. Format answers with bullet points or numbe
         conversationHistory.length - MAX_HISTORY_TURNS * 2
       );
     }
+
+    saveHistory(conversationHistory);
 
     res.json({
       reply,
