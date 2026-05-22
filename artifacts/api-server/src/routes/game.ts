@@ -418,6 +418,37 @@ function isGameCandidate(proc: string): boolean {
   return base.length >= 4;
 }
 
+router.delete("/game/cache", (req, res) => {
+  const isLocalhost =
+    req.ip === "127.0.0.1" ||
+    req.ip === "::1" ||
+    req.ip === "::ffff:127.0.0.1";
+
+  const adminToken = process.env.ADMIN_TOKEN;
+  const authHeader = req.headers.authorization ?? "";
+  const providedToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice(7)
+    : null;
+  const hasValidToken =
+    adminToken && providedToken && providedToken === adminToken;
+
+  if (!isLocalhost && !hasValidToken) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+
+  const searchEntries = steamSearchCache.size;
+  steamSearchCache.clear();
+  steamAppListCache = null;
+  steamAppListFetchedAt = 0;
+
+  console.log(
+    `[game/cache] Cache cleared — removed ${searchEntries} search entr${searchEntries === 1 ? "y" : "ies"} and reset Steam app list cache`
+  );
+
+  res.json({ cleared: true, searchEntriesRemoved: searchEntries });
+});
+
 router.get("/game/detect", async (_req, res) => {
   const processes = await getRunningProcesses();
   const config = loadConfig();
