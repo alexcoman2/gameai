@@ -79,6 +79,10 @@
   },
   "optionalDependencies": {
     "@rollup/rollup-win32-x64-msvc": "*",
-    "@rollup/rollup-linux-x64-gnu": "*"
+    "@rollup/rollup-linux-x64-gnu": "*",
+    "lightningcss-win32-x64-msvc": "*",
+    "lightningcss-linux-x64-gnu": "*",
+    "@tailwindcss/oxide-win32-x64-msvc": "*",
+    "@tailwindcss/oxide-linux-x64-gnu": "*"
   }
 }
