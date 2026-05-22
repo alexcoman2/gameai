@@ -16,11 +16,13 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const workspaceRoot = path.resolve(__dirname, "..", "..");
 
+// On Windows, pnpm is installed as pnpm.cmd — use shell:true so the OS
+// resolves .cmd/.bat files correctly on all platforms.
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
     const proc = spawn(cmd, args, {
       stdio: "inherit",
-      shell: false,
+      shell: true,
       ...opts,
     });
     proc.on("exit", (code) => {
