@@ -56,6 +56,9 @@ router.post("/chat/watch", async (req, res) => {
       ? `The user believes they are playing: ${gameName}. Confirm or correct this in the gameName field.`
       : "Game is unknown — identify it if possible.";
 
+    // Extract the real media type from the data URL before stripping the prefix.
+    const mimeMatch = imageData.match(/^data:(image\/\w+);base64,/);
+    const declaredType = mimeMatch?.[1] ?? "image/png";
     const rawBase64 = imageData.replace(/^data:image\/\w+;base64,/, "");
 
     // Anthropic hard limit is 5 MB decoded. Compress to JPEG if needed.
@@ -64,7 +67,7 @@ router.post("/chat/watch", async (req, res) => {
     // but if it does, missing sharp is caught gracefully.
     const MAX_BYTES = 4_500_000;
     let imageBase64 = rawBase64;
-    let mediaType: "image/png" | "image/jpeg" = "image/png";
+    let mediaType: "image/png" | "image/jpeg" = declaredType === "image/jpeg" ? "image/jpeg" : "image/png";
     if (Buffer.byteLength(rawBase64, "base64") > MAX_BYTES) {
       try {
         const sharp = (await import("sharp")).default;
@@ -120,10 +123,12 @@ router.post("/chat/watch", async (req, res) => {
     }
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
+      console.error(`[watch] Anthropic API error status=${err.status} message=${err.message}`);
       res.status(500).json({ error: `Claude API error: ${err.message}` });
       return;
     }
     const msg = err instanceof Error ? err.message : "Unknown error";
+    console.error(`[watch] unexpected error: ${msg}`);
     res.status(500).json({ error: `Watch request failed: ${msg}` });
   }
 });
