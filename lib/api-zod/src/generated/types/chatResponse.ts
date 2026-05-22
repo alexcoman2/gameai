@@ -5,9 +5,12 @@
  * API specification for AI Gaming Companion
  * OpenAPI spec version: 0.1.0
  */
+import type { HistoryEntry } from './historyEntry';
 
 export interface ChatResponse {
   reply: string;
   model: string;
   tokensUsed: number;
+  /** Updated history after this turn (only returned in stateless/hosted mode) */
+  updatedHistory?: HistoryEntry[];
 }

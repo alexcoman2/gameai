@@ -64,13 +64,21 @@ export const SendChatMessageBody = zod.object({
   "gameName": zod.string().nullish().describe('Currently detected game name for context'),
   "includeScreenshot": zod.boolean().optional().describe('Whether to attach the latest local screenshot to the message'),
   "imageData": zod.string().nullish().describe('Base64 PNG screenshot to attach (overrides includeScreenshot lookup)'),
-  "sessionId": zod.string().nullish().describe('Session ID to associate this message with')
+  "sessionId": zod.string().nullish().describe('Session ID to associate this message with'),
+  "history": zod.array(zod.object({
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string()
+}).describe('A single turn in the conversation history (text only, no images)')).optional().describe('Full conversation history — when provided the hosted server is stateless (no disk writes)')
 })
 
 export const SendChatMessageResponse = zod.object({
   "reply": zod.string(),
   "model": zod.string(),
-  "tokensUsed": zod.number()
+  "tokensUsed": zod.number(),
+  "updatedHistory": zod.array(zod.object({
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string()
+}).describe('A single turn in the conversation history (text only, no images)')).optional().describe('Updated history after this turn (only returned in stateless\/hosted mode)')
 })
 
 

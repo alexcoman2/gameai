@@ -24,18 +24,59 @@ type ConversationMessage = {
   content: Anthropic.MessageParam["content"];
 };
 
+// Simple text-only wire format for passing history to the hosted server
+type HistoryEntry = { role: "user" | "assistant"; content: string };
+
 let globalHistory: ConversationMessage[] = loadHistory();
 
-router.post("/chat/clear", async (_req, res) => {
-  globalHistory = [];
-  clearHistory();
+// ── Helpers ──────────────────────────────────────────────────────────────────
 
+function toHistoryEntries(history: ConversationMessage[]): HistoryEntry[] {
+  return history.map((msg) => {
+    let text = "";
+    if (typeof msg.content === "string") {
+      text = msg.content;
+    } else if (Array.isArray(msg.content)) {
+      const block = (msg.content as Array<{ type: string; text?: string }>).find(
+        (b) => b.type === "text"
+      );
+      text = block?.text ?? "";
+    }
+    return { role: msg.role, content: text };
+  });
+}
+
+function fromHistoryEntries(entries: HistoryEntry[]): ConversationMessage[] {
+  return entries.map((e) => ({
+    role: e.role,
+    content:
+      e.role === "user"
+        ? ([{ type: "text", text: e.content }] as Anthropic.MessageParam["content"])
+        : e.content,
+  }));
+}
+
+// ── Routes ───────────────────────────────────────────────────────────────────
+
+router.post("/chat/clear", async (req, res) => {
+  const { sessionId } = req.body as { sessionId?: string };
   const hostedUrl = process.env.NEXUS_LINK_API_URL;
+
   if (hostedUrl) {
-    try {
-      await fetch(`${hostedUrl}/api/chat/clear`, { method: "POST" });
-    } catch {
-      // best-effort — clear local state regardless
+    // Proxy mode: clear local state only — hosted server is stateless, nothing to clear there
+    if (sessionId) {
+      // session clear is handled by the dedicated /sessions/:id/clear endpoint
+    } else {
+      globalHistory = [];
+      clearHistory();
+    }
+  } else {
+    // Direct mode
+    if (sessionId) {
+      // Handled by sessions route
+    } else {
+      globalHistory = [];
+      clearHistory();
     }
   }
 
@@ -43,28 +84,34 @@ router.post("/chat/clear", async (_req, res) => {
 });
 
 router.post("/chat/message", async (req, res) => {
-  const { message, gameName, includeScreenshot, imageData: reqImageData, sessionId } =
-    req.body as {
-      message: string;
-      gameName?: string | null;
-      includeScreenshot?: boolean;
-      imageData?: string | null;
-      sessionId?: string | null;
-    };
+  const {
+    message,
+    gameName,
+    includeScreenshot,
+    imageData: reqImageData,
+    sessionId,
+    history: reqHistory,
+  } = req.body as {
+    message: string;
+    gameName?: string | null;
+    includeScreenshot?: boolean;
+    imageData?: string | null;
+    sessionId?: string | null;
+    history?: HistoryEntry[] | null;
+  };
 
   if (!message || typeof message !== "string" || message.trim() === "") {
     res.status(400).json({ error: "message is required" });
     return;
   }
 
-  // ── PROXY MODE ─────────────────────────────────────────────────────────────
-  // When NEXUS_LINK_API_URL is set (Electron packaged build) this server has no
-  // API key. It grabs the local screenshot and forwards the request to the
-  // hosted server which holds the key.
+  // ── PROXY MODE ──────────────────────────────────────────────────────────────
+  // Local Electron server. Loads history from disk, attaches screenshot, then
+  // forwards everything to the stateless hosted server. Persists the result.
   const hostedUrl = process.env.NEXUS_LINK_API_URL;
   if (hostedUrl) {
+    // Resolve screenshot
     let imageData: string | null = reqImageData ?? null;
-
     if (!imageData && includeScreenshot) {
       const latest = getLatestScreenshot();
       if (latest.available && latest.imageData) {
@@ -72,15 +119,85 @@ router.post("/chat/message", async (req, res) => {
       }
     }
 
+    // Load conversation history from local disk
+    const useSession = sessionId ? getSession(sessionId) !== null : false;
+    const localHistory: ConversationMessage[] = useSession
+      ? loadSessionHistory(sessionId!)
+      : globalHistory;
+    const historyEntries = toHistoryEntries(localHistory);
+
     try {
       const upstream = await fetch(`${hostedUrl}/api/chat/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, gameName, imageData }),
+        body: JSON.stringify({ message, gameName, imageData, history: historyEntries }),
       });
 
-      const data = await upstream.json() as Record<string, unknown>;
-      res.status(upstream.status).json(data);
+      const data = (await upstream.json()) as Record<string, unknown>;
+
+      if (!upstream.ok) {
+        res.status(upstream.status).json(data);
+        return;
+      }
+
+      const reply = data.reply as string;
+      const updatedHistoryRaw = data.updatedHistory as HistoryEntry[] | undefined;
+
+      if (reply && updatedHistoryRaw) {
+        const updatedHistory = fromHistoryEntries(updatedHistoryRaw);
+
+        // Persist updated history locally
+        if (useSession) {
+          saveSessionHistory(sessionId!, updatedHistory);
+
+          const now = new Date().toLocaleTimeString([], {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          const messageCount = Math.floor(updatedHistory.length / 2);
+          const userMsgId = `${Date.now()}-user`;
+          const assistantMsgId = `${Date.now() + 1}-assistant`;
+
+          let screenshotRef: string | null = null;
+          if (imageData) {
+            const clean = imageData.replace(/^data:image\/\w+;base64,/, "");
+            saveScreenshotFile(sessionId!, userMsgId, clean);
+            screenshotRef = `file:${userMsgId}`;
+          }
+
+          appendSessionMessages(sessionId!, [
+            {
+              id: userMsgId,
+              role: "user",
+              content: message.trim(),
+              timestamp: now,
+              screenshot: screenshotRef,
+            },
+            {
+              id: assistantMsgId,
+              role: "assistant",
+              content: reply,
+              timestamp: now,
+              screenshot: null,
+            },
+          ]);
+          updateSession(sessionId!, {
+            updatedAt: new Date().toISOString(),
+            messageCount,
+            gameContext: gameName ?? null,
+          });
+        } else {
+          globalHistory = updatedHistory;
+          saveHistory(updatedHistory);
+        }
+      }
+
+      // Return just the chat response fields (strip updatedHistory from client response)
+      res.json({
+        reply: data.reply,
+        model: data.model,
+        tokensUsed: data.tokensUsed,
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
       res.status(502).json({ error: `Failed to reach AI service: ${msg}` });
@@ -88,19 +205,24 @@ router.post("/chat/message", async (req, res) => {
     return;
   }
 
-  // ── DIRECT MODE ────────────────────────────────────────────────────────────
-  // Running on the hosted Replit server — API key is available here.
+  // ── DIRECT MODE ─────────────────────────────────────────────────────────────
+  // Running on the hosted Replit server (or local dev without NEXUS_LINK_API_URL).
+  // When `history` is provided in the request, operate statelessly — call Claude
+  // and return updatedHistory without touching the disk.
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    res
-      .status(500)
-      .json({ error: "AI service is not configured on the server." });
+    res.status(500).json({ error: "AI service is not configured on the server." });
     return;
   }
 
-  const useSession = sessionId ? getSession(sessionId) !== null : false;
+  // Stateless mode: history provided by the caller (proxy or external client)
+  const stateless = Array.isArray(reqHistory);
 
-  let conversationHistory: ConversationMessage[] = useSession
+  const useSession = !stateless && sessionId ? getSession(sessionId) !== null : false;
+
+  let conversationHistory: ConversationMessage[] = stateless
+    ? fromHistoryEntries(reqHistory!)
+    : useSession
     ? loadSessionHistory(sessionId!)
     : globalHistory;
 
@@ -128,12 +250,11 @@ Keep responses focused and practical. Format answers with bullet points or numbe
   try {
     const userContent: Anthropic.MessageParam["content"] = [];
 
-    // Accept imageData from the request body (sent by proxy) or from local state
+    // Resolve screenshot (local state only used in non-stateless dev mode)
     let imageBase64: string | null = null;
     if (reqImageData) {
-      // Strip data URL prefix if present
       imageBase64 = reqImageData.replace(/^data:image\/\w+;base64,/, "");
-    } else if (includeScreenshot) {
+    } else if (!stateless && includeScreenshot) {
       const latest = getLatestScreenshot();
       if (latest.available && latest.imageData) {
         imageBase64 = latest.imageData;
@@ -151,20 +272,10 @@ Keep responses focused and practical. Format answers with bullet points or numbe
       });
     }
 
-    userContent.push({
-      type: "text",
-      text: message.trim(),
-    });
-
-    const historyMessages: Anthropic.MessageParam[] = conversationHistory.map(
-      (entry) => ({
-        role: entry.role,
-        content: entry.content,
-      })
-    );
+    userContent.push({ type: "text", text: message.trim() });
 
     const allMessages: Anthropic.MessageParam[] = [
-      ...historyMessages,
+      ...conversationHistory.map((e) => ({ role: e.role, content: e.content })),
       { role: "user", content: userContent },
     ];
 
@@ -181,11 +292,15 @@ Keep responses focused and practical. Format answers with bullet points or numbe
         ? replyBlock.text
         : "No response generated.";
 
+    // Build updated history (text-only for user turns)
     const userTextOnly: Anthropic.MessageParam["content"] = [
       { type: "text", text: message.trim() },
     ];
-    conversationHistory.push({ role: "user", content: userTextOnly });
-    conversationHistory.push({ role: "assistant", content: reply });
+    conversationHistory = [
+      ...conversationHistory,
+      { role: "user", content: userTextOnly },
+      { role: "assistant", content: reply },
+    ];
 
     if (conversationHistory.length > MAX_HISTORY_TURNS * 2) {
       conversationHistory = conversationHistory.slice(
@@ -193,6 +308,18 @@ Keep responses focused and practical. Format answers with bullet points or numbe
       );
     }
 
+    if (stateless) {
+      // Stateless: return updated history to the caller — no disk writes
+      res.json({
+        reply,
+        model: response.model,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+        updatedHistory: toHistoryEntries(conversationHistory),
+      });
+      return;
+    }
+
+    // Legacy / dev mode: persist to disk as before
     if (useSession) {
       saveSessionHistory(sessionId!, conversationHistory);
 
@@ -252,8 +379,8 @@ Keep responses focused and practical. Format answers with bullet points or numbe
       res.status(500).json({ error: `Claude API error: ${err.message}` });
       return;
     }
-    const message_err = err instanceof Error ? err.message : "Unknown error";
-    res.status(500).json({ error: `AI request failed: ${message_err}` });
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: `AI request failed: ${msg}` });
   }
 });
 

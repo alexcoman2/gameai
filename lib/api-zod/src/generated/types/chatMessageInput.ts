@@ -5,6 +5,7 @@
  * API specification for AI Gaming Companion
  * OpenAPI spec version: 0.1.0
  */
+import type { HistoryEntry } from './historyEntry';
 
 export interface ChatMessageInput {
   /** @minLength 1 */
@@ -26,4 +27,6 @@ export interface ChatMessageInput {
      * @nullable
      */
   sessionId?: string | null;
+  /** Full conversation history — when provided the hosted server is stateless (no disk writes) */
+  history?: HistoryEntry[];
 }

@@ -338,6 +338,19 @@ components:
         - capturedAt
         - available
 
+    HistoryEntry:
+      type: object
+      description: A single turn in the conversation history (text only, no images)
+      properties:
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+      required:
+        - role
+        - content
+
     ChatMessageInput:
       type: object
       properties:
@@ -356,6 +369,11 @@ components:
         sessionId:
           type: ["string", "null"]
           description: Session ID to associate this message with
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoryEntry"
+          description: Full conversation history — when provided the hosted server is stateless (no disk writes)
       required:
         - message
 
@@ -368,6 +386,11 @@ components:
           type: string
         tokensUsed:
           type: integer
+        updatedHistory:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoryEntry"
+          description: Updated history after this turn (only returned in stateless/hosted mode)
       required:
         - reply
         - model

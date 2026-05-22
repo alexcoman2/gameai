@@ -60,6 +60,22 @@ export interface Screenshot {
   available: boolean;
 }
 
+export type HistoryEntryRole = typeof HistoryEntryRole[keyof typeof HistoryEntryRole];
+
+
+export const HistoryEntryRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+/**
+ * A single turn in the conversation history (text only, no images)
+ */
+export interface HistoryEntry {
+  role: HistoryEntryRole;
+  content: string;
+}
+
 export interface ChatMessageInput {
   /** @minLength 1 */
   message: string;
@@ -80,12 +96,16 @@ export interface ChatMessageInput {
      * @nullable
      */
   sessionId?: string | null;
+  /** Full conversation history — when provided the hosted server is stateless (no disk writes) */
+  history?: HistoryEntry[];
 }
 
 export interface ChatResponse {
   reply: string;
   model: string;
   tokensUsed: number;
+  /** Updated history after this turn (only returned in stateless/hosted mode) */
+  updatedHistory?: HistoryEntry[];
 }
 
 export interface Settings {

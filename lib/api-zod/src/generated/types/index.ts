@@ -15,6 +15,8 @@ export * from './gameDetection';
 export * from './gameDetectionConfidence';
 export * from './gameDetectionSource';
 export * from './healthStatus';
+export * from './historyEntry';
+export * from './historyEntryRole';
 export * from './okResponse';
 export * from './screenshot';
 export * from './session';
