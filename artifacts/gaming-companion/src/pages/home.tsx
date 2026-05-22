@@ -278,10 +278,11 @@ export default function Home() {
   useEffect(() => {
     (window as Window & { __gameNameOverride__?: string }).__gameNameOverride__ =
       gameNameOverride.trim() ||
+      visionDetectedGame ||
       gameDetection?.gameName ||
       gameDetection?.processName ||
       undefined;
-  }, [gameNameOverride, gameDetection?.gameName, gameDetection?.processName]);
+  }, [gameNameOverride, visionDetectedGame, gameDetection?.gameName, gameDetection?.processName]);
 
   const handleCapture = async () => {
     if (isElectron && electronAPI?.captureScreenshot) {
