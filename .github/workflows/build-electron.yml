@@ -47,6 +47,8 @@ jobs:
           NODE_ENV: production
           PORT: "20618"
           BASE_PATH: "/"
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
 
       - name: Upload NSIS installer artifact
         uses: actions/upload-artifact@v4

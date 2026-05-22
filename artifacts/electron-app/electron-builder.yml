@@ -35,6 +35,10 @@ win:
       arch:
         - x64
   requestedExecutionLevel: asInvoker
+  signingHashAlgorithms:
+    - sha256
+  certificateFile: ${env.WIN_CSC_LINK}
+  certificatePassword: ${env.WIN_CSC_KEY_PASSWORD}
 
 nsis:
   oneClick: true
