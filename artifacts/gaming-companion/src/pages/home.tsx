@@ -58,6 +58,7 @@ export default function Home() {
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [watchMode, setWatchMode] = useState(false);
   const [watchScreenshot, setWatchScreenshot] = useState<string | null>(null);
+  const [watchLog, setWatchLog] = useState<{ time: string; note: string }[]>([]);
   const [watchInterval, setWatchInterval] = useState<10 | 30 | 60>(30);
 
   const isElectron = !!(window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron;
@@ -210,26 +211,59 @@ export default function Home() {
     return () => clearInterval(timer);
   }, [isElectron, settings?.autoCapture, settings?.screenshotInterval]);
 
-  // Watch mode: silently refresh a screenshot on interval — no AI calls,
-  // no notifications. The captured frame is attached automatically when
-  // the user sends their next message.
+  // Watch mode: two-tier loop.
+  // Tier 1 — screenshot refresh at watchInterval (fast, no AI calls).
+  // Tier 2 — observation every 90s: sends screenshot to Claude Haiku for a
+  //           1-sentence game state note, appended to watchLog (max 15 entries).
+  //           watchLog is included in every chat message so Claude knows what
+  //           has been happening between conversations.
   useEffect(() => {
     if (!isElectron || !watchMode || !electronAPI?.captureScreenshot) return;
-    const INTERVAL_MS = watchInterval * 1000;
+    const SCREENSHOT_MS = watchInterval * 1000;
+    const OBSERVE_MS = 90_000;
     let active = true;
+    let lastObserveAt = 0;
 
-    const capture = async () => {
+    const tick = async () => {
       if (!active) return;
       try {
         const dataUrl = await electronAPI.captureScreenshot!();
-        if (dataUrl && active) setWatchScreenshot(dataUrl);
+        if (!dataUrl || !active) return;
+        setWatchScreenshot(dataUrl);
+
+        const now = Date.now();
+        if (now - lastObserveAt >= OBSERVE_MS) {
+          lastObserveAt = now;
+          const gameName =
+            (window as Window & { __gameNameOverride__?: string }).__gameNameOverride__ ||
+            undefined;
+          try {
+            const res = await fetch("/api/chat/watch", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ imageData: dataUrl, gameName }),
+            });
+            if (res.ok && active) {
+              const data = (await res.json()) as { observation: string | null };
+              if (data.observation) {
+                const entry = {
+                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  note: data.observation,
+                };
+                setWatchLog((prev) => [...prev.slice(-14), entry]);
+              }
+            }
+          } catch {
+            // Silent fail — observation is best-effort
+          }
+        }
       } catch {
         // Silent fail — screen capture may be denied
       }
     };
 
-    capture();
-    const timer = setInterval(capture, INTERVAL_MS);
+    tick();
+    const timer = setInterval(tick, SCREENSHOT_MS);
     return () => {
       active = false;
       clearInterval(timer);
@@ -404,6 +438,7 @@ export default function Home() {
             ? { imageData: sentScreenshot, includeScreenshot: false }
             : { includeScreenshot: shouldSendScreenshot }),
           sessionId: activeSessionId,
+          ...(watchLog.length > 0 ? { watchLog } : {}),
         }
       });
 

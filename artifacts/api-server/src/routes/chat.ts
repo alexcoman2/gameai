@@ -91,6 +91,7 @@ router.post("/chat/message", async (req, res) => {
     imageData: reqImageData,
     sessionId,
     history: reqHistory,
+    watchLog: reqWatchLog,
   } = req.body as {
     message: string;
     gameName?: string | null;
@@ -98,6 +99,7 @@ router.post("/chat/message", async (req, res) => {
     imageData?: string | null;
     sessionId?: string | null;
     history?: HistoryEntry[] | null;
+    watchLog?: { time: string; note: string }[] | null;
   };
 
   if (!message || typeof message !== "string" || message.trim() === "") {
@@ -130,7 +132,7 @@ router.post("/chat/message", async (req, res) => {
       const upstream = await fetch(`${hostedUrl}/api/chat/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, gameName, imageData, history: historyEntries }),
+        body: JSON.stringify({ message, gameName, imageData, history: historyEntries, watchLog: reqWatchLog }),
       });
 
       const data = (await upstream.json()) as Record<string, unknown>;
@@ -237,21 +239,25 @@ router.post("/chat/message", async (req, res) => {
     ? `You have been assisting this player for ${Math.round(historyLength)} exchange${historyLength !== 1 ? "s" : ""} this session. Use the full conversation history to maintain continuity — remember what problems they've encountered, what strategies were tried, what areas they've explored, and what help you've already given.`
     : `This is the start of a new session with this player.`;
 
+  const watchLogSection = reqWatchLog && reqWatchLog.length > 0
+    ? `\nWATCH LOG (passive screen observations recorded while the player was playing, newest last):\n${reqWatchLog.map(e => `  [${e.time}] ${e.note}`).join("\n")}\nUse this log to understand what has been happening in the game between messages. It fills the gap when the player has been playing without chatting.\n`
+    : "";
+
   const systemPrompt = `You are NEXUS_LINK AI CORE — an expert gaming co-pilot embedded as a desktop overlay. You operate as a persistent, session-aware companion throughout the player's entire gameplay session.
 
 GAME: ${gameContext}
 
 SESSION MEMORY: ${sessionContext}
-
+${watchLogSection}
 SCREENSHOT: When a screenshot is attached to the current message, it is a real-time capture of the player's screen taken by the NEXUS_LINK app. Always describe what you see before giving advice. Never claim you cannot see screenshots — if one is attached, you are seeing it.
 
 YOUR ROLE:
 - Maintain a running mental model of the player's progress, current situation, and past interactions this session
 - Reference earlier conversation context naturally ("Earlier you mentioned...", "Since you already tried X...")
+- When asked "what's going on" or "what should I do", synthesize the watch log AND conversation history to give a grounded answer
 - Help with stuck moments, boss fights, puzzles, quests, builds, and mechanics
 - Be spoiler-aware — warn before story spoilers and check if the player wants them
 - Be concise and actionable — bullet points and numbered steps for instructions
-- When asked "what's going on" or "what should I do", synthesize everything you know from the session to give a grounded answer
 
 You are not a one-shot Q&A bot. You are a co-pilot who has been watching and helping throughout this session.`;
 

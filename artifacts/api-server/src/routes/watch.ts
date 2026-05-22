@@ -3,29 +3,17 @@ import Anthropic from "@anthropic-ai/sdk";
 
 const router = Router();
 
-const WATCH_SYSTEM_PROMPT = `You are NEXUS_LINK WATCH MODE — a passive game monitor analyzing screenshots in real time.
+const OBSERVE_SYSTEM_PROMPT = `You are a game state recorder embedded in a gaming assistant app. Your only job is to describe what you see in the screenshot in 1-2 sentences — factual, specific, no advice.
 
-Your job: scan the screenshot and flag anything that genuinely warrants the player's attention.
+Include: current location or area (if identifiable), what the player appears to be doing, health/stamina/mana if visible, any enemies or NPCs present, any notable UI elements (quest markers, timers, low resources).
 
-Flag these situations (examples, not exhaustive):
-- Health/mana/stamina critically low
-- Enemies or hazards the player may not have noticed
-- An objective marker or quest item visible on screen
-- A puzzle element or interactable the player seems to be ignoring
-- Buffs/debuffs that are about to expire
-- Loot or collectibles visible on screen
-- Boss patterns or attack tells
-- Environmental danger (fire spreading, timer running out, etc.)
+Examples of good observations:
+- "Player is in a dark cave area with ~40% health, facing two skeleton archers near a locked gate."
+- "Inventory screen open showing 3 empty slots; player appears to be managing equipment."
+- "Cutscene playing — no gameplay visible."
+- "Player is running through a forest area at full health, no enemies visible."
 
-Do NOT flag:
-- Normal gameplay that looks intentional
-- Routine combat the player is clearly managing
-- UI elements that are simply visible
-- Anything speculative without visual evidence
-
-If you see something genuinely worth flagging, respond with a single short tip — max 2 sentences, direct and actionable.
-
-If everything looks routine or unremarkable, respond with exactly: NOTHING_TO_FLAG`;
+Be factual and brief. No tips, no warnings, no suggestions. Just describe what you see.`;
 
 router.post("/chat/watch", async (req, res) => {
   const { imageData, gameName } = req.body as {
@@ -57,7 +45,7 @@ router.post("/chat/watch", async (req, res) => {
   }
 
   if (!imageData) {
-    res.json({ insight: null, hasInsight: false });
+    res.json({ observation: null });
     return;
   }
 
@@ -65,15 +53,15 @@ router.post("/chat/watch", async (req, res) => {
     const client = new Anthropic({ apiKey });
 
     const gameContext = gameName
-      ? `The player is currently in: ${gameName}.`
-      : "No game detected.";
+      ? `Game: ${gameName}.`
+      : "Game unknown.";
 
     const imageBase64 = imageData.replace(/^data:image\/\w+;base64,/, "");
 
     const response = await client.messages.create({
-      model: "claude-opus-4-5",
-      max_tokens: 200,
-      system: WATCH_SYSTEM_PROMPT,
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 120,
+      system: OBSERVE_SYSTEM_PROMPT,
       messages: [
         {
           role: "user",
@@ -82,17 +70,16 @@ router.post("/chat/watch", async (req, res) => {
               type: "image",
               source: { type: "base64", media_type: "image/png", data: imageBase64 },
             },
-            { type: "text", text: `${gameContext} What do you see that I should know about?` },
+            { type: "text", text: `${gameContext} Describe what you see.` },
           ],
         },
       ],
     });
 
-    const text =
-      response.content[0]?.type === "text" ? response.content[0].text.trim() : "NOTHING_TO_FLAG";
+    const observation =
+      response.content[0]?.type === "text" ? response.content[0].text.trim() : null;
 
-    const hasInsight = text !== "NOTHING_TO_FLAG" && text.length > 0;
-    res.json({ insight: hasInsight ? text : null, hasInsight });
+    res.json({ observation });
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
       res.status(500).json({ error: `Claude API error: ${err.message}` });
