@@ -12,6 +12,7 @@ import {
   saveSessionHistory,
   appendSessionMessages,
   updateSession,
+  saveScreenshotFile,
 } from "../lib/sessions-store.js";
 
 const router = Router();
@@ -200,16 +201,25 @@ Keep responses focused and practical. Format answers with bullet points or numbe
         minute: "2-digit",
       });
       const messageCount = Math.floor(conversationHistory.length / 2);
+      const userMsgId = `${Date.now()}-user`;
+      const assistantMsgId = `${Date.now() + 1}-assistant`;
+
+      let screenshotRef: string | null = null;
+      if (imageBase64) {
+        saveScreenshotFile(sessionId!, userMsgId, imageBase64);
+        screenshotRef = `file:${userMsgId}`;
+      }
+
       appendSessionMessages(sessionId!, [
         {
-          id: `${Date.now()}-user`,
+          id: userMsgId,
           role: "user",
           content: message.trim(),
           timestamp: now,
-          screenshot: null,
+          screenshot: screenshotRef,
         },
         {
-          id: `${Date.now() + 1}-assistant`,
+          id: assistantMsgId,
           role: "assistant",
           content: reply,
           timestamp: now,
