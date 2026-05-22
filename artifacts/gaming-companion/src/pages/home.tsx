@@ -59,6 +59,7 @@ export default function Home() {
   const [watchMode, setWatchMode] = useState(false);
   const [watchInsight, setWatchInsight] = useState<string | null>(null);
   const [watchLoading, setWatchLoading] = useState(false);
+  const [watchInterval, setWatchInterval] = useState<10 | 30 | 60>(30);
 
   const isElectron = !!(window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron;
 
@@ -213,7 +214,7 @@ export default function Home() {
   // Watch mode: silently scan the screen every 30s and surface insights
   useEffect(() => {
     if (!isElectron || !watchMode || !electronAPI?.captureScreenshot) return;
-    const INTERVAL_MS = 30_000;
+    const INTERVAL_MS = watchInterval * 1000;
     let active = true;
 
     const runScan = async () => {
@@ -249,7 +250,7 @@ export default function Home() {
       clearInterval(timer);
       setWatchLoading(false);
     };
-  }, [isElectron, watchMode]);
+  }, [isElectron, watchMode, watchInterval]);
 
   // Keep game name accessible to the watch effect without re-creating the interval
   useEffect(() => {
@@ -627,30 +628,46 @@ export default function Home() {
 
           <div className="flex items-center gap-1">
             {isElectron && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setWatchMode((v) => !v);
-                  setWatchInsight(null);
-                }}
-                title={watchMode ? "Watch mode: ON — scanning every 30s" : "Watch mode: OFF"}
-                className={`font-mono text-[10px] uppercase tracking-widest rounded-none h-7 px-2 gap-1.5 ${
-                  watchMode
-                    ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20 hover:text-amber-400"
-                    : "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10"
-                }`}
-              >
-                {watchLoading ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : watchMode ? (
-                  <Radio className="w-3 h-3 animate-pulse" />
-                ) : (
-                  <Eye className="w-3 h-3" />
-                )}
-                Watch
-              </Button>
+              <div className="flex items-center">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setWatchMode((v) => !v);
+                    setWatchInsight(null);
+                  }}
+                  title={watchMode ? `Watch mode: ON — scanning every ${watchInterval}s` : "Watch mode: OFF"}
+                  className={`font-mono text-[10px] uppercase tracking-widest rounded-none h-7 px-2 gap-1.5 ${
+                    watchMode
+                      ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20 hover:text-amber-400"
+                      : "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10"
+                  }`}
+                >
+                  {watchLoading ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : watchMode ? (
+                    <Radio className="w-3 h-3 animate-pulse" />
+                  ) : (
+                    <Eye className="w-3 h-3" />
+                  )}
+                  Watch
+                </Button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setWatchInterval((v) => (v === 10 ? 30 : v === 30 ? 60 : 10))
+                  }
+                  title="Cycle scan interval: 10s → 30s → 60s"
+                  className={`font-mono text-[9px] h-7 px-1.5 border-l transition-colors ${
+                    watchMode
+                      ? "text-amber-400/80 border-amber-400/20 bg-amber-400/5 hover:bg-amber-400/15"
+                      : "text-muted-foreground/50 border-border hover:text-muted-foreground hover:bg-muted/30"
+                  }`}
+                >
+                  {watchInterval}s
+                </button>
+              </div>
             )}
 
             {isElectron && (
