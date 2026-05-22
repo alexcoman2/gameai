@@ -301,18 +301,92 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
       { role: "user", content: userContent },
     ];
 
-    const response = await client.messages.create({
+    // Web search tool — Claude calls this autonomously when it needs fresh info
+    const exaApiKey = process.env.EXA_API_KEY;
+    const tools: Anthropic.Tool[] = exaApiKey ? [
+      {
+        name: "web_search",
+        description: "Search the web for up-to-date gaming information: patch notes, balance changes, current meta builds, tier lists, wiki lookups, community discoveries, or anything that may have changed since your training cutoff. Use this whenever the player asks about recent updates, current season content, or anything you're uncertain is still accurate.",
+        input_schema: {
+          type: "object" as const,
+          properties: {
+            query: {
+              type: "string",
+              description: "Search query. Be specific — include game name, patch/season if relevant (e.g. 'Dark Souls Remastered best early game weapons 2024', 'Diablo IV season 8 best build necromancer').",
+            },
+          },
+          required: ["query"],
+        },
+      },
+    ] : [];
+
+    // Agentic loop: Claude may call web_search one or more times before replying
+    const loopMessages = [...allMessages];
+    let response = await client.messages.create({
       model: "claude-sonnet-4-5",
       max_tokens: 2048,
       system: systemPrompt,
-      messages: allMessages,
+      messages: loopMessages,
+      ...(tools.length > 0 ? { tools, tool_choice: { type: "auto" } } : {}),
     });
 
-    const replyBlock = response.content[0];
-    const reply =
-      replyBlock && replyBlock.type === "text"
-        ? replyBlock.text
-        : "No response generated.";
+    while (response.stop_reason === "tool_use") {
+      const toolUseBlock = response.content.find((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
+      if (!toolUseBlock) break;
+
+      loopMessages.push({ role: "assistant", content: response.content });
+
+      let toolResult = "";
+      if (toolUseBlock.name === "web_search" && exaApiKey) {
+        try {
+          const input = toolUseBlock.input as { query: string };
+          console.log(`[chat] web_search: "${input.query}"`);
+          const searchRes = await fetch("https://api.exa.ai/search", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": exaApiKey,
+            },
+            body: JSON.stringify({
+              query: input.query,
+              numResults: 5,
+              contents: { text: { maxCharacters: 800 } },
+            }),
+          });
+          if (searchRes.ok) {
+            const data = await searchRes.json() as { results?: Array<{ title?: string; url?: string; text?: string }> };
+            const results = data.results ?? [];
+            toolResult = results.map((r, i) =>
+              `[${i + 1}] ${r.title ?? "No title"}\n${r.url ?? ""}\n${r.text ?? ""}`.trim()
+            ).join("\n\n");
+            if (!toolResult) toolResult = "No results found.";
+          } else {
+            toolResult = `Search failed: HTTP ${searchRes.status}`;
+          }
+        } catch (e) {
+          toolResult = `Search error: ${e instanceof Error ? e.message : String(e)}`;
+        }
+      } else {
+        toolResult = "Tool not available.";
+      }
+
+      loopMessages.push({
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: toolUseBlock.id, content: toolResult }],
+      });
+
+      response = await client.messages.create({
+        model: "claude-sonnet-4-5",
+        max_tokens: 2048,
+        system: systemPrompt,
+        messages: loopMessages,
+        tools,
+        tool_choice: { type: "auto" },
+      });
+    }
+
+    const replyBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === "text");
+    const reply = replyBlock ? replyBlock.text : "No response generated.";
 
     // Build updated history (text-only for user turns)
     const userTextOnly: Anthropic.MessageParam["content"] = [
