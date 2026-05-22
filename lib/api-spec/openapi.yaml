@@ -230,10 +230,14 @@ components:
         autoCapture:
           type: boolean
           description: Whether auto screenshot capture is enabled
+        hasSteamApiKey:
+          type: boolean
+          description: Whether a Steam Web API key is configured
       required:
         - hasApiKey
         - screenshotInterval
         - autoCapture
+        - hasSteamApiKey
 
     SettingsInput:
       type: object
@@ -246,6 +250,9 @@ components:
           description: Auto-screenshot interval in seconds (10-300)
         autoCapture:
           type: ["boolean", "null"]
+        steamApiKey:
+          type: ["string", "null"]
+          description: Steam Web API key for extended game detection (pass null to keep existing)
       required: []
 
     ErrorResponse:

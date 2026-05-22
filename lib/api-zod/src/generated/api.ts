@@ -78,7 +78,8 @@ export const SendChatMessageResponse = zod.object({
 export const GetSettingsResponse = zod.object({
   "hasApiKey": zod.boolean().describe('Whether a Claude API key is configured (never returns the actual key)'),
   "screenshotInterval": zod.number().describe('Auto-screenshot interval in seconds'),
-  "autoCapture": zod.boolean().describe('Whether auto screenshot capture is enabled')
+  "autoCapture": zod.boolean().describe('Whether auto screenshot capture is enabled'),
+  "hasSteamApiKey": zod.boolean().describe('Whether a Steam Web API key is configured')
 })
 
 
@@ -89,13 +90,15 @@ export const GetSettingsResponse = zod.object({
 export const SaveSettingsBody = zod.object({
   "apiKey": zod.string().nullish().describe('Claude API key (pass null to keep existing)'),
   "screenshotInterval": zod.number().nullish().describe('Auto-screenshot interval in seconds (10-300)'),
-  "autoCapture": zod.boolean().nullish()
+  "autoCapture": zod.boolean().nullish(),
+  "steamApiKey": zod.string().nullish().describe('Steam Web API key for extended game detection (pass null to keep existing)')
 })
 
 export const SaveSettingsResponse = zod.object({
   "hasApiKey": zod.boolean().describe('Whether a Claude API key is configured (never returns the actual key)'),
   "screenshotInterval": zod.number().describe('Auto-screenshot interval in seconds'),
-  "autoCapture": zod.boolean().describe('Whether auto screenshot capture is enabled')
+  "autoCapture": zod.boolean().describe('Whether auto screenshot capture is enabled'),
+  "hasSteamApiKey": zod.boolean().describe('Whether a Steam Web API key is configured')
 })
 
 

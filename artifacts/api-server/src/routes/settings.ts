@@ -12,13 +12,15 @@ router.get("/settings", (_req, res) => {
   res.json({
     screenshotInterval: config.screenshotInterval,
     autoCapture: config.autoCapture,
+    hasSteamApiKey: config.steamApiKey.length > 0,
   });
 });
 
 router.post("/settings", (req, res) => {
-  const { screenshotInterval, autoCapture } = req.body as {
+  const { screenshotInterval, autoCapture, steamApiKey } = req.body as {
     screenshotInterval?: number | null;
     autoCapture?: boolean | null;
+    steamApiKey?: string | null;
   };
 
   const updates: Parameters<typeof saveConfig>[0] = {};
@@ -28,6 +30,9 @@ router.post("/settings", (req, res) => {
   }
   if (typeof autoCapture === "boolean") {
     updates.autoCapture = autoCapture;
+  }
+  if (typeof steamApiKey === "string") {
+    updates.steamApiKey = steamApiKey;
   }
 
   const saved = saveConfig(updates);
@@ -41,6 +46,7 @@ router.post("/settings", (req, res) => {
   res.json({
     screenshotInterval: saved.screenshotInterval,
     autoCapture: saved.autoCapture,
+    hasSteamApiKey: saved.steamApiKey.length > 0,
   });
 });
 

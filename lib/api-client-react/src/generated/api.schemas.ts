@@ -67,6 +67,8 @@ export interface Settings {
   screenshotInterval: number;
   /** Whether auto screenshot capture is enabled */
   autoCapture: boolean;
+  /** Whether a Steam Web API key is configured */
+  hasSteamApiKey: boolean;
 }
 
 export interface SettingsInput {
@@ -82,6 +84,11 @@ export interface SettingsInput {
   screenshotInterval?: number | null;
   /** @nullable */
   autoCapture?: boolean | null;
+  /**
+     * Steam Web API key for extended game detection (pass null to keep existing)
+     * @nullable
+     */
+  steamApiKey?: string | null;
 }
 
 export interface ErrorResponse {

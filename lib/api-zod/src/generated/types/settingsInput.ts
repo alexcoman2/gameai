@@ -19,4 +19,9 @@ export interface SettingsInput {
   screenshotInterval?: number | null;
   /** @nullable */
   autoCapture?: boolean | null;
+  /**
+     * Steam Web API key for extended game detection (pass null to keep existing)
+     * @nullable
+     */
+  steamApiKey?: string | null;
 }

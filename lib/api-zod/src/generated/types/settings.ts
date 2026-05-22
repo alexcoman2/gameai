@@ -13,4 +13,6 @@ export interface Settings {
   screenshotInterval: number;
   /** Whether auto screenshot capture is enabled */
   autoCapture: boolean;
+  /** Whether a Steam Web API key is configured */
+  hasSteamApiKey: boolean;
 }

@@ -5,6 +5,7 @@ import os from "os";
 export interface AppConfig {
   screenshotInterval: number;
   autoCapture: boolean;
+  steamApiKey: string;
 }
 
 const CONFIG_DIR = path.join(os.homedir(), ".gaming-companion");
@@ -13,6 +14,7 @@ const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 const DEFAULT_CONFIG: AppConfig = {
   screenshotInterval: 30,
   autoCapture: true,
+  steamApiKey: "",
 };
 
 export function loadConfig(): AppConfig {
@@ -29,6 +31,10 @@ export function loadConfig(): AppConfig {
           typeof parsed.autoCapture === "boolean"
             ? parsed.autoCapture
             : DEFAULT_CONFIG.autoCapture,
+        steamApiKey:
+          typeof parsed.steamApiKey === "string"
+            ? parsed.steamApiKey
+            : DEFAULT_CONFIG.steamApiKey,
       };
     }
   } catch {
@@ -48,6 +54,10 @@ export function saveConfig(updates: Partial<AppConfig>): AppConfig {
       updates.autoCapture !== undefined
         ? updates.autoCapture
         : current.autoCapture,
+    steamApiKey:
+      updates.steamApiKey !== undefined
+        ? updates.steamApiKey
+        : current.steamApiKey,
   };
 
   try {
