@@ -9,7 +9,11 @@
   },
   "private": true,
   "pnpm": {
-    "onlyBuiltDependencies": ["electron", "esbuild", "electron-builder", "screenshot-desktop"]
+    "onlyBuiltDependencies": ["electron", "esbuild", "electron-builder", "screenshot-desktop"],
+    "supportedArchitectures": {
+      "os": ["linux", "win32"],
+      "cpu": ["x64"]
+    }
   },
   "devDependencies": {
     "prettier": "^3.8.3",
