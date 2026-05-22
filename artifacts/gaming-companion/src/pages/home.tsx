@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useGameContext } from "@/context/game-context";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useDetectGame, getDetectGameQueryKey,
@@ -283,6 +284,17 @@ export default function Home() {
       gameDetection?.processName ||
       undefined;
   }, [gameNameOverride, visionDetectedGame, gameDetection?.gameName, gameDetection?.processName]);
+
+  const { setEffectiveGameName } = useGameContext();
+  useEffect(() => {
+    const resolved =
+      gameNameOverride.trim() ||
+      visionDetectedGame ||
+      gameDetection?.gameName ||
+      gameDetection?.processName ||
+      null;
+    setEffectiveGameName(resolved);
+  }, [gameNameOverride, visionDetectedGame, gameDetection?.gameName, gameDetection?.processName, setEffectiveGameName]);
 
   const handleCapture = async () => {
     if (isElectron && electronAPI?.captureScreenshot) {

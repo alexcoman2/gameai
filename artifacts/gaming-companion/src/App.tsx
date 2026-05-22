@@ -7,6 +7,7 @@ import Home from "@/pages/home";
 import Settings from "@/pages/settings";
 import { Layout } from "@/components/layout";
 import { ChatProvider } from "@/context/chat-context";
+import { GameProvider } from "@/context/game-context";
 
 const queryClient = new QueryClient();
 
@@ -25,11 +26,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <ChatProvider>
-          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-            <Layout>
-              <Router />
-            </Layout>
-          </WouterRouter>
+          <GameProvider>
+            <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+              <Layout>
+                <Router />
+              </Layout>
+            </WouterRouter>
+          </GameProvider>
           <Toaster />
         </ChatProvider>
       </TooltipProvider>

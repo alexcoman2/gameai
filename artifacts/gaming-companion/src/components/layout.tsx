@@ -1,9 +1,11 @@
 import { Link, useLocation } from "wouter";
 import { Settings, MessageSquare, Crosshair } from "lucide-react";
 import { useDetectGame, getDetectGameQueryKey } from "@workspace/api-client-react";
+import { useGameContext } from "@/context/game-context";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const { effectiveGameName } = useGameContext();
 
   const { data: gameDetection, isLoading: isDetecting } = useDetectGame({
     query: {
@@ -60,6 +62,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         : 'STEAM'}
                     </span>
                   )}
+                </div>
+              ) : effectiveGameName ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  <span className="text-foreground">{effectiveGameName}</span>
                 </div>
               ) : (
                 <div className="flex items-center gap-1.5">
