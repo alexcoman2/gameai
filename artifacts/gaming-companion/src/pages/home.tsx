@@ -21,7 +21,7 @@ import { Label } from "@/components/ui/label";
 import {
   Camera, Send, Loader2, Maximize2, X, MessageSquare,
   Plus, Trash2, Pencil, Check, MessagesSquare, ChevronRight, Pin, PinOff,
-  Eye, EyeOff, Radio,
+  Eye, EyeOff, Radio, Minimize2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
@@ -59,6 +59,7 @@ export default function Home() {
   const [watchMode, setWatchMode] = useState(false);
   const [watchScreenshot, setWatchScreenshot] = useState<string | null>(null);
   const [watchLog, setWatchLog] = useState<{ time: string; note: string }[]>([]);
+  const [compact, setCompact] = useState(false);
 
   const isElectron = !!(window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron;
 
@@ -482,7 +483,7 @@ export default function Home() {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
   return (
-    <div className="flex-1 flex flex-col p-4 md:p-6 gap-4 h-[calc(100vh-73px)]">
+    <div className={`flex-1 flex flex-col h-[calc(100vh-73px)] ${compact ? "p-1 gap-1" : "p-4 md:p-6 gap-4"}`}>
       <Card className="flex-1 flex flex-col min-h-0 border-border rounded-none bg-card/50 overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
 
@@ -694,6 +695,22 @@ export default function Home() {
               </Button>
             )}
 
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setCompact((v) => !v)}
+              title={compact ? "Compact mode: ON — click to expand" : "Compact mode: OFF — click to shrink for overlay"}
+              className={`font-mono text-[10px] uppercase tracking-widest rounded-none h-7 px-2 gap-1.5 ${
+                compact
+                  ? "text-cyan-400 bg-cyan-400/10 hover:bg-cyan-400/20 hover:text-cyan-400"
+                  : "text-muted-foreground hover:text-cyan-400 hover:bg-cyan-400/10"
+              }`}
+            >
+              <Minimize2 className="w-3 h-3" />
+              {compact ? "Mini" : "Mini"}
+            </Button>
+
             {messages.length > 0 && (
               <Button
                 type="button"
@@ -716,12 +733,12 @@ export default function Home() {
 
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto p-4 space-y-6"
+          className={`flex-1 overflow-y-auto ${compact ? "p-2 space-y-2" : "p-4 space-y-6"}`}
         >
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-4 opacity-50">
-              <MessageSquare className="w-12 h-12 mb-2" />
-              <p className="font-mono text-sm tracking-widest uppercase">Comm channel open. Awaiting input.</p>
+              <MessageSquare className={compact ? "w-6 h-6 mb-1" : "w-12 h-12 mb-2"} />
+              <p className={`font-mono tracking-widest uppercase ${compact ? "text-[10px]" : "text-sm"}`}>Comm channel open. Awaiting input.</p>
             </div>
           ) : (
             messages.map((msg) => {
@@ -742,14 +759,14 @@ export default function Home() {
                   key={msg.id}
                   className={`flex flex-col max-w-[85%] ${msg.role === "user" ? "ml-auto items-end" : "mr-auto items-start"}`}
                 >
-                  <div className={`flex items-center gap-2 mb-1 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                    <span className="font-mono text-xs font-bold uppercase text-primary/80">
+                  <div className={`flex items-center gap-2 ${compact ? "mb-0" : "mb-1"} ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                    <span className={`font-mono font-bold uppercase text-primary/80 ${compact ? "text-[9px]" : "text-xs"}`}>
                       {msg.role === "user" ? "OPERATOR" : "AI_CORE"}
                     </span>
                     <span className="font-mono text-[10px] text-muted-foreground/60">{msg.timestamp}</span>
                   </div>
 
-                  <div className={`p-4 font-mono text-sm leading-relaxed border ${
+                  <div className={`font-mono border ${compact ? "p-2 text-[11px] leading-snug" : "p-4 text-sm leading-relaxed"} ${
                     msg.role === "user"
                       ? "bg-primary/5 border-primary/20 text-foreground"
                       : "bg-secondary/50 border-border text-foreground"
@@ -781,13 +798,13 @@ export default function Home() {
 
           {sendMutation.isPending && (
             <div className="flex flex-col max-w-[85%] mr-auto items-start">
-              <div className="flex items-center gap-2 mb-1">
-                <span className="font-mono text-xs font-bold uppercase text-primary/80">
+              <div className={`flex items-center gap-2 ${compact ? "mb-0" : "mb-1"}`}>
+                <span className={`font-mono font-bold uppercase text-primary/80 ${compact ? "text-[9px]" : "text-xs"}`}>
                   AI_CORE
                 </span>
               </div>
-              <div className="p-4 font-mono text-sm bg-secondary/50 border border-border flex items-center gap-3 text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <div className={`font-mono bg-secondary/50 border border-border flex items-center gap-3 text-muted-foreground ${compact ? "p-2 text-[11px]" : "p-4 text-sm"}`}>
+                <Loader2 className="w-3 h-3 animate-spin text-primary" />
                 <span>Processing telemetry...</span>
               </div>
             </div>
@@ -818,20 +835,20 @@ export default function Home() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="ENTER COMMAND OR QUERY..."
-            className="flex-1 font-mono rounded-none border-border focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/50 bg-card/50 h-12 placeholder:tracking-widest"
+            className={`flex-1 font-mono rounded-none border-border focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/50 bg-card/50 placeholder:tracking-widest ${compact ? "h-8 text-xs" : "h-12"}`}
             disabled={sendMutation.isPending}
           />
           <Button
             type="submit"
             disabled={!input.trim() || sendMutation.isPending}
-            className="h-12 px-6 rounded-none bg-primary text-primary-foreground hover:bg-primary/90 font-mono uppercase tracking-wider transition-all"
+            className={`rounded-none bg-primary text-primary-foreground hover:bg-primary/90 font-mono uppercase tracking-wider transition-all ${compact ? "h-8 px-3" : "h-12 px-6"}`}
           >
-            <Send className="w-4 h-4 mr-2" />
-            Execute
+            <Send className={compact ? "w-3 h-3" : "w-4 h-4 mr-2"} />
+            {!compact && "Execute"}
           </Button>
         </form>
 
-        <div className="flex flex-col gap-2 p-3 bg-card/50 border border-border">
+        {!compact && <div className="flex flex-col gap-2 p-3 bg-card/50 border border-border">
           <div className="flex items-center gap-4">
             <Button
               type="button"
@@ -906,7 +923,7 @@ export default function Home() {
               </span>
             )}
           </div>
-        </div>
+        </div>}
       </div>
     </div>
   );
