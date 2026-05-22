@@ -157,6 +157,32 @@ const GAME_PROCESS_MAP: Record<string, string> = {
   "databreachchronicles.exe": "Norco",
   "a_plague_tale.exe": "A Plague Tale: Innocence",
   "aplaguetale2.exe": "A Plague Tale: Requiem",
+  // Fighting
+  "mk1.exe": "Mortal Kombat 1",
+  "mk11.exe": "Mortal Kombat 11",
+  "mkx.exe": "Mortal Kombat X",
+  "mk9.exe": "Mortal Kombat 9",
+  "injustice2.exe": "Injustice 2",
+  "injustice.exe": "Injustice: Gods Among Us",
+  "streetfighter6.exe": "Street Fighter 6",
+  "sf6.exe": "Street Fighter 6",
+  "streetfighter5.exe": "Street Fighter V",
+  "sfv.exe": "Street Fighter V",
+  "tekken8.exe": "Tekken 8",
+  "tekken7.exe": "Tekken 7",
+  "mortalkombat.exe": "Mortal Kombat",
+  "mk12.exe": "Mortal Kombat 1",
+  "dragonball.exe": "Dragon Ball FighterZ",
+  "dbfz.exe": "Dragon Ball FighterZ",
+  "guilty_gear.exe": "Guilty Gear -Strive-",
+  "ggst.exe": "Guilty Gear -Strive-",
+  "blazblue.exe": "BlazBlue: Centralfiction",
+  "soulcalibur6.exe": "SoulCalibur VI",
+  "sc6.exe": "SoulCalibur VI",
+  "kof15.exe": "The King of Fighters XV",
+  "kof14.exe": "The King of Fighters XIV",
+  "mvc3.exe": "Marvel vs. Capcom 3",
+  "umbra.exe": "Mortal Kombat 1",
   // Racing / Sports
   "forza5.exe": "Forza Horizon 5",
   "forza4.exe": "Forza Horizon 4",
@@ -415,7 +441,7 @@ function isGameCandidate(proc: string): boolean {
   if (!proc.endsWith(".exe")) return false;
   if (NON_GAME_PROCESSES.has(proc)) return false;
   const base = proc.replace(/\.exe$/i, "");
-  return base.length >= 4;
+  return base.length >= 3;
 }
 
 router.delete("/game/cache", (req, res) => {
