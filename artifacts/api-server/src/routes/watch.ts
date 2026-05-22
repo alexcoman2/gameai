@@ -8,12 +8,17 @@ const OBSERVE_SYSTEM_PROMPT = `You are a game state recorder embedded in a gamin
 Return exactly this format:
 {
   "gameName": "<the specific game being played, or null if you cannot identify it>",
-  "observation": "<1-2 sentence factual description of what you see>"
+  "observation": "<2-3 sentence factual description of what you literally see>"
 }
 
-For gameName: identify the game from ANY visible portion — HUD elements, skill bars, health globes, minimap, art style, characters, game world, or any text. Be specific — "Diablo IV" not "an ARPG", "Elden Ring" not "a Soulslike". If a game hint is provided and you can see ANY game-like content consistent with it, confirm that name. Only return null if you see absolutely no game content (e.g. only desktop, browser, or the overlay itself with no game behind it).
+For gameName: identify the game from ANY visible portion — HUD elements, skill bars, health globes, minimap, art style, characters, game world, or any text. Be specific — "Diablo IV" not "an ARPG", "Dark Souls Remastered" not "a Soulslike". If a game hint is provided and you can see ANY game-like content consistent with it, confirm that name. Only return null if you see absolutely no game content.
 
-For observation: ALWAYS provide a value — never return null. Focus on the game content visible behind the overlay. Describe: current location/area, what the player is doing, health/resources if visible, enemies or NPCs, notable UI state. If no game is visible at all, briefly describe what IS on screen. No tips, no advice — only describe what you see.`;
+For observation: describe ONLY what you can literally see in this specific screenshot. Be precise about visual details:
+- Environment: architecture style, materials (stone/wood/metal), lighting (torch-lit/sunlit/dark), colours, structures visible
+- Characters: player position, what they are doing (standing/fighting/exploring), enemy types and positions if visible
+- HUD: health/stamina/mana bars and approximate levels, souls/currency count, equipped weapon, active effects
+- DO NOT guess or assume the location name from memory — only name a location if you can read it on screen as text. Instead describe what the environment looks like (e.g. "a crumbling stone cathedral with tall stained-glass windows and a fog gate ahead" not "Anor Londo"). If you see a bonfire, name it only if its label is visible on screen.
+- If no game is visible, briefly describe what IS on screen. No tips, no advice — only describe what you see.`;
 
 router.post("/chat/watch", async (req, res) => {
   const { imageData, gameName } = req.body as {
@@ -109,17 +114,20 @@ router.post("/chat/watch", async (req, res) => {
       return;
     }
 
+    // Strip markdown code fences the model sometimes adds despite instructions
+    const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+
     try {
-      const parsed = JSON.parse(raw) as { observation?: string | null; gameName?: string | null };
+      const parsed = JSON.parse(cleaned) as { observation?: string | null; gameName?: string | null };
       console.log(`[watch] parsed => gameName="${parsed.gameName}" observation="${parsed.observation?.slice(0, 80)}"`);
       res.json({
         observation: parsed.observation ?? null,
         gameName: parsed.gameName ?? null,
       });
     } catch {
-      // Model returned non-JSON — treat the whole text as an observation, no game name
+      // Still not valid JSON — use as raw observation
       console.log(`[watch] non-JSON response, using as raw observation`);
-      res.json({ observation: raw, gameName: null });
+      res.json({ observation: cleaned, gameName: null });
     }
   } catch (err) {
     if (err instanceof Anthropic.APIError) {
