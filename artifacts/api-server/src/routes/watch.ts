@@ -1,6 +1,5 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import sharp from "sharp";
 
 const router = Router();
 
@@ -60,16 +59,24 @@ router.post("/chat/watch", async (req, res) => {
     const rawBase64 = imageData.replace(/^data:image\/\w+;base64,/, "");
 
     // Anthropic hard limit is 5 MB decoded. Compress to JPEG if needed.
+    // Uses a dynamic import so sharp's native binaries are optional — the
+    // Electron bundled server never reaches this path (it proxies to hosted),
+    // but if it does, missing sharp is caught gracefully.
     const MAX_BYTES = 4_500_000;
     let imageBase64 = rawBase64;
     let mediaType: "image/png" | "image/jpeg" = "image/png";
     if (Buffer.byteLength(rawBase64, "base64") > MAX_BYTES) {
-      const compressed = await sharp(Buffer.from(rawBase64, "base64"))
-        .resize({ width: 1280, withoutEnlargement: true })
-        .jpeg({ quality: 80 })
-        .toBuffer();
-      imageBase64 = compressed.toString("base64");
-      mediaType = "image/jpeg";
+      try {
+        const sharp = (await import("sharp")).default;
+        const compressed = await sharp(Buffer.from(rawBase64, "base64"))
+          .resize({ width: 1280, withoutEnlargement: true })
+          .jpeg({ quality: 80 })
+          .toBuffer();
+        imageBase64 = compressed.toString("base64");
+        mediaType = "image/jpeg";
+      } catch {
+        // sharp not available in this environment — send as-is
+      }
     }
 
     const response = await client.messages.create({
