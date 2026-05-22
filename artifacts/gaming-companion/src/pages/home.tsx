@@ -238,7 +238,7 @@ export default function Home() {
   useEffect(() => {
     if (!isElectron || !watchMode || !electronAPI?.captureScreenshot) return;
     const SCREENSHOT_MS = 2000;
-    const OBSERVE_MS = 20_000;
+    const OBSERVE_MS = 5_000;
     let active = true;
     let lastObserveAt = 0;
 
@@ -698,7 +698,7 @@ export default function Home() {
                     });
                     setWatchInsight(null);
                   }}
-                  title={watchMode ? "Watch mode: ON — scanning every 2s, observing every 20s" : "Watch mode: OFF"}
+                  title={watchMode ? "Watch mode: ON — scanning every 2s, observing every 5s" : "Watch mode: OFF"}
                   className={`font-mono text-[10px] uppercase tracking-widest rounded-none h-7 px-2 gap-1.5 ${
                     watchMode
                       ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20 hover:text-amber-400"
