@@ -294,7 +294,7 @@ You are not a one-shot Q&A bot. You are a co-pilot who has been watching and hel
     ];
 
     const response = await client.messages.create({
-      model: "claude-opus-4-5",
+      model: "claude-sonnet-4-5",
       max_tokens: 2048,
       system: systemPrompt,
       messages: allMessages,
