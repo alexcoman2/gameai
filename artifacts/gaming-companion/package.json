@@ -76,5 +76,9 @@
   },
   "dependencies": {
     "@radix-ui/react-visually-hidden": "^1.2.4"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "*",
+    "@rollup/rollup-linux-x64-gnu": "*"
   }
 }
