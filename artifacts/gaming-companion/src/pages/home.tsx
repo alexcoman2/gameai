@@ -37,6 +37,21 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+function compressScreenshot(dataUrl: string, quality = 0.8): Promise<string> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      canvas.getContext("2d")!.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/jpeg", quality));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 export default function Home() {
   const queryClient = useQueryClient();
   const {
@@ -245,7 +260,8 @@ export default function Home() {
             // (i.e. when the game was visible fullscreen) over the current screen
             // which would show the NEXUS_LINK overlay after an alt-tab.
             const gameScreenshot = await electronAPI.getLastGameScreenshot?.() ?? null;
-            const observeWith = gameScreenshot || dataUrl;
+            const raw = gameScreenshot || dataUrl;
+            const observeWith = await compressScreenshot(raw);
             const res = await fetch("/api/chat/watch", {
               method: "POST",
               headers: { "Content-Type": "application/json" },

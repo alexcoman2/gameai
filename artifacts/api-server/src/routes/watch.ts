@@ -1,5 +1,6 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import sharp from "sharp";
 
 const router = Router();
 
@@ -56,7 +57,20 @@ router.post("/chat/watch", async (req, res) => {
       ? `The user believes they are playing: ${gameName}. Confirm or correct this in the gameName field.`
       : "Game is unknown — identify it if possible.";
 
-    const imageBase64 = imageData.replace(/^data:image\/\w+;base64,/, "");
+    const rawBase64 = imageData.replace(/^data:image\/\w+;base64,/, "");
+
+    // Anthropic hard limit is 5 MB decoded. Compress to JPEG if needed.
+    const MAX_BYTES = 4_500_000;
+    let imageBase64 = rawBase64;
+    let mediaType: "image/png" | "image/jpeg" = "image/png";
+    if (Buffer.byteLength(rawBase64, "base64") > MAX_BYTES) {
+      const compressed = await sharp(Buffer.from(rawBase64, "base64"))
+        .resize({ width: 1280, withoutEnlargement: true })
+        .jpeg({ quality: 80 })
+        .toBuffer();
+      imageBase64 = compressed.toString("base64");
+      mediaType = "image/jpeg";
+    }
 
     const response = await client.messages.create({
       model: "claude-haiku-4-5",
@@ -68,7 +82,7 @@ router.post("/chat/watch", async (req, res) => {
           content: [
             {
               type: "image",
-              source: { type: "base64", media_type: "image/png", data: imageBase64 },
+              source: { type: "base64", media_type: mediaType, data: imageBase64 },
             },
             { type: "text", text: `${gameContext} Respond with JSON only.` },
           ],
