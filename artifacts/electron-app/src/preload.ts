@@ -1,0 +1,11 @@
+import { contextBridge, ipcRenderer } from "electron";
+
+contextBridge.exposeInMainWorld("electronAPI", {
+  toggleAlwaysOnTop: (): Promise<boolean> =>
+    ipcRenderer.invoke("toggle-always-on-top"),
+  getAlwaysOnTop: (): Promise<boolean> =>
+    ipcRenderer.invoke("get-always-on-top"),
+  setAlwaysOnTop: (value: boolean): Promise<boolean> =>
+    ipcRenderer.invoke("set-always-on-top", value),
+  isElectron: true as const,
+});

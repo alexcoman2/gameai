@@ -1,0 +1,57 @@
+appId: com.replit.ai-gaming-companion
+productName: AI Gaming Companion
+copyright: Copyright © 2025
+
+asar: false
+
+directories:
+  output: dist-release
+  buildResources: assets
+
+files:
+  - dist/main.js
+  - dist/preload.js
+  - package.json
+  - "!node_modules"
+  - "!src"
+  - "!build.mjs"
+  - "!tsconfig.json"
+  - "!electron-builder.yml"
+
+extraResources:
+  - from: ../../artifacts/api-server/dist
+    to: server
+    filter:
+      - "**/*"
+  - from: ../../artifacts/gaming-companion/dist/public
+    to: public
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  requestedExecutionLevel: asInvoker
+
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AI Gaming Companion
+
+linux:
+  target:
+    - target: deb
+      arch:
+        - x64
+  category: Game
+
+mac:
+  target:
+    - target: dmg
+      arch:
+        - x64
+  category: public.app-category.games

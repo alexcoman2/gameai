@@ -1,0 +1,24 @@
+{
+  "name": "@workspace/electron-app",
+  "version": "1.0.0",
+  "description": "AI Gaming Companion — Electron desktop app",
+  "author": "Replit",
+  "private": true,
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "dist": "node dist.mjs",
+    "dist:win": "node dist.mjs --win",
+    "package": "pnpm run build-all && pnpm run dist",
+    "build-all": "node pipeline.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "electron": "^36.3.2",
+    "electron-builder": "^25.1.8",
+    "esbuild": "0.27.3",
+    "typescript": "^5.8.3"
+  }
+}
