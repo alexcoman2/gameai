@@ -240,8 +240,8 @@ router.post("/chat/message", async (req, res) => {
     : `This is the start of a new session with this player.`;
 
   const watchLogSection = reqWatchLog && reqWatchLog.length > 0
-    ? `\nWATCH LOG (passive screen observations recorded while the player was playing, newest last):\n${reqWatchLog.map(e => `  [${e.time}] ${e.note}`).join("\n")}\nUse this log to understand what has been happening in the game between messages. It fills the gap when the player has been playing without chatting.\n`
-    : "";
+    ? `\nWATCH LOG — you have ${reqWatchLog.length} passive screen observation${reqWatchLog.length !== 1 ? "s" : ""} recorded by NEXUS_LINK while the player was playing (newest last):\n${reqWatchLog.map(e => `  [${e.time}] ${e.note}`).join("\n")}\nThis IS your log. Use it to understand what has been happening between messages. When the player asks about your logs, reference these entries directly.\n`
+    : "\nWATCH LOG — no observations recorded yet this session. Watch Mode is currently off or hasn't fired yet. If the player asks about your logs, explain that NEXUS_LINK's Watch Mode passively records screen observations every 20 seconds when enabled, and they can turn it on using the Watch button in the toolbar to start building a log.\n";
 
   const systemPrompt = `You are NEXUS_LINK AI CORE — an expert gaming co-pilot embedded as a desktop overlay. You operate as a persistent, session-aware companion throughout the player's entire gameplay session.
 
