@@ -11,17 +11,18 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Camera, Send, Loader2, Maximize2, X, MessageSquare } from "lucide-react";
+import { Camera, Send, Loader2, Maximize2, X, MessageSquare, RotateCcw } from "lucide-react";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { useChat } from "@/context/chat-context";
 
 export default function Home() {
-  const { messages, addMessage, gameNameOverride, setGameNameOverride } = useChat();
+  const { messages, addMessage, clearMessages, gameNameOverride, setGameNameOverride } = useChat();
   const [input, setInput] = useState("");
   const [includeScreenshot, setIncludeScreenshot] = useState(false);
   const [pendingScreenshot, setPendingScreenshot] = useState<string | null>(null);
+  const [isClearing, setIsClearing] = useState(false);
   
   const scrollRef = useRef<HTMLDivElement>(null);
   
@@ -65,6 +66,18 @@ export default function Home() {
       }
     } catch (e) {
       console.error("Failed to capture screenshot", e);
+    }
+  };
+
+  const handleNewSession = async () => {
+    setIsClearing(true);
+    try {
+      await fetch("/api/chat/clear", { method: "POST" });
+    } catch (e) {
+      console.error("Failed to clear server conversation history", e);
+    } finally {
+      clearMessages();
+      setIsClearing(false);
     }
   };
 
@@ -128,6 +141,26 @@ export default function Home() {
       <Card className="flex-1 flex flex-col min-h-0 border-border rounded-none bg-card/50 overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
         
+        {messages.length > 0 && (
+          <div className="flex justify-end px-4 pt-3 pb-0">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={handleNewSession}
+              disabled={isClearing}
+              className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-none h-7 px-2 gap-1.5"
+            >
+              {isClearing ? (
+                <Loader2 className="w-3 h-3 animate-spin" />
+              ) : (
+                <RotateCcw className="w-3 h-3" />
+              )}
+              New Session
+            </Button>
+          </div>
+        )}
+
         <div 
           ref={scrollRef}
           className="flex-1 overflow-y-auto p-4 space-y-6"

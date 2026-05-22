@@ -4,6 +4,20 @@ import { getLatestScreenshot } from "../lib/screenshot-state.js";
 
 const router = Router();
 
+const MAX_HISTORY_TURNS = 20;
+
+type ConversationMessage = {
+  role: "user" | "assistant";
+  content: Anthropic.MessageParam["content"];
+};
+
+let conversationHistory: ConversationMessage[] = [];
+
+router.post("/chat/clear", (_req, res) => {
+  conversationHistory = [];
+  res.json({ ok: true });
+});
+
 router.post("/chat/message", async (req, res) => {
   const { message, gameName, includeScreenshot } = req.body as {
     message: string;
@@ -65,16 +79,23 @@ Keep responses focused and practical. Format answers with bullet points or numbe
       text: message.trim(),
     });
 
+    const historyMessages: Anthropic.MessageParam[] = conversationHistory.map(
+      (entry) => ({
+        role: entry.role,
+        content: entry.content,
+      })
+    );
+
+    const allMessages: Anthropic.MessageParam[] = [
+      ...historyMessages,
+      { role: "user", content: userContent },
+    ];
+
     const response = await client.messages.create({
       model: "claude-opus-4-5",
       max_tokens: 1024,
       system: systemPrompt,
-      messages: [
-        {
-          role: "user",
-          content: userContent,
-        },
-      ],
+      messages: allMessages,
     });
 
     const replyBlock = response.content[0];
@@ -82,6 +103,18 @@ Keep responses focused and practical. Format answers with bullet points or numbe
       replyBlock && replyBlock.type === "text"
         ? replyBlock.text
         : "No response generated.";
+
+    const userTextOnly: Anthropic.MessageParam["content"] = [
+      { type: "text", text: message.trim() },
+    ];
+    conversationHistory.push({ role: "user", content: userTextOnly });
+    conversationHistory.push({ role: "assistant", content: reply });
+
+    if (conversationHistory.length > MAX_HISTORY_TURNS * 2) {
+      conversationHistory = conversationHistory.slice(
+        conversationHistory.length - MAX_HISTORY_TURNS * 2
+      );
+    }
 
     res.json({
       reply,
