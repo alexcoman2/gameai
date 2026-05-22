@@ -49,6 +49,8 @@ export default function Home() {
 
   const isElectron = !!(window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron;
 
+  const prevHighConfGameRef = useRef<string | null>(null);
+
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -311,6 +313,18 @@ export default function Home() {
       });
     }
   };
+
+  useEffect(() => {
+    if (gameDetection?.confidence === "high" && gameDetection.gameName) {
+      const detected = gameDetection.gameName;
+      if (prevHighConfGameRef.current !== detected) {
+        prevHighConfGameRef.current = detected;
+        if (gameNameOverride.trim() && gameNameOverride.trim() !== detected) {
+          setGameNameOverride("");
+        }
+      }
+    }
+  }, [gameDetection?.confidence, gameDetection?.gameName, gameNameOverride, setGameNameOverride]);
 
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
@@ -652,12 +666,24 @@ export default function Home() {
 
           <div className="flex items-center gap-2">
             <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground whitespace-nowrap">Game Override:</span>
-            <Input
-              value={gameNameOverride}
-              onChange={(e) => setGameNameOverride(e.target.value)}
-              placeholder={gameDetection?.gameName || gameDetection?.processName || "Auto-detect active..."}
-              className="h-7 text-xs font-mono rounded-none bg-background border-border focus-visible:border-primary placeholder:text-muted-foreground/40 placeholder:text-[10px]"
-            />
+            <div className="relative flex-1 flex items-center">
+              <Input
+                value={gameNameOverride}
+                onChange={(e) => setGameNameOverride(e.target.value)}
+                placeholder={gameDetection?.gameName || gameDetection?.processName || "Auto-detect active..."}
+                className="h-7 text-xs font-mono rounded-none bg-background border-border focus-visible:border-primary placeholder:text-muted-foreground/40 placeholder:text-[10px] pr-6"
+              />
+              {gameNameOverride.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setGameNameOverride("")}
+                  className="absolute right-1 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                  title="Clear override"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
             {gameDetection?.detected && gameDetection.source && (
               <span
                 className={`shrink-0 font-mono text-[9px] uppercase tracking-widest px-1.5 py-0.5 border ${
