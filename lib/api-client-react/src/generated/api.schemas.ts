@@ -50,8 +50,13 @@ export interface ChatMessageInput {
      * @nullable
      */
   gameName?: string | null;
-  /** Whether to attach the latest screenshot to the message */
+  /** Whether to attach the latest local screenshot to the message */
   includeScreenshot?: boolean;
+  /**
+     * Base64 PNG screenshot to attach (overrides includeScreenshot lookup)
+     * @nullable
+     */
+  imageData?: string | null;
 }
 
 export interface ChatResponse {
@@ -61,8 +66,6 @@ export interface ChatResponse {
 }
 
 export interface Settings {
-  /** Whether a Claude API key is configured (never returns the actual key) */
-  hasApiKey: boolean;
   /** Auto-screenshot interval in seconds */
   screenshotInterval: number;
   /** Whether auto screenshot capture is enabled */
@@ -72,11 +75,6 @@ export interface Settings {
 }
 
 export interface SettingsInput {
-  /**
-     * Claude API key (pass null to keep existing)
-     * @nullable
-     */
-  apiKey?: string | null;
   /**
      * Auto-screenshot interval in seconds (10-300)
      * @nullable

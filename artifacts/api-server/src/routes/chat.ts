@@ -18,27 +18,74 @@ type ConversationMessage = {
 
 let conversationHistory: ConversationMessage[] = loadHistory();
 
-router.post("/chat/clear", (_req, res) => {
+router.post("/chat/clear", async (_req, res) => {
   conversationHistory = [];
   clearHistory();
+
+  const hostedUrl = process.env.NEXUS_LINK_API_URL;
+  if (hostedUrl) {
+    try {
+      await fetch(`${hostedUrl}/api/chat/clear`, { method: "POST" });
+    } catch {
+      // best-effort — clear local state regardless
+    }
+  }
+
   res.json({ ok: true });
 });
 
 router.post("/chat/message", async (req, res) => {
-  const { message, gameName, includeScreenshot } = req.body as {
-    message: string;
-    gameName?: string | null;
-    includeScreenshot?: boolean;
-  };
+  const { message, gameName, includeScreenshot, imageData: reqImageData } =
+    req.body as {
+      message: string;
+      gameName?: string | null;
+      includeScreenshot?: boolean;
+      imageData?: string | null;
+    };
 
   if (!message || typeof message !== "string" || message.trim() === "") {
     res.status(400).json({ error: "message is required" });
     return;
   }
 
+  // ── PROXY MODE ─────────────────────────────────────────────────────────────
+  // When NEXUS_LINK_API_URL is set (Electron packaged build) this server has no
+  // API key. It grabs the local screenshot and forwards the request to the
+  // hosted server which holds the key.
+  const hostedUrl = process.env.NEXUS_LINK_API_URL;
+  if (hostedUrl) {
+    let imageData: string | null = reqImageData ?? null;
+
+    if (!imageData && includeScreenshot) {
+      const latest = getLatestScreenshot();
+      if (latest.available && latest.imageData) {
+        imageData = latest.imageData;
+      }
+    }
+
+    try {
+      const upstream = await fetch(`${hostedUrl}/api/chat/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message, gameName, imageData }),
+      });
+
+      const data = await upstream.json() as Record<string, unknown>;
+      res.status(upstream.status).json(data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      res.status(502).json({ error: `Failed to reach AI service: ${msg}` });
+    }
+    return;
+  }
+
+  // ── DIRECT MODE ────────────────────────────────────────────────────────────
+  // Running on the hosted Replit server — API key is available here.
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    res.status(500).json({ error: "AI service is not configured on the server." });
+    res
+      .status(500)
+      .json({ error: "AI service is not configured on the server." });
     return;
   }
 
@@ -66,18 +113,27 @@ Keep responses focused and practical. Format answers with bullet points or numbe
   try {
     const userContent: Anthropic.MessageParam["content"] = [];
 
-    if (includeScreenshot) {
+    // Accept imageData from the request body (sent by proxy) or from local state
+    let imageBase64: string | null = null;
+    if (reqImageData) {
+      // Strip data URL prefix if present
+      imageBase64 = reqImageData.replace(/^data:image\/\w+;base64,/, "");
+    } else if (includeScreenshot) {
       const latest = getLatestScreenshot();
       if (latest.available && latest.imageData) {
-        userContent.push({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: "image/png",
-            data: latest.imageData,
-          },
-        });
+        imageBase64 = latest.imageData;
       }
+    }
+
+    if (imageBase64) {
+      userContent.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: "image/png",
+          data: imageBase64,
+        },
+      });
     }
 
     userContent.push({
@@ -133,13 +189,11 @@ Keep responses focused and practical. Format answers with bullet points or numbe
     if (err instanceof Anthropic.APIError) {
       if (err.status === 401) {
         res.status(400).json({
-          error: "Invalid Claude API key. Please check your settings.",
+          error: "Invalid Claude API key. Please check server configuration.",
         });
         return;
       }
-      res
-        .status(500)
-        .json({ error: `Claude API error: ${err.message}` });
+      res.status(500).json({ error: `Claude API error: ${err.message}` });
       return;
     }
     const message_err = err instanceof Error ? err.message : "Unknown error";

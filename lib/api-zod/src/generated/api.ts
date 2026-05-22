@@ -61,7 +61,8 @@ export const GetLatestScreenshotResponse = zod.object({
 export const SendChatMessageBody = zod.object({
   "message": zod.string().min(1),
   "gameName": zod.string().nullish().describe('Currently detected game name for context'),
-  "includeScreenshot": zod.boolean().optional().describe('Whether to attach the latest screenshot to the message')
+  "includeScreenshot": zod.boolean().optional().describe('Whether to attach the latest local screenshot to the message'),
+  "imageData": zod.string().nullish().describe('Base64 PNG screenshot to attach (overrides includeScreenshot lookup)')
 })
 
 export const SendChatMessageResponse = zod.object({
@@ -76,7 +77,6 @@ export const SendChatMessageResponse = zod.object({
  * @summary Get current settings
  */
 export const GetSettingsResponse = zod.object({
-  "hasApiKey": zod.boolean().describe('Whether a Claude API key is configured (never returns the actual key)'),
   "screenshotInterval": zod.number().describe('Auto-screenshot interval in seconds'),
   "autoCapture": zod.boolean().describe('Whether auto screenshot capture is enabled'),
   "hasSteamApiKey": zod.boolean().describe('Whether a Steam Web API key is configured')
@@ -88,14 +88,12 @@ export const GetSettingsResponse = zod.object({
  * @summary Save settings
  */
 export const SaveSettingsBody = zod.object({
-  "apiKey": zod.string().nullish().describe('Claude API key (pass null to keep existing)'),
   "screenshotInterval": zod.number().nullish().describe('Auto-screenshot interval in seconds (10-300)'),
   "autoCapture": zod.boolean().nullish(),
   "steamApiKey": zod.string().nullish().describe('Steam Web API key for extended game detection (pass null to keep existing)')
 })
 
 export const SaveSettingsResponse = zod.object({
-  "hasApiKey": zod.boolean().describe('Whether a Claude API key is configured (never returns the actual key)'),
   "screenshotInterval": zod.number().describe('Auto-screenshot interval in seconds'),
   "autoCapture": zod.boolean().describe('Whether auto screenshot capture is enabled'),
   "hasSteamApiKey": zod.boolean().describe('Whether a Steam Web API key is configured')

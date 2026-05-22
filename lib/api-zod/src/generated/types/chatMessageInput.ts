@@ -14,6 +14,11 @@ export interface ChatMessageInput {
      * @nullable
      */
   gameName?: string | null;
-  /** Whether to attach the latest screenshot to the message */
+  /** Whether to attach the latest local screenshot to the message */
   includeScreenshot?: boolean;
+  /**
+     * Base64 PNG screenshot to attach (overrides includeScreenshot lookup)
+     * @nullable
+     */
+  imageData?: string | null;
 }

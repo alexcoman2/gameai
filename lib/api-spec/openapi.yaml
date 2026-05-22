@@ -200,7 +200,10 @@ components:
           description: Currently detected game name for context
         includeScreenshot:
           type: boolean
-          description: Whether to attach the latest screenshot to the message
+          description: Whether to attach the latest local screenshot to the message
+        imageData:
+          type: ["string", "null"]
+          description: Base64 PNG screenshot to attach (overrides includeScreenshot lookup)
       required:
         - message
 
@@ -221,9 +224,6 @@ components:
     Settings:
       type: object
       properties:
-        hasApiKey:
-          type: boolean
-          description: Whether a Claude API key is configured (never returns the actual key)
         screenshotInterval:
           type: integer
           description: Auto-screenshot interval in seconds
@@ -234,7 +234,6 @@ components:
           type: boolean
           description: Whether a Steam Web API key is configured
       required:
-        - hasApiKey
         - screenshotInterval
         - autoCapture
         - hasSteamApiKey
@@ -242,9 +241,6 @@ components:
     SettingsInput:
       type: object
       properties:
-        apiKey:
-          type: ["string", "null"]
-          description: Claude API key (pass null to keep existing)
         screenshotInterval:
           type: ["integer", "null"]
           description: Auto-screenshot interval in seconds (10-300)

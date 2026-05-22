@@ -8,11 +8,6 @@
 
 export interface SettingsInput {
   /**
-     * Claude API key (pass null to keep existing)
-     * @nullable
-     */
-  apiKey?: string | null;
-  /**
      * Auto-screenshot interval in seconds (10-300)
      * @nullable
      */

@@ -7,8 +7,6 @@
  */
 
 export interface Settings {
-  /** Whether a Claude API key is configured (never returns the actual key) */
-  hasApiKey: boolean;
   /** Auto-screenshot interval in seconds */
   screenshotInterval: number;
   /** Whether auto screenshot capture is enabled */
