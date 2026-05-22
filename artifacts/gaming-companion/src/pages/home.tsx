@@ -219,7 +219,7 @@ export default function Home() {
   useEffect(() => {
     if (!isElectron || !watchMode || !electronAPI?.captureScreenshot) return;
     const SCREENSHOT_MS = 2000;
-    const OBSERVE_MS = 90_000;
+    const OBSERVE_MS = 20_000;
     let active = true;
     let lastObserveAt = 0;
 
