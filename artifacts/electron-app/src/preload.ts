@@ -9,5 +9,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("set-always-on-top", value),
   captureScreenshot: (): Promise<string> =>
     ipcRenderer.invoke("capture-screenshot"),
+  getLastGameScreenshot: (): Promise<string | null> =>
+    ipcRenderer.invoke("get-last-game-screenshot"),
   isElectron: true as const,
 });

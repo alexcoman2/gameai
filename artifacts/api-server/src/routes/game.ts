@@ -124,7 +124,16 @@ const GAME_PROCESS_MAP: Record<string, string> = {
   "supergiant.exe": "Pyre",
   "transistor.exe": "Transistor",
   "bastion.exe": "Bastion",
-  // Strategy
+  // Strategy / Turn-Based
+  "heroes5.exe": "Heroes of Might and Magic V",
+  "h5_game.exe": "Heroes of Might and Magic V",
+  "heroes5tribes.exe": "Heroes of Might and Magic V: Tribes of the East",
+  "h5_game_tribes.exe": "Heroes of Might and Magic V: Tribes of the East",
+  "heroes3hota.exe": "Heroes of Might and Magic III",
+  "heroes3.exe": "Heroes of Might and Magic III",
+  "h3hota.exe": "Heroes of Might and Magic III: Horn of the Abyss",
+  "heroes6.exe": "Might & Magic Heroes VI",
+  "heroes7.exe": "Might & Magic Heroes VII",
   "civilization6.exe": "Civilization VI",
   "civ6.exe": "Civilization VI",
   "civilization5.exe": "Civilization V",

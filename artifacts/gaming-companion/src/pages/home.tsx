@@ -190,6 +190,7 @@ export default function Home() {
   type ElectronAPI = {
     isElectron?: boolean;
     captureScreenshot?: () => Promise<string>;
+    getLastGameScreenshot?: () => Promise<string | null>;
     getAlwaysOnTop?: () => Promise<boolean>;
     toggleAlwaysOnTop?: () => Promise<boolean>;
   };
@@ -240,10 +241,15 @@ export default function Home() {
             (window as Window & { __gameNameOverride__?: string }).__gameNameOverride__ ||
             undefined;
           try {
+            // Prefer the last screenshot captured while the window was NOT focused
+            // (i.e. when the game was visible fullscreen) over the current screen
+            // which would show the NEXUS_LINK overlay after an alt-tab.
+            const gameScreenshot = await electronAPI.getLastGameScreenshot?.() ?? null;
+            const observeWith = gameScreenshot || dataUrl;
             const res = await fetch("/api/chat/watch", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ imageData: dataUrl, gameName }),
+              body: JSON.stringify({ imageData: observeWith, gameName }),
             });
             if (res.ok && active) {
               const data = (await res.json()) as { observation: string | null; gameName: string | null };

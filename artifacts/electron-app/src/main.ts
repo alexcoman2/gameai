@@ -12,6 +12,8 @@ import * as path from "path";
 const SERVER_PORT = 8765;
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: UtilityProcess | null = null;
+let lastGameScreenshot: string | null = null;
+let backgroundCaptureTimer: ReturnType<typeof setInterval> | null = null;
 
 function getResourcePaths(): { serverEntry: string; staticDir: string } {
   if (app.isPackaged) {
@@ -120,6 +122,32 @@ function createWindow(): void {
   mainWindow.on("closed", () => {
     mainWindow = null;
   });
+
+  // Background capture: when the user alt-tabs to NEXUS_LINK, capture the
+  // game screen in the background so watch observations still see the game.
+  mainWindow.on("blur", () => {
+    if (backgroundCaptureTimer) return;
+    backgroundCaptureTimer = setInterval(async () => {
+      try {
+        const sources = await desktopCapturer.getSources({
+          types: ["screen"],
+          thumbnailSize: { width: 1920, height: 1080 },
+        });
+        if (sources.length > 0) {
+          lastGameScreenshot = sources[0].thumbnail.toDataURL();
+        }
+      } catch {
+        // Silent fail
+      }
+    }, 2000);
+  });
+
+  mainWindow.on("focus", () => {
+    if (backgroundCaptureTimer) {
+      clearInterval(backgroundCaptureTimer);
+      backgroundCaptureTimer = null;
+    }
+  });
 }
 
 app.whenReady().then(() => {
@@ -160,6 +188,10 @@ ipcMain.handle("capture-screenshot", async () => {
   if (sources.length === 0) throw new Error("No screen sources found");
   const dataUrl = sources[0].thumbnail.toDataURL();
   return dataUrl;
+});
+
+ipcMain.handle("get-last-game-screenshot", () => {
+  return lastGameScreenshot;
 });
 
 ipcMain.handle("toggle-always-on-top", () => {
