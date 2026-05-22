@@ -9,7 +9,6 @@ import {
 } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -17,21 +16,13 @@ import { Camera, Send, AlertCircle, Loader2, Maximize2, X, MessageSquare } from 
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
-
-interface Message {
-  id: string;
-  role: "user" | "assistant";
-  content: string;
-  timestamp: string;
-  screenshot?: string | null;
-}
+import { useChat } from "@/context/chat-context";
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const { messages, addMessage, gameNameOverride, setGameNameOverride } = useChat();
   const [input, setInput] = useState("");
   const [includeScreenshot, setIncludeScreenshot] = useState(false);
   const [pendingScreenshot, setPendingScreenshot] = useState<string | null>(null);
-  const [gameNameOverride, setGameNameOverride] = useState("");
   
   const scrollRef = useRef<HTMLDivElement>(null);
   
@@ -57,7 +48,6 @@ export default function Home() {
   const captureMutation = useCaptureScreenshot();
   const sendMutation = useSendChatMessage();
 
-  // Scroll to bottom on new message
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -86,19 +76,18 @@ export default function Home() {
     const latestImgData = latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : null;
     const sentScreenshot = includeScreenshot ? (pendingScreenshot || latestImgData) : null;
 
-    const userMessage: Message = {
+    const userMessage = {
       id: Date.now().toString(),
-      role: "user",
+      role: "user" as const,
       content: input,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       screenshot: sentScreenshot
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    addMessage(userMessage);
     const messageContent = input;
     setInput("");
     
-    // Clear pending screenshot after sending
     const currentIncludeScreenshot = includeScreenshot;
     setIncludeScreenshot(false);
     setPendingScreenshot(null);
@@ -112,22 +101,25 @@ export default function Home() {
         }
       });
 
-      const assistantMessage: Message = {
+      addMessage({
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: response.reply,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      });
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { error?: string } }; message?: string };
+      const errMsg =
+        apiErr?.response?.data?.error ||
+        apiErr?.message ||
+        "Communication link failed. Unable to reach AI core.";
 
-      setMessages(prev => [...prev, assistantMessage]);
-    } catch (e) {
-      const errorMessage: Message = {
+      addMessage({
         id: (Date.now() + 1).toString(),
         role: "assistant",
-        content: "ERROR: Communication link failed. Unable to reach AI core.",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages(prev => [...prev, errorMessage]);
+        content: `ERROR: ${errMsg}`,
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      });
     }
   };
 
@@ -182,19 +174,19 @@ export default function Home() {
             messages.map((msg) => (
               <div 
                 key={msg.id} 
-                className={`flex flex-col max-w-[85%] ${msg.role === 'user' ? 'ml-auto items-end' : 'mr-auto items-start'}`}
+                className={`flex flex-col max-w-[85%] ${msg.role === "user" ? "ml-auto items-end" : "mr-auto items-start"}`}
               >
-                <div className={`flex items-center gap-2 mb-1 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
+                <div className={`flex items-center gap-2 mb-1 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
                   <span className="font-mono text-xs font-bold uppercase text-primary/80">
-                    {msg.role === 'user' ? 'OPERATOR' : 'AI_CORE'}
+                    {msg.role === "user" ? "OPERATOR" : "AI_CORE"}
                   </span>
                   <span className="font-mono text-[10px] text-muted-foreground/60">{msg.timestamp}</span>
                 </div>
                 
                 <div className={`p-4 font-mono text-sm leading-relaxed border ${
-                  msg.role === 'user' 
-                    ? 'bg-primary/5 border-primary/20 text-foreground' 
-                    : 'bg-secondary/50 border-border text-foreground'
+                  msg.role === "user" 
+                    ? "bg-primary/5 border-primary/20 text-foreground" 
+                    : "bg-secondary/50 border-border text-foreground"
                 }`}>
                   {msg.screenshot && (
                     <Dialog>
@@ -244,7 +236,7 @@ export default function Home() {
                <img src={pendingScreenshot || (latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : "")} alt="thumb" className="w-full h-full object-cover opacity-70" />
             </div>
             <span className="text-primary tracking-widest uppercase flex-1">
-              Visual data attached {pendingScreenshot ? '(Manual)' : '(Auto)'}
+              Visual data attached {pendingScreenshot ? "(Manual)" : "(Auto)"}
             </span>
             <Button type="button" variant="ghost" size="icon" onClick={() => {
               setIncludeScreenshot(false);

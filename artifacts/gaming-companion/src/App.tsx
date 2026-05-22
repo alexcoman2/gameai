@@ -6,6 +6,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Settings from "@/pages/settings";
 import { Layout } from "@/components/layout";
+import { ChatProvider } from "@/context/chat-context";
 
 const queryClient = new QueryClient();
 
@@ -23,12 +24,14 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <Layout>
-            <Router />
-          </Layout>
-        </WouterRouter>
-        <Toaster />
+        <ChatProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
+            <Layout>
+              <Router />
+            </Layout>
+          </WouterRouter>
+          <Toaster />
+        </ChatProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

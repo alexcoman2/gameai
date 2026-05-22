@@ -5,7 +5,7 @@ import { useDetectGame, getDetectGameQueryKey } from "@workspace/api-client-reac
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
 
-  const { data: gameDetection } = useDetectGame({
+  const { data: gameDetection, isLoading: isDetecting } = useDetectGame({
     query: {
       refetchInterval: 10000,
       queryKey: getDetectGameQueryKey(),
@@ -24,7 +24,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <h1 className="text-xl font-bold font-mono tracking-wider text-primary">NEXUS_LINK</h1>
             <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground uppercase tracking-widest mt-1">
               <span>STATUS:</span>
-              {gameDetection?.detected ? (
+              {isDetecting ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                  <span className="text-yellow-400">DETECTING...</span>
+                </div>
+              ) : gameDetection?.detected ? (
                 <div className="flex items-center gap-1.5">
                   <span className={`w-2 h-2 rounded-full ${
                     gameDetection.confidence === 'high' ? 'bg-primary animate-pulse' :
