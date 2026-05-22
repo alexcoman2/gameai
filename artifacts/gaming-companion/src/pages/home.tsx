@@ -45,6 +45,7 @@ export default function Home() {
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [sessionInitialized, setSessionInitialized] = useState(false);
+  const historyLoadedRef = useRef<Set<string>>(new Set());
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
 
   const isElectron = !!(window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron;
@@ -135,7 +136,7 @@ export default function Home() {
   }, [isLoadingSessions, sessions]);
 
   useEffect(() => {
-    if (!sessionMessagesData) return;
+    if (!sessionMessagesData || !activeSessionId) return;
     const mapped = sessionMessagesData.messages.map((m) => ({
       id: m.id,
       role: m.role as "user" | "assistant",
@@ -143,8 +144,24 @@ export default function Home() {
       timestamp: m.timestamp,
       screenshot: m.screenshot ?? null,
     }));
-    setMessages(mapped);
-  }, [sessionMessagesData]);
+
+    const alreadyLoaded = historyLoadedRef.current.has(activeSessionId);
+    if (!alreadyLoaded && mapped.length > 0) {
+      historyLoadedRef.current.add(activeSessionId);
+      setMessages([
+        ...mapped,
+        {
+          id: `divider-${activeSessionId}-${Date.now()}`,
+          role: "divider" as const,
+          content: new Date().toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }),
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          screenshot: null,
+        },
+      ]);
+    } else {
+      setMessages(mapped);
+    }
+  }, [sessionMessagesData, activeSessionId]);
 
   const toDataUrl = (base64: string) =>
     base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`;
@@ -541,45 +558,59 @@ export default function Home() {
               <p className="font-mono text-sm tracking-widest uppercase">Comm channel open. Awaiting input.</p>
             </div>
           ) : (
-            messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex flex-col max-w-[85%] ${msg.role === "user" ? "ml-auto items-end" : "mr-auto items-start"}`}
-              >
-                <div className={`flex items-center gap-2 mb-1 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
-                  <span className="font-mono text-xs font-bold uppercase text-primary/80">
-                    {msg.role === "user" ? "OPERATOR" : "AI_CORE"}
-                  </span>
-                  <span className="font-mono text-[10px] text-muted-foreground/60">{msg.timestamp}</span>
-                </div>
+            messages.map((msg) => {
+              if (msg.role === "divider") {
+                return (
+                  <div key={msg.id} className="flex items-center gap-3 py-1">
+                    <div className="flex-1 h-px bg-border/50" />
+                    <span className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground/40 whitespace-nowrap">
+                      session resumed · {msg.content} · {msg.timestamp}
+                    </span>
+                    <div className="flex-1 h-px bg-border/50" />
+                  </div>
+                );
+              }
 
-                <div className={`p-4 font-mono text-sm leading-relaxed border ${
-                  msg.role === "user"
-                    ? "bg-primary/5 border-primary/20 text-foreground"
-                    : "bg-secondary/50 border-border text-foreground"
-                }`}>
-                  {msg.screenshot && (
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <div className="mb-3 relative group cursor-pointer border border-border overflow-hidden">
-                          <img src={msg.screenshot} alt="Captured game screenshot" className="w-full max-w-sm h-auto opacity-80 group-hover:opacity-100 transition-opacity" />
-                          <div className="absolute inset-0 bg-background/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Maximize2 className="w-6 h-6 text-primary" />
+              return (
+                <div
+                  key={msg.id}
+                  className={`flex flex-col max-w-[85%] ${msg.role === "user" ? "ml-auto items-end" : "mr-auto items-start"}`}
+                >
+                  <div className={`flex items-center gap-2 mb-1 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
+                    <span className="font-mono text-xs font-bold uppercase text-primary/80">
+                      {msg.role === "user" ? "OPERATOR" : "AI_CORE"}
+                    </span>
+                    <span className="font-mono text-[10px] text-muted-foreground/60">{msg.timestamp}</span>
+                  </div>
+
+                  <div className={`p-4 font-mono text-sm leading-relaxed border ${
+                    msg.role === "user"
+                      ? "bg-primary/5 border-primary/20 text-foreground"
+                      : "bg-secondary/50 border-border text-foreground"
+                  }`}>
+                    {msg.screenshot && (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <div className="mb-3 relative group cursor-pointer border border-border overflow-hidden">
+                            <img src={msg.screenshot} alt="Captured game screenshot" className="w-full max-w-sm h-auto opacity-80 group-hover:opacity-100 transition-opacity" />
+                            <div className="absolute inset-0 bg-background/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Maximize2 className="w-6 h-6 text-primary" />
+                            </div>
                           </div>
-                        </div>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-6xl w-[90vw] h-[90vh] p-0 bg-background border-primary/30 rounded-none flex items-center justify-center">
-                        <VisuallyHidden>
-                          <DialogTitle>Screenshot Details</DialogTitle>
-                        </VisuallyHidden>
-                        <img src={msg.screenshot} alt="Captured game screenshot" className="max-w-full max-h-full object-contain" />
-                      </DialogContent>
-                    </Dialog>
-                  )}
-                  <div className="whitespace-pre-wrap">{msg.content}</div>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-6xl w-[90vw] h-[90vh] p-0 bg-background border-primary/30 rounded-none flex items-center justify-center">
+                          <VisuallyHidden>
+                            <DialogTitle>Screenshot Details</DialogTitle>
+                          </VisuallyHidden>
+                          <img src={msg.screenshot} alt="Captured game screenshot" className="max-w-full max-h-full object-contain" />
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                  </div>
                 </div>
-              </div>
-            ))
+              );
+            })
           )}
 
           {sendMutation.isPending && (

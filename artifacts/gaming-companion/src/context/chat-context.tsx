@@ -2,7 +2,7 @@ import { createContext, useContext, useState, ReactNode } from "react";
 
 export interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: "user" | "assistant" | "divider";
   content: string;
   timestamp: string;
   screenshot?: string | null;
