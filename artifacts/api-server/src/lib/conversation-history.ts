@@ -2,6 +2,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import Anthropic from "@anthropic-ai/sdk";
+import { logger } from "./logger";
 
 type ConversationMessage = {
   role: "user" | "assistant";
@@ -10,6 +11,8 @@ type ConversationMessage = {
 
 const DATA_DIR = path.join(os.homedir(), ".gaming-companion");
 const HISTORY_FILE = path.join(DATA_DIR, "conversation-history.json");
+
+const MAX_HISTORY_BYTES = 512 * 1024;
 
 export function loadHistory(): ConversationMessage[] {
   try {
@@ -20,8 +23,11 @@ export function loadHistory(): ConversationMessage[] {
         return parsed as ConversationMessage[];
       }
     }
-  } catch {
-    // Fall through to empty history on any read/parse error
+  } catch (err) {
+    logger.warn(
+      { err, file: HISTORY_FILE },
+      "Failed to read conversation history file; starting with empty history"
+    );
   }
   return [];
 }
@@ -31,7 +37,19 @@ export function saveHistory(history: ConversationMessage[]): void {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2), "utf-8");
+
+    let trimmed = [...history];
+    let serialized = JSON.stringify(trimmed, null, 2);
+
+    while (
+      Buffer.byteLength(serialized, "utf-8") > MAX_HISTORY_BYTES &&
+      trimmed.length > 0
+    ) {
+      trimmed = trimmed.slice(1);
+      serialized = JSON.stringify(trimmed, null, 2);
+    }
+
+    fs.writeFileSync(HISTORY_FILE, serialized, "utf-8");
   } catch {
     // Silently ignore write failures (e.g., read-only filesystem)
   }
