@@ -266,12 +266,17 @@ You are not a one-shot Q&A bot. You are a co-pilot who has been watching and hel
 
     // Resolve screenshot (local state only used in non-stateless dev mode)
     let imageBase64: string | null = null;
+    let chatMediaType: "image/png" | "image/jpeg" = "image/png";
     if (reqImageData) {
+      const mimeMatch = reqImageData.match(/^data:(image\/\w+);base64,/);
+      chatMediaType = mimeMatch?.[1] === "image/jpeg" ? "image/jpeg" : "image/png";
       imageBase64 = reqImageData.replace(/^data:image\/\w+;base64,/, "");
     } else if (!stateless && includeScreenshot) {
       const latest = getLatestScreenshot();
       if (latest.available && latest.imageData) {
-        imageBase64 = latest.imageData;
+        const mimeMatch = latest.imageData.match(/^data:(image\/\w+);base64,/);
+        chatMediaType = mimeMatch?.[1] === "image/jpeg" ? "image/jpeg" : "image/png";
+        imageBase64 = latest.imageData.replace(/^data:image\/\w+;base64,/, "");
       }
     }
 
@@ -280,7 +285,7 @@ You are not a one-shot Q&A bot. You are a co-pilot who has been watching and hel
         type: "image",
         source: {
           type: "base64",
-          media_type: "image/png",
+          media_type: chatMediaType,
           data: imageBase64,
         },
       });
