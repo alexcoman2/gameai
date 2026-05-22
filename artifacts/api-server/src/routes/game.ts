@@ -9,6 +9,24 @@ const execAsync = promisify(exec);
 const router = Router();
 
 const GAME_PROCESS_MAP: Record<string, string> = {
+  // Diablo / ARPG
+  "diablo iv.exe": "Diablo IV",
+  "diablo4.exe": "Diablo IV",
+  "diabloiv.exe": "Diablo IV",
+  "diablo3.exe": "Diablo III",
+  "diablo iii.exe": "Diablo III",
+  "lastepoch.exe": "Last Epoch",
+  "last epoch.exe": "Last Epoch",
+  "pathofexile.exe": "Path of Exile",
+  "pathofexile2.exe": "Path of Exile 2",
+  "poe.exe": "Path of Exile",
+  "poe2.exe": "Path of Exile 2",
+  "torchlight.exe": "Torchlight Infinite",
+  "grimdawn.exe": "Grim Dawn",
+  "d2r.exe": "Diablo II: Resurrected",
+  "diablo ii resurrected.exe": "Diablo II: Resurrected",
+  "victim.exe": "Victor Vran",
+  "wolcen.exe": "Wolcen: Lords of Mayhem",
   // Action / Adventure
   "witcher3.exe": "The Witcher 3: Wild Hunt",
   "cyberpunk2077.exe": "Cyberpunk 2077",
