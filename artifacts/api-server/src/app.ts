@@ -44,7 +44,12 @@ if (staticDir) {
 }
 
 const config = loadConfig();
-if (config.autoCapture) {
+// Only run auto-capture in the local Electron context where a real display
+// is available. STATIC_DIR is only set when serving the packaged desktop app.
+// On the hosted Replit server there is no display and screenshot-desktop
+// would crash the process.
+const hasDisplay = !!process.env["STATIC_DIR"];
+if (hasDisplay && config.autoCapture) {
   startAutoCapture(config.screenshotInterval);
   logger.info(
     { interval: config.screenshotInterval },

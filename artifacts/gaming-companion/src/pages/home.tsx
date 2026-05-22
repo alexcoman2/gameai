@@ -124,6 +124,12 @@ export default function Home() {
 
   useEffect(() => {
     if (sessionInitialized || isLoadingSessions) return;
+    // If we already have an active session (e.g. returning from Settings page),
+    // just mark initialized without switching sessions.
+    if (activeSessionId) {
+      setSessionInitialized(true);
+      return;
+    }
     if (sessions.length === 0) {
       createSessionMutation.mutate(
         { data: { name: "Session 1" } },
@@ -140,7 +146,7 @@ export default function Home() {
       setActiveSessionId(sessions[0].id);
       setSessionInitialized(true);
     }
-  }, [isLoadingSessions, sessions]);
+  }, [isLoadingSessions, sessions, activeSessionId]);
 
   useEffect(() => {
     if (!sessionMessagesData || !activeSessionId) return;

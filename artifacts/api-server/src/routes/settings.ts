@@ -37,10 +37,13 @@ router.post("/settings", (req, res) => {
 
   const saved = saveConfig(updates);
 
-  if (saved.autoCapture) {
-    startAutoCapture(saved.screenshotInterval);
-  } else {
-    stopAutoCapture();
+  const hasDisplay = !!process.env["STATIC_DIR"];
+  if (hasDisplay) {
+    if (saved.autoCapture) {
+      startAutoCapture(saved.screenshotInterval);
+    } else {
+      stopAutoCapture();
+    }
   }
 
   res.json({
