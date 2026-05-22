@@ -290,7 +290,10 @@ export default function Home() {
     if (!input.trim() || sendMutation.isPending) return;
 
     const latestImgData = latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : null;
-    const sentScreenshot = includeScreenshot ? (pendingScreenshot || latestImgData) : null;
+    // Auto-include latest screenshot when auto-capture is on, or when user manually toggled
+    const autoCapturing = settings?.autoCapture && !!latestImgData;
+    const sentScreenshot = (includeScreenshot || autoCapturing) ? (pendingScreenshot || latestImgData) : null;
+    const shouldSendScreenshot = includeScreenshot || autoCapturing;
 
     const userMessage = {
       id: Date.now().toString(),
@@ -304,7 +307,6 @@ export default function Home() {
     const messageContent = input;
     setInput("");
 
-    const currentIncludeScreenshot = includeScreenshot;
     setIncludeScreenshot(false);
     setPendingScreenshot(null);
 
@@ -313,7 +315,7 @@ export default function Home() {
         data: {
           message: messageContent,
           gameName: gameNameOverride.trim() || gameDetection?.gameName || gameDetection?.processName,
-          includeScreenshot: currentIncludeScreenshot,
+          includeScreenshot: shouldSendScreenshot,
           sessionId: activeSessionId,
         }
       });
