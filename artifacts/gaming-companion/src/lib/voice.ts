@@ -135,10 +135,23 @@ function stripMarkdown(text: string): string {
 // otherwise the failure is invisible (just console.warn).
 export const VOICE_BLOCKED_EVENT = "unstuck:voice:blocked";
 
+// Dispatched when the server refuses /api/voice/speak (plan gate, daily cap,
+// upstream OpenAI failure, etc.). Detail carries the human-readable reason
+// from the server so the page can toast it verbatim instead of guessing
+// "blocked by browser".
+export const VOICE_ERROR_EVENT = "unstuck:voice:error";
+
 function dispatchBlocked(): void {
   if (typeof window === "undefined") return;
   try {
     window.dispatchEvent(new CustomEvent(VOICE_BLOCKED_EVENT));
+  } catch { /* ignore */ }
+}
+
+function dispatchError(reason: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent(VOICE_ERROR_EVENT, { detail: reason }));
   } catch { /* ignore */ }
 }
 
@@ -202,6 +215,8 @@ export function speak(text: string): void {
 
   void (async () => {
     try {
+      // eslint-disable-next-line no-console
+      console.info("[voice] speak() requesting TTS,", clean.length, "chars");
       const res = await authFetch("/api/voice/speak", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -209,9 +224,35 @@ export function speak(text: string): void {
         signal: abort.signal,
       });
       if (abort.signal.aborted) return;
-      if (!res.ok) throw new Error(`TTS HTTP ${res.status}`);
+
+      if (!res.ok) {
+        // Try to extract the server's reason so we can show it verbatim.
+        // /api/voice/speak returns JSON {error: "..."} on error paths even
+        // though success returns binary audio.
+        let serverReason = `TTS HTTP ${res.status}`;
+        try {
+          const errJson = (await res.json()) as { error?: string };
+          if (errJson?.error) serverReason = errJson.error;
+        } catch { /* response wasn't JSON */ }
+        // eslint-disable-next-line no-console
+        console.warn("[voice] /api/voice/speak failed:", res.status, serverReason);
+        // 4xx = server deliberately refused (plan gate, cap, bad input).
+        // No point in falling back to browser TTS — surface the reason.
+        // 5xx / network = transient; fall back so the user still hears something.
+        if (res.status >= 400 && res.status < 500) {
+          dispatchError(serverReason);
+          return;
+        }
+        throw new Error(serverReason);
+      }
       const blob = await res.blob();
       if (abort.signal.aborted) return;
+      if (blob.size === 0) {
+        // eslint-disable-next-line no-console
+        console.warn("[voice] /api/voice/speak returned empty body");
+        dispatchError("Voice service returned no audio. Please try again.");
+        return;
+      }
 
       myUrl = URL.createObjectURL(blob);
       myAudio = new Audio(myUrl);
@@ -234,7 +275,38 @@ export function speak(text: string): void {
       // Note: do NOT null currentFetchAbort here — keep it pointing at
       // our abort so a later cancelSpeech() can flip signal.aborted=true
       // and the play() rejection below knows it was deliberately cancelled.
-      await myAudio.play();
+      try {
+        await myAudio.play();
+        // eslint-disable-next-line no-console
+        console.info("[voice] TTS playback started");
+      } catch (playErr) {
+        if (abort.signal.aborted) return;
+        // A newer speak() may have taken over the globals between the
+        // initial rejection and now. If so, do nothing — touching
+        // stopCurrentAudio() / speakBrowserFallback() would cancel the
+        // newer speech and replay our stale text on top of it.
+        if (currentAudio !== myAudio) return;
+        // Most common cause: autoplay policy. Re-prime and retry once.
+        // primeTtsPlayback is fire-and-forget, but on a real user gesture
+        // the silent-clip play() typically resolves synchronously enough
+        // that the retry has a meaningful chance of succeeding.
+        // eslint-disable-next-line no-console
+        console.warn("[voice] audio.play() rejected, retrying after re-prime:", playErr);
+        audioPrimed = false;
+        primeTtsPlayback();
+        try {
+          await myAudio.play();
+          // eslint-disable-next-line no-console
+          console.info("[voice] TTS playback started after re-prime");
+        } catch (retryErr) {
+          if (abort.signal.aborted) return;
+          if (currentAudio !== myAudio) return;
+          // eslint-disable-next-line no-console
+          console.warn("[voice] retry play() also rejected; falling back to browser TTS:", retryErr);
+          stopCurrentAudio();
+          speakBrowserFallback(clean);
+        }
+      }
     } catch (err) {
       // Two failure modes:
       //   a) signal aborted → user/another speak() cancelled us; do nothing.

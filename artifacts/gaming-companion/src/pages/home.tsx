@@ -24,7 +24,7 @@ import {
   Eye, EyeOff, Radio, Minimize2, Mic, MicOff, Volume2, VolumeX,
 } from "lucide-react";
 import {
-  createVoiceRecorder, speak, cancelSpeech, primeTtsPlayback,
+  createVoiceRecorder, speak, cancelSpeech, primeTtsPlayback, VOICE_ERROR_EVENT,
   isTtsEnabled, setTtsEnabled, isLikelyHallucination,
   VOICE_BLOCKED_EVENT,
 } from "@/lib/voice";
@@ -180,8 +180,20 @@ export default function Home() {
         variant: "destructive",
       });
     };
+    const onError = (e: Event) => {
+      const reason = (e as CustomEvent<string>).detail || "Voice reply failed";
+      toast({
+        title: "Voice reply unavailable",
+        description: reason,
+        variant: "destructive",
+      });
+    };
     window.addEventListener(VOICE_BLOCKED_EVENT, onBlocked);
-    return () => window.removeEventListener(VOICE_BLOCKED_EVENT, onBlocked);
+    window.addEventListener(VOICE_ERROR_EVENT, onError);
+    return () => {
+      window.removeEventListener(VOICE_BLOCKED_EVENT, onBlocked);
+      window.removeEventListener(VOICE_ERROR_EVENT, onError);
+    };
   }, [toast]);
   const [watchLog, setWatchLog] = useState<{ time: string; note: string; event?: string | null; confidence?: number | null; visibleText?: string | null }[]>([]);
   const [visionDetectedGame, setVisionDetectedGame] = useState<string | null>(null);
