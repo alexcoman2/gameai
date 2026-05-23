@@ -13,6 +13,7 @@ import {
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware.js";
 import { paddleWebhookHandler } from "./routes/paddle-webhook.js";
+import { validatePaddleConfig } from "./lib/paddle.js";
 import { IS_PROXY, IS_HOSTED } from "./lib/server-mode.js";
 import path from "path";
 
@@ -135,5 +136,11 @@ if (hasDisplay && config.autoCapture) {
     "Auto screenshot capture started"
   );
 }
+
+// Loud startup sanity check for the Paddle billing wiring. In live mode
+// this surfaces missing webhook secrets, missing price IDs, and the
+// most insidious foot-gun: sandbox price IDs left over from testing
+// that would 404 on every checkout in production.
+validatePaddleConfig();
 
 export default app;
