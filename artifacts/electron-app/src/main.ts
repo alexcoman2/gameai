@@ -3,6 +3,8 @@ import {
   BrowserWindow,
   ipcMain,
   desktopCapturer,
+  globalShortcut,
+  screen,
   utilityProcess,
   type UtilityProcess,
 } from "electron";
@@ -10,7 +12,13 @@ import * as http from "http";
 import * as path from "path";
 
 const SERVER_PORT = 8765;
+const OVERLAY_HOTKEY_PRIMARY = "Control+Shift+Space";
+const OVERLAY_HOTKEY_FALLBACK = "Alt+Space";
+const OVERLAY_WIDTH = 440;
+const OVERLAY_HEIGHT = 560;
+
 let mainWindow: BrowserWindow | null = null;
+let overlayWindow: BrowserWindow | null = null;
 let serverProcess: UtilityProcess | null = null;
 let lastGameScreenshot: string | null = null;
 let backgroundCaptureTimer: ReturnType<typeof setInterval> | null = null;
@@ -77,13 +85,7 @@ async function startServer(): Promise<void> {
       PORT: String(SERVER_PORT),
       NODE_ENV: "production",
       STATIC_DIR: staticDir,
-      // Tells the bundled api-server it is the local proxy instance: skip
-      // its own Clerk auth (no keys here), enable per-machine local routes
-      // (sessions/settings/screenshot/game), and forward AI/billing calls
-      // to the hosted backend below.
       AUTH_MODE: "proxy",
-      // Points to the hosted Replit API server. The local server acts as a
-      // proxy for chat/watch/billing and never needs an Anthropic API key.
       UNSTUCK_API_URL:
         process.env.UNSTUCK_API_URL ||
         process.env.NEXUS_LINK_API_URL ||
@@ -156,10 +158,95 @@ function createWindow(): void {
   });
 }
 
+// ── Overlay window ──────────────────────────────────────────────────────────
+// Frameless, always-on-top, semi-transparent companion window. Toggled by a
+// global hotkey so the user can pop chat over their game mid-fight without
+// alt-tabbing to the main app. Lives independently of the main window but
+// shares the same renderer origin (localhost:SERVER_PORT) so it picks up the
+// same Clerk session / cookies / localStorage automatically.
+
+function createOverlayWindow(): void {
+  if (overlayWindow && !overlayWindow.isDestroyed()) return;
+
+  const primary = screen.getPrimaryDisplay();
+  const { width: screenW } = primary.workAreaSize;
+  const x = Math.max(0, screenW - OVERLAY_WIDTH - 24);
+  const y = 24;
+
+  overlayWindow = new BrowserWindow({
+    width: OVERLAY_WIDTH,
+    height: OVERLAY_HEIGHT,
+    x,
+    y,
+    frame: false,
+    transparent: true,
+    resizable: true,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    show: false,
+    alwaysOnTop: true,
+    hasShadow: false,
+    backgroundColor: "#00000000",
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      backgroundThrottling: false,
+    },
+  });
+
+  overlayWindow.setAlwaysOnTop(true, "screen-saver");
+  overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+  void overlayWindow.loadURL(`http://localhost:${SERVER_PORT}/overlay`);
+
+  // Hide on blur so it never steals focus from the game once dismissed.
+  overlayWindow.on("blur", () => {
+    // Keep the window alive but hidden — toggling it back is instant.
+    overlayWindow?.hide();
+  });
+
+  overlayWindow.on("closed", () => {
+    overlayWindow = null;
+  });
+}
+
+function toggleOverlay(): void {
+  if (!overlayWindow || overlayWindow.isDestroyed()) {
+    createOverlayWindow();
+    overlayWindow?.once("ready-to-show", () => {
+      overlayWindow?.show();
+      overlayWindow?.focus();
+      overlayWindow?.webContents.send("overlay-shown");
+    });
+    return;
+  }
+  if (overlayWindow.isVisible()) {
+    overlayWindow.hide();
+  } else {
+    overlayWindow.show();
+    overlayWindow.focus();
+    overlayWindow.webContents.send("overlay-shown");
+  }
+}
+
+function registerOverlayHotkeys(): void {
+  // Try the primary binding first; if it's already claimed by another app
+  // (some games grab Ctrl+Shift+Space) fall back to Alt+Space.
+  const ok = globalShortcut.register(OVERLAY_HOTKEY_PRIMARY, toggleOverlay);
+  if (!ok) {
+    globalShortcut.register(OVERLAY_HOTKEY_FALLBACK, toggleOverlay);
+  }
+}
+
 app.whenReady().then(() => {
   startServer()
     .then(() => {
       createWindow();
+      createOverlayWindow();
+      registerOverlayHotkeys();
     })
     .catch((err: unknown) => {
       console.error("Failed to start backend server:", err);
@@ -177,6 +264,10 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
   }
+});
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.on("before-quit", () => {
@@ -219,4 +310,37 @@ ipcMain.handle("set-always-on-top", (_event, value: boolean) => {
     return true;
   }
   return false;
+});
+
+// ── Overlay IPC ─────────────────────────────────────────────────────────────
+
+ipcMain.handle("overlay-hide", () => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.hide();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle("overlay-open-main", () => {
+  if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.hide();
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+    return true;
+  }
+  return false;
+});
+
+ipcMain.handle("overlay-get-hotkey", () => {
+  // Report whichever binding actually registered, so the UI can show the
+  // correct hint text.
+  if (globalShortcut.isRegistered(OVERLAY_HOTKEY_PRIMARY)) {
+    return OVERLAY_HOTKEY_PRIMARY;
+  }
+  if (globalShortcut.isRegistered(OVERLAY_HOTKEY_FALLBACK)) {
+    return OVERLAY_HOTKEY_FALLBACK;
+  }
+  return null;
 });
