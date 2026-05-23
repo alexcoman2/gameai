@@ -332,12 +332,53 @@ function createWindow(): void {
   mainWindow.webContents.on("did-navigate-in-page", (_evt, url) => {
     appendServerLog(`[main] did-navigate-in-page url=${url}\n`);
   });
-  mainWindow.webContents.on(
-    "will-redirect",
-    (_evt, url) => {
-      appendServerLog(`[main] will-redirect → ${url}\n`);
-    },
-  );
+  // Safety net: if Clerk (or anything else) sends us to the hosted Replit
+  // origin for a non-API page, rewrite the navigation back to the local
+  // server so the Electron window stays on http://127.0.0.1:8765. We MUST
+  // still allow /api/__clerk/* callbacks through — those endpoints set the
+  // Clerk session cookies (proxied) before the final redirect home.
+  const HOSTED_ORIGIN = "https://game-companion-ai.replit.app";
+  const rewriteHostedToLocal = (
+    rawUrl: string,
+  ): string | null => {
+    if (!rawUrl.startsWith(HOSTED_ORIGIN)) return null;
+    let parsed: URL;
+    try {
+      parsed = new URL(rawUrl);
+    } catch {
+      return null;
+    }
+    // Leave Clerk proxy callbacks (and any other /api/ endpoint that must
+    // stay on the hosted origin to set/read cookies) untouched.
+    if (parsed.pathname.startsWith("/api/")) return null;
+    const local = new URL(mainUrl);
+    local.pathname = parsed.pathname;
+    local.search = parsed.search;
+    local.hash = parsed.hash;
+    return local.toString();
+  };
+  mainWindow.webContents.on("will-redirect", (evt, url) => {
+    appendServerLog(`[main] will-redirect → ${url}\n`);
+    const rewritten = rewriteHostedToLocal(url);
+    if (rewritten) {
+      appendServerLog(
+        `[main] rewriting hosted→local: ${url} → ${rewritten}\n`,
+      );
+      evt.preventDefault();
+      void mainWindow?.loadURL(rewritten);
+    }
+  });
+  mainWindow.webContents.on("will-navigate", (evt, url) => {
+    appendServerLog(`[main] will-navigate → ${url}\n`);
+    const rewritten = rewriteHostedToLocal(url);
+    if (rewritten) {
+      appendServerLog(
+        `[main] rewriting hosted→local: ${url} → ${rewritten}\n`,
+      );
+      evt.preventDefault();
+      void mainWindow?.loadURL(rewritten);
+    }
+  });
   mainWindow.webContents.on(
     "did-fail-load",
     (_evt, errorCode, errorDescription, validatedURL, isMainFrame) => {

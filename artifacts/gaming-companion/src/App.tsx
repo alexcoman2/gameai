@@ -32,6 +32,13 @@ const clerkPubKey = isLocalHost
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// In Electron (and any non-proxy host), Clerk's OAuth flow defaults to using
+// the FAPI/proxy origin (game-companion-ai.replit.app) as the post-sign-in
+// redirect target. That sends the Electron window permanently to the hosted
+// site after Google OAuth. Force the post-auth landing URL back to the
+// current window's origin so we stay on http://127.0.0.1:8765 inside Electron.
+const postAuthRedirectUrl = `${window.location.origin}${basePath}/`;
+
 function stripBase(path: string): string {
   return basePath && path.startsWith(basePath)
     ? path.slice(basePath.length) || "/"
@@ -99,6 +106,8 @@ function SignInPage() {
         routing="path"
         path={`${basePath}/sign-in`}
         signUpUrl={`${basePath}/sign-up`}
+        forceRedirectUrl={postAuthRedirectUrl}
+        fallbackRedirectUrl={postAuthRedirectUrl}
       />
     </div>
   );
@@ -111,6 +120,8 @@ function SignUpPage() {
         routing="path"
         path={`${basePath}/sign-up`}
         signInUrl={`${basePath}/sign-in`}
+        forceRedirectUrl={postAuthRedirectUrl}
+        fallbackRedirectUrl={postAuthRedirectUrl}
       />
     </div>
   );
@@ -205,6 +216,10 @@ function App() {
       appearance={clerkAppearance}
       signInUrl={`${basePath}/sign-in`}
       signUpUrl={`${basePath}/sign-up`}
+      signInForceRedirectUrl={postAuthRedirectUrl}
+      signUpForceRedirectUrl={postAuthRedirectUrl}
+      signInFallbackRedirectUrl={postAuthRedirectUrl}
+      signUpFallbackRedirectUrl={postAuthRedirectUrl}
       routerPush={(to) => setLocation(stripBase(to))}
       routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
       localization={{
