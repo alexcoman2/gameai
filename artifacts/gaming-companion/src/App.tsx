@@ -20,10 +20,15 @@ import { Layout } from "@/components/layout";
 import { ChatProvider } from "@/context/chat-context";
 import { GameProvider } from "@/context/game-context";
 
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
+const hostname = window.location.hostname;
+const isLocalHost =
+  hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+const clerkPubKey = isLocalHost
+  ? import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
+  : publishableKeyFromHost(
+      hostname,
+      import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
+    );
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
