@@ -23,6 +23,8 @@ import {
   Plus, Trash2, Pencil, Check, MessagesSquare, ChevronRight, Pin, PinOff,
   Eye, EyeOff, Radio, Minimize2, Mic, MicOff, Volume2, VolumeX,
 } from "lucide-react";
+import { useLocation } from "wouter";
+import { useMe } from "@/hooks/use-me";
 import {
   createVoiceRecorder, speak, cancelSpeech, primeTtsPlayback, VOICE_ERROR_EVENT,
   isTtsEnabled, setTtsEnabled, isLikelyHallucination,
@@ -88,6 +90,14 @@ export default function Home() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [ttsOn, setTtsOn] = useState(isTtsEnabled());
   const [handsFree, setHandsFree] = useState(isHandsFreeEnabled());
+  // Plan gate: voice mode (STT/TTS/hands-free) is a paid feature. The
+  // server enforces this with a 403 on /api/voice/*, but we also need to
+  // disable the buttons in the UI so free users don't waste a mic-permission
+  // prompt and a recording just to see a "voice not allowed" toast.
+  const { me } = useMe();
+  const [, navigate] = useLocation();
+  const voiceLocked = !me || me.plan === "free";
+  const goUpgrade = () => navigate("/upgrade");
   // Refs that the rearm setTimeout / TTS onAllDone callback (both fire
   // outside React render) need to read fresh — closure values would be
   // stale by the time they run.
@@ -1246,11 +1256,17 @@ export default function Home() {
         <form onSubmit={handleSend} className="flex flex-wrap gap-2 min-w-0">
           <Button
             type="button"
-            onClick={() => void toggleMic()}
+            onClick={() => (voiceLocked ? goUpgrade() : void toggleMic())}
             disabled={isTranscribing || sending}
-            title={isRecording ? "Stop & transcribe" : "Speak"}
+            title={
+              voiceLocked
+                ? "Voice input is a Pro feature — click to upgrade"
+                : isRecording ? "Stop & transcribe" : "Speak"
+            }
             className={`rounded-none font-mono uppercase tracking-wider transition-all ${
-              isRecording
+              voiceLocked
+                ? "bg-secondary/40 text-muted-foreground border border-border opacity-60 hover:opacity-80 cursor-pointer"
+                : isRecording
                 ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse"
                 : "bg-secondary text-foreground hover:bg-secondary/80 border border-border"
             } ${compact ? "h-8 px-2" : "h-12 px-3"}`}
@@ -1265,15 +1281,21 @@ export default function Home() {
           </Button>
           <Button
             type="button"
-            onClick={toggleTts}
-            title={ttsOn ? "Voice replies ON — click to mute" : "Voice replies OFF — click to enable"}
+            onClick={() => (voiceLocked ? goUpgrade() : toggleTts())}
+            title={
+              voiceLocked
+                ? "Voice replies are a Pro feature — click to upgrade"
+                : ttsOn ? "Voice replies ON — click to mute" : "Voice replies OFF — click to enable"
+            }
             className={`rounded-none font-mono uppercase tracking-wider transition-all border ${
-              ttsOn
+              voiceLocked
+                ? "bg-secondary/40 text-muted-foreground border-border opacity-60 hover:opacity-80"
+                : ttsOn
                 ? "bg-primary/15 text-primary border-primary/40 hover:bg-primary/25"
                 : "bg-secondary text-muted-foreground border-border hover:text-foreground"
             } ${compact ? "h-8 px-2" : "h-12 px-3"}`}
           >
-            {ttsOn ? (
+            {ttsOn && !voiceLocked ? (
               <Volume2 className={compact ? "w-3 h-3" : "w-4 h-4"} />
             ) : (
               <VolumeX className={compact ? "w-3 h-3" : "w-4 h-4"} />
@@ -1281,14 +1303,18 @@ export default function Home() {
           </Button>
           <Button
             type="button"
-            onClick={toggleHandsFree}
+            onClick={() => (voiceLocked ? goUpgrade() : toggleHandsFree())}
             title={
-              handsFree
+              voiceLocked
+                ? "Hands-free voice chat is a Pro feature — click to upgrade"
+                : handsFree
                 ? "Hands-free voice chat ON — mic re-arms after each reply. Click to stop."
                 : "Hands-free voice chat OFF — click to start a continuous voice conversation"
             }
             className={`rounded-none font-mono uppercase tracking-wider transition-all border ${
-              handsFree
+              voiceLocked
+                ? "bg-secondary/40 text-muted-foreground border-border opacity-60 hover:opacity-80"
+                : handsFree
                 ? "bg-primary/15 text-primary border-primary/40 hover:bg-primary/25 animate-pulse"
                 : "bg-secondary text-muted-foreground border-border hover:text-foreground"
             } ${compact ? "h-8 px-2" : "h-12 px-3"}`}

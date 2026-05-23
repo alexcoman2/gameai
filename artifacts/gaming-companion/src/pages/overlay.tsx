@@ -11,6 +11,7 @@ import {
   isHandsFreeEnabled, setHandsFreeEnabled,
   VOICE_BLOCKED_EVENT, TTS_ENABLED_LS_KEY, HANDS_FREE_LS_KEY,
 } from "@/lib/voice";
+import { useMe } from "@/hooks/use-me";
 import { readWatchState } from "@/lib/watch-state";
 
 type ElectronAPI = {
@@ -127,6 +128,23 @@ export default function OverlayPage() {
   const isPttRef = useRef(false);
   const [ttsOn, setTtsOn] = useState(isTtsEnabled());
   const [handsFree, setHandsFree] = useState(isHandsFreeEnabled());
+  // Plan gate: voice is a paid feature. Server hard-blocks /api/voice/* with
+  // 403 for free users, but we also disable the buttons here so they don't
+  // waste a mic-permission prompt to learn that. Clicking a locked button
+  // pops open the main window so the user can navigate to /upgrade.
+  const { me } = useMe();
+  const voiceLocked = !!me && me.plan === "free";
+  const openMainForUpgrade = () => {
+    void electronAPI?.overlayOpenMain?.();
+    setTurns((prev) => [
+      ...prev,
+      {
+        id: `e-${Date.now()}`,
+        role: "error",
+        content: "Voice mode requires a Pro, Pro+, or Elite plan. Open the main window to upgrade.",
+      },
+    ]);
+  };
   // Track the latest hands-free value inside a ref so async callbacks
   // (TTS onAllDone, mic onAutoStop) see the current setting instead of
   // the stale closure value from when the request was kicked off.
@@ -711,11 +729,17 @@ export default function OverlayPage() {
             </button>
             <button
               type="button"
-              onClick={() => void toggleMic()}
+              onClick={() => (voiceLocked ? openMainForUpgrade() : void toggleMic())}
               disabled={isTranscribing || (isLoaded && !isSignedIn)}
-              title={isRecording ? "Stop, transcribe & send" : "Speak (auto-sends on stop)"}
+              title={
+                voiceLocked
+                  ? "Voice input is a Pro feature — click to upgrade"
+                  : isRecording ? "Stop, transcribe & send" : "Speak (auto-sends on stop)"
+              }
               className={`h-8 w-8 flex-shrink-0 flex items-center justify-center border transition ${
-                isRecording
+                voiceLocked
+                  ? "border-border text-muted-foreground opacity-50 hover:opacity-75"
+                  : isRecording
                   ? "border-destructive/60 text-destructive bg-destructive/10 animate-pulse"
                   : "border-border text-muted-foreground hover:text-foreground"
               } disabled:opacity-40 disabled:cursor-not-allowed`}
@@ -730,27 +754,37 @@ export default function OverlayPage() {
             </button>
             <button
               type="button"
-              onClick={toggleTts}
-              title={ttsOn ? "Voice replies ON — click to mute" : "Voice replies OFF — click to enable"}
+              onClick={() => (voiceLocked ? openMainForUpgrade() : toggleTts())}
+              title={
+                voiceLocked
+                  ? "Voice replies are a Pro feature — click to upgrade"
+                  : ttsOn ? "Voice replies ON — click to mute" : "Voice replies OFF — click to enable"
+              }
               className={`h-8 w-8 flex-shrink-0 flex items-center justify-center border transition ${
-                ttsOn
+                voiceLocked
+                  ? "border-border text-muted-foreground opacity-50 hover:opacity-75"
+                  : ttsOn
                   ? "border-primary text-primary bg-primary/15 hover:bg-primary/25"
                   : "border-border text-muted-foreground hover:text-foreground"
               }`}
             >
-              {ttsOn ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              {ttsOn && !voiceLocked ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
             </button>
             <button
               type="button"
-              onClick={toggleHandsFree}
+              onClick={() => (voiceLocked ? openMainForUpgrade() : toggleHandsFree())}
               disabled={isLoaded && !isSignedIn}
               title={
-                handsFree
+                voiceLocked
+                  ? "Hands-free voice chat is a Pro feature — click to upgrade"
+                  : handsFree
                   ? "Hands-free voice chat ON — mic re-arms after each reply. Click to stop."
                   : "Hands-free voice chat OFF — click to start a continuous voice conversation"
               }
               className={`h-8 w-8 flex-shrink-0 flex items-center justify-center border transition ${
-                handsFree
+                voiceLocked
+                  ? "border-border text-muted-foreground opacity-50 hover:opacity-75"
+                  : handsFree
                   ? "border-primary text-primary bg-primary/15 hover:bg-primary/25 animate-pulse"
                   : "border-border text-muted-foreground hover:text-foreground"
               } disabled:opacity-40 disabled:cursor-not-allowed`}
