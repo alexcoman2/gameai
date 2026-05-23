@@ -27,8 +27,11 @@ if (!gotSingleInstanceLock) {
   process.exit(0);
 }
 
-let SERVER_PORT = 8765;
-const SERVER_PORT_MAX = 8785;
+// Locked to a single fixed port. The origin (http://127.0.0.1:8765) is part
+// of Clerk's cookie scope — if the port shifts between launches, the user's
+// sign-in is silently lost. Anything stale on this port is killed at startup
+// (see ensurePortFree).
+const SERVER_PORT = 8765;
 // The bundled api-server binds to 127.0.0.1 (IPv4) in proxy mode. We MUST
 // use the literal "127.0.0.1" here too — on Windows, "localhost" resolves
 // to IPv6 (::1) first, the server isn't listening on ::1, every probe is
@@ -168,30 +171,65 @@ function waitForServer(port: number): Promise<void> {
   });
 }
 
-function findAvailablePort(start: number, end: number): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const tryPort = (port: number) => {
-      if (port > end) {
-        reject(new Error(`no free port in range ${start}-${end}`));
-        return;
-      }
-      const tester = net.createServer();
-      tester.once("error", () => tryPort(port + 1));
-      tester.once("listening", () => {
-        tester.close(() => resolve(port));
-      });
-      tester.listen(port, SERVER_HOST);
-    };
-    tryPort(start);
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    tester.once("error", () => resolve(false));
+    tester.once("listening", () => tester.close(() => resolve(true)));
+    tester.listen(port, SERVER_HOST);
   });
+}
+
+async function ensurePortFree(port: number): Promise<void> {
+  if (await isPortFree(port)) return;
+  appendServerLog(
+    `[main] port ${port} is in use — killing whatever owns it\n`,
+  );
+  if (process.platform === "win32") {
+    try {
+      // Find PIDs listening on the port and force-kill them.
+      const out = execFileSync(
+        "cmd",
+        ["/c", `netstat -ano -p tcp | findstr :${port}`],
+        { encoding: "utf8", windowsHide: true },
+      );
+      const pids = new Set<string>();
+      for (const line of out.split(/\r?\n/)) {
+        const m = line.match(/LISTENING\s+(\d+)/);
+        if (m) pids.add(m[1]);
+      }
+      for (const pid of pids) {
+        try {
+          execFileSync("taskkill", ["/F", "/T", "/PID", pid], {
+            stdio: "ignore",
+            windowsHide: true,
+          });
+          appendServerLog(`[main] killed stale process pid=${pid}\n`);
+        } catch {
+          // ignore
+        }
+      }
+    } catch {
+      // netstat found nothing or failed — fall through to retry
+    }
+  }
+  // Wait briefly for the OS to release the socket.
+  for (let i = 0; i < 20; i++) {
+    if (await isPortFree(port)) return;
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error(
+    `Port ${port} is still in use after attempting to free it. ` +
+      `Open Task Manager, end any "Unstuck" processes, and try again.`,
+  );
 }
 
 async function startServer(): Promise<void> {
   const { serverEntry, staticDir } = getResourcePaths();
 
-  // Find a free port — handles the case where a stale server from a previous
-  // launch still holds 8765.
-  SERVER_PORT = await findAvailablePort(SERVER_PORT, SERVER_PORT_MAX);
+  // Lock to the fixed port. Cookies (Clerk sign-in) are scoped to the
+  // exact origin, so the port must be identical across launches.
+  await ensurePortFree(SERVER_PORT);
 
   appendServerLog(
     `[main] starting api-server\n  entry: ${serverEntry}\n  static: ${staticDir}\n  exists: ${fs.existsSync(serverEntry)}\n`,
