@@ -433,43 +433,56 @@ export default function Upgrade() {
                 )}
                 {isUpgradeable && (
                   <>
-                    <button
-                      type="button"
-                      disabled={isCurrent || loadingTier !== null || loadingPaypalTier !== null || (isAdmin && !adminTestMode)}
-                      onClick={() => handleUpgrade(tier.id as PaidTier)}
-                      className={`w-full py-3 font-mono text-xs uppercase tracking-wider border transition-colors ${
-                        highlight
-                          ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                          : "bg-transparent text-foreground border-border hover:bg-muted"
-                      } disabled:opacity-50 disabled:cursor-not-allowed`}
-                    >
-                      {loadingTier === tier.id ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Loading...
-                        </span>
-                      ) : isCurrent ? (
-                        "Active"
-                      ) : currentPlan !== "free" ? (
-                        `Switch to ${tier.name}`
-                      ) : (
-                        `Upgrade to ${tier.name}`
-                      )}
-                    </button>
-                    {paypalEnabled && !isCurrent && (
+                    {/* Paddle checkout is temporarily not enabled on this
+                        account (Paddle onboarding still pending), so PayPal
+                        is the primary upgrade path. Paddle remains as a
+                        secondary fallback button once it's enabled. */}
+                    {paypalEnabled ? (
                       <button
                         type="button"
-                        disabled={loadingTier !== null || loadingPaypalTier !== null || (isAdmin && !adminTestMode)}
+                        disabled={isCurrent || loadingTier !== null || loadingPaypalTier !== null || (isAdmin && !adminTestMode)}
                         onClick={() => handlePaypalUpgrade(tier.id as PaidTier)}
-                        className="mt-2 w-full py-2 font-mono text-[11px] uppercase tracking-wider border border-[#ffc439]/60 text-[#ffc439] bg-transparent hover:bg-[#ffc439]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className={`w-full py-3 font-mono text-xs uppercase tracking-wider border transition-colors ${
+                          highlight
+                            ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                            : "bg-transparent text-foreground border-border hover:bg-muted"
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
                       >
                         {loadingPaypalTier === tier.id ? (
                           <span className="flex items-center justify-center gap-2">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            Redirecting...
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Redirecting to PayPal...
                           </span>
+                        ) : isCurrent ? (
+                          "Active"
+                        ) : currentPlan !== "free" ? (
+                          `Switch to ${tier.name} with PayPal`
                         ) : (
-                          "Or pay with PayPal"
+                          `Upgrade to ${tier.name} with PayPal`
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={isCurrent || loadingTier !== null || (isAdmin && !adminTestMode)}
+                        onClick={() => handleUpgrade(tier.id as PaidTier)}
+                        className={`w-full py-3 font-mono text-xs uppercase tracking-wider border transition-colors ${
+                          highlight
+                            ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                            : "bg-transparent text-foreground border-border hover:bg-muted"
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {loadingTier === tier.id ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Loading...
+                          </span>
+                        ) : isCurrent ? (
+                          "Active"
+                        ) : currentPlan !== "free" ? (
+                          `Switch to ${tier.name}`
+                        ) : (
+                          `Upgrade to ${tier.name}`
                         )}
                       </button>
                     )}
@@ -486,7 +499,9 @@ export default function Upgrade() {
         </div>
 
         <p className="text-center text-xs font-mono text-muted-foreground mt-8">
-          Powered by Paddle · Secure checkout · Cancel anytime
+          {paypalEnabled
+            ? "Secure checkout via PayPal · Cancel anytime"
+            : "Powered by Paddle · Secure checkout · Cancel anytime"}
         </p>
       </div>
     </div>
