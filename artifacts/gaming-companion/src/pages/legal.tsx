@@ -102,6 +102,9 @@ export function AboutPage() {
       </p>
 
       <div className="mt-12 flex flex-wrap gap-x-6 gap-y-2 text-xs font-mono uppercase tracking-wider">
+        <Link href="/pricing" className="text-muted-foreground hover:text-primary">
+          Pricing
+        </Link>
         <Link href="/legal/terms" className="text-muted-foreground hover:text-primary">
           Terms of Service
         </Link>
@@ -115,6 +118,178 @@ export function AboutPage() {
           Open the app →
         </Link>
       </div>
+    </div>
+  );
+}
+
+export function PricingPage() {
+  return (
+    <div className="flex-1 px-6 py-16 max-w-5xl mx-auto w-full">
+      <Link
+        href="/about"
+        className="text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-primary"
+      >
+        ← Back to Unstuck
+      </Link>
+      <h1 className="mt-4 text-4xl font-bold font-mono tracking-wider text-primary">
+        Pricing
+      </h1>
+      <p className="mt-3 text-sm text-muted-foreground max-w-2xl">
+        Three plans. All prices in USD. Paid plans bill monthly and auto-renew
+        until you cancel. Cancel anytime — your plan stays active through the
+        end of the period you've already paid for. Sold by{" "}
+        {SITE_CONFIG.legalEntityName} via Paddle.com Market Limited (our
+        Merchant of Record).
+      </p>
+
+      <div className="mt-10 grid gap-6 md:grid-cols-3">
+        <PriceCard
+          name="Free"
+          price="$0"
+          cadence=""
+          included={[
+            "25 chats / month",
+            "30 minutes of Watch Mode / month",
+            "Hard cap — usage stops at the limit",
+          ]}
+          overage="No overage. When the cap is hit, the app blocks until next month."
+        />
+        <PriceCard
+          name="Pro"
+          price="$29"
+          cadence="/ month USD"
+          highlight
+          included={[
+            "200 chats / month",
+            "2 hours of Watch Mode / month",
+            "Cancel anytime",
+          ]}
+          overage="Then $0.05 / additional chat and $0.20 / additional minute of Watch Mode, billed at the end of each period."
+        />
+        <PriceCard
+          name="Elite"
+          price="$99"
+          cadence="/ month USD"
+          included={[
+            "750 chats / month",
+            "8 hours of Watch Mode / month",
+            "Priority response on support",
+          ]}
+          overage="Then $0.04 / additional chat and $0.15 / additional minute of Watch Mode, billed at the end of each period."
+        />
+      </div>
+
+      <h2 className="mt-14 text-base font-mono uppercase tracking-wider text-primary">
+        How overage billing works
+      </h2>
+      <ul className="mt-3 text-sm space-y-2 text-foreground/90 list-disc pl-5">
+        <li>
+          Your monthly allowance resets at the start of each billing period.
+        </li>
+        <li>
+          On Pro and Elite, going over your included allowance does not block
+          you — you keep using the app at the per-unit overage rates above.
+        </li>
+        <li>
+          We total your overage usage at the end of the billing period and
+          charge it as a single line item via Paddle alongside your next
+          renewal.
+        </li>
+        <li>
+          A safety fuse caps any single user at <b>$5 / day</b> of total cost
+          regardless of plan. If you somehow blow through this, the app pauses
+          until 00:00 UTC. This is to protect you from a stuck Watch Mode loop
+          or a bad prompt.
+        </li>
+      </ul>
+
+      <h2 className="mt-12 text-base font-mono uppercase tracking-wider text-primary">
+        Cancellation & refunds
+      </h2>
+      <p className="mt-3 text-sm text-foreground/90">
+        Cancel from your account at any time — see the{" "}
+        <Link href="/legal/refund" className="text-primary underline">
+          Refund Policy
+        </Link>{" "}
+        for full details including the 14-day satisfaction window.
+      </p>
+
+      <h2 className="mt-12 text-base font-mono uppercase tracking-wider text-primary">
+        Questions
+      </h2>
+      <p className="mt-3 text-sm text-foreground/90">
+        Email{" "}
+        <a
+          className="text-primary underline"
+          href={`mailto:${SITE_CONFIG.contactEmail}`}
+        >
+          {SITE_CONFIG.contactEmail}
+        </a>{" "}
+        and we'll get back to you.
+      </p>
+
+      <div className="mt-14 flex flex-wrap gap-x-6 gap-y-2 text-xs font-mono uppercase tracking-wider">
+        <Link href="/about" className="text-muted-foreground hover:text-primary">
+          About
+        </Link>
+        <Link href="/legal/terms" className="text-muted-foreground hover:text-primary">
+          Terms of Service
+        </Link>
+        <Link href="/legal/privacy" className="text-muted-foreground hover:text-primary">
+          Privacy Policy
+        </Link>
+        <Link href="/legal/refund" className="text-muted-foreground hover:text-primary">
+          Refund Policy
+        </Link>
+        <Link href="/sign-in" className="text-primary hover:underline">
+          Open the app →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function PriceCard({
+  name,
+  price,
+  cadence,
+  included,
+  overage,
+  highlight,
+}: {
+  name: string;
+  price: string;
+  cadence: string;
+  included: string[];
+  overage: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div
+      className={
+        "border p-6 flex flex-col " +
+        (highlight
+          ? "border-primary bg-primary/5"
+          : "border-border bg-card/40")
+      }
+    >
+      <div className="text-xs font-mono uppercase tracking-widest text-primary">
+        {name}
+      </div>
+      <div className="mt-3 flex items-baseline gap-2">
+        <span className="text-3xl font-bold font-mono">{price}</span>
+        {cadence && (
+          <span className="text-xs text-muted-foreground">{cadence}</span>
+        )}
+      </div>
+      <ul className="mt-5 space-y-2 text-sm text-foreground/90 flex-1">
+        {included.map((line) => (
+          <li key={line}>· {line}</li>
+        ))}
+      </ul>
+      <p className="mt-5 text-xs text-muted-foreground border-t border-border/50 pt-4">
+        {overage}
+      </p>
     </div>
   );
 }

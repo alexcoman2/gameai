@@ -141,6 +141,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <span>© {new Date().getFullYear()} Unstuck</span>
         <nav className="flex flex-wrap gap-x-5 gap-y-1">
           <Link href="/about" className="hover:text-primary">About</Link>
+          <Link href="/pricing" className="hover:text-primary">Pricing</Link>
           <Link href="/legal/terms" className="hover:text-primary">Terms</Link>
           <Link href="/legal/privacy" className="hover:text-primary">Privacy</Link>
           <Link href="/legal/refund" className="hover:text-primary">Refunds</Link>
