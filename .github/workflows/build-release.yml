@@ -14,6 +14,12 @@ jobs:
   build-windows:
     runs-on: windows-latest
 
+    # Required so softprops/action-gh-release can create/update the GitHub
+    # Release with the default GITHUB_TOKEN. Without this, GITHUB_TOKEN is
+    # read-only and the release step fails with "Bad credentials".
+    permissions:
+      contents: write
+
     env:
       UNSTUCK_API_URL: ${{ secrets.UNSTUCK_API_URL || secrets.NEXUS_LINK_API_URL }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
