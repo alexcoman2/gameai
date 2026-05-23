@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "KSWmA8dj91oD5_xMBZAwh"
+uri = "file://artifacts/electron-app/dist-release/Unstuck-win64-portable.zip"
+type = "unspecified"
+title = "Unstuck — Windows portable build (118 MB)"
