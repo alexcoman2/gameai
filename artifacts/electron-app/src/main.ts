@@ -17,6 +17,21 @@ import * as http from "http";
 import * as net from "net";
 import * as path from "path";
 
+// ── Third-party cookie restrictions ────────────────────────────────────────
+// clerk-js runs at http://127.0.0.1:8765 and makes credentialed XHRs to the
+// proxy host (https://game-companion-ai.replit.app/api/__clerk/*). Those are
+// cross-site, so Chromium's tracking-protection / third-party cookie
+// phaseout (TrackingProtection3pcd and friends) blocks both sending the
+// proxy host's cookies on the request AND storing Set-Cookie on the
+// response. Without those cookies clerk-js can never refresh the session
+// and the local page stays signed out. This is a single-user desktop app
+// with one specific cross-origin target it controls — there is no tracking
+// concern — so disable the relevant Chromium features.
+app.commandLine.appendSwitch(
+  "disable-features",
+  "TrackingProtection3pcd,ThirdPartyStoragePartitioning,PrivacySandboxAdsAPIs",
+);
+
 // ── Single-instance lock ───────────────────────────────────────────────────
 // Prevents the "EADDRINUSE 127.0.0.1:8765" crash that happens when the user
 // re-launches Unstuck before the previous instance's utilityProcess has
@@ -369,18 +384,19 @@ function createWindow(): void {
       void mainWindow?.loadURL(rewritten);
       return;
     }
-    // Returning home from the hosted OAuth callback: the per-event mirror
-    // typically only catches __client. Pull a full snapshot of every
-    // Clerk cookie from the proxy host onto the local origin BEFORE the
-    // page loads, so clerk-js initializes against a coherent state.
+    // Any redirect that lands on the local origin: pull a full snapshot
+    // of every Clerk cookie from the proxy host onto the local origin
+    // BEFORE the page loads, so clerk-js initializes against a coherent
+    // state. We can't gate this on webContents.getURL() containing the
+    // proxy host — during a chained redirect that getter still returns
+    // the last fully-loaded page (e.g. /sign-in), not the intermediate
+    // hosted URLs. The sync is cheap and idempotent, so just always run
+    // it on redirect-to-local.
     if (url.startsWith(mainUrl)) {
-      const currentUrl = mainWindow?.webContents.getURL() ?? "";
-      if (currentUrl.includes("game-companion-ai.replit.app")) {
-        evt.preventDefault();
-        void syncAllClerkCookiesFromProxy().finally(() => {
-          void mainWindow?.loadURL(url);
-        });
-      }
+      evt.preventDefault();
+      void syncAllClerkCookiesFromProxy().finally(() => {
+        void mainWindow?.loadURL(url);
+      });
     }
   });
   mainWindow.webContents.on("will-navigate", (evt, url) => {
