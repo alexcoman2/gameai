@@ -12,9 +12,22 @@ import {
 } from "electron";
 import * as fs from "fs";
 import * as http from "http";
+import * as net from "net";
 import * as path from "path";
 
-const SERVER_PORT = 8765;
+// ── Single-instance lock ───────────────────────────────────────────────────
+// Prevents the "EADDRINUSE 127.0.0.1:8765" crash that happens when the user
+// re-launches Unstuck before the previous instance's utilityProcess has
+// fully released the port. If we don't get the lock, focus the existing
+// window (handled below) and exit immediately.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+  process.exit(0);
+}
+
+let SERVER_PORT = 8765;
+const SERVER_PORT_MAX = 8785;
 // The bundled api-server binds to 127.0.0.1 (IPv4) in proxy mode. We MUST
 // use the literal "127.0.0.1" here too — on Windows, "localhost" resolves
 // to IPv6 (::1) first, the server isn't listening on ::1, every probe is
@@ -154,8 +167,30 @@ function waitForServer(port: number): Promise<void> {
   });
 }
 
+function findAvailablePort(start: number, end: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const tryPort = (port: number) => {
+      if (port > end) {
+        reject(new Error(`no free port in range ${start}-${end}`));
+        return;
+      }
+      const tester = net.createServer();
+      tester.once("error", () => tryPort(port + 1));
+      tester.once("listening", () => {
+        tester.close(() => resolve(port));
+      });
+      tester.listen(port, SERVER_HOST);
+    };
+    tryPort(start);
+  });
+}
+
 async function startServer(): Promise<void> {
   const { serverEntry, staticDir } = getResourcePaths();
+
+  // Find a free port — handles the case where a stale server from a previous
+  // launch still holds 8765.
+  SERVER_PORT = await findAvailablePort(SERVER_PORT, SERVER_PORT_MAX);
 
   appendServerLog(
     `[main] starting api-server\n  entry: ${serverEntry}\n  static: ${staticDir}\n  exists: ${fs.existsSync(serverEntry)}\n`,
@@ -402,6 +437,16 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+// If the user launches Unstuck while it's already running, focus the existing
+// window instead of letting a second copy try (and fail) to bind the port.
+app.on("second-instance", () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
   }
 });
 
