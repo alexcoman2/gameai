@@ -454,11 +454,35 @@ app.on("will-quit", () => {
   globalShortcut.unregisterAll();
 });
 
-app.on("before-quit", () => {
-  if (serverProcess) {
+function killServerProcess(): void {
+  if (!serverProcess) return;
+  const pid = serverProcess.pid;
+  try {
     serverProcess.kill();
-    serverProcess = null;
+  } catch {
+    // ignore
   }
+  // Belt-and-suspenders: on Windows, utilityProcess.kill() can return before
+  // the child actually dies, leaving the server bound to its port and
+  // blocking the next launch. Force-kill the PID directly as a fallback.
+  if (typeof pid === "number" && pid > 0) {
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // ignore — process already gone
+    }
+  }
+  serverProcess = null;
+}
+
+app.on("before-quit", () => {
+  killServerProcess();
+});
+
+// Last-ditch cleanup if the app exits via an uncaught error path that
+// bypasses before-quit.
+process.on("exit", () => {
+  killServerProcess();
 });
 
 ipcMain.handle("capture-screenshot", async () => {
