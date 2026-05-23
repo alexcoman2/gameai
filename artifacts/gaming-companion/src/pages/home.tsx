@@ -659,6 +659,15 @@ export default function Home() {
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || sending) return;
+    void import("@/lib/posthog").then(({ trackEvent }) =>
+      trackEvent("chat_message_sent", {
+        game: gameNameOverride.trim() || visionDetectedGame || gameDetection?.gameName || gameDetection?.processName || null,
+        watchMode,
+        hasScreenshot: !!(includeScreenshot || (settings?.autoCapture || (isElectron && watchMode))),
+        platform: isElectron ? "electron" : "web",
+        ttsOn,
+      }),
+    );
     // Prime audio under the submit gesture so the TTS reply that arrives
     // seconds later can play (browser autoplay policy).
     if (ttsOn) primeTtsPlayback();
@@ -933,7 +942,11 @@ export default function Home() {
                   onClick={() => {
                     setWatchMode((v) => {
                       if (v) { setVisionDetectedGame(null); }
-                      return !v;
+                      const next = !v;
+                      void import("@/lib/posthog").then(({ trackEvent }) =>
+                        trackEvent("watch_mode_toggled", { enabled: next }),
+                      );
+                      return next;
                     });
                   }}
                   title={watchMode ? "Watch mode: ON — capturing and observing every 5s" : "Watch mode: OFF"}

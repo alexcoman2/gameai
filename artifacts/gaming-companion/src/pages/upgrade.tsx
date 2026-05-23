@@ -6,6 +6,7 @@ import { openCheckout, getPaddleConfig } from "@/lib/paddle-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import { useMe } from "@/hooks/use-me";
+import { trackEvent } from "@/lib/posthog";
 
 type PlanTier = "free" | "pro" | "pro_plus" | "elite";
 
@@ -192,6 +193,7 @@ export default function Upgrade() {
       return;
     }
     setLoadingTier(tier);
+    trackEvent("checkout_started", { tier, provider: "paddle", adminTest: isAdmin && adminTestMode });
     try {
       await openCheckout({ tier, adminTest: isAdmin && adminTestMode });
     } catch (e) {
@@ -215,6 +217,7 @@ export default function Upgrade() {
       return;
     }
     setLoadingPaypalTier(tier);
+    trackEvent("checkout_started", { tier, provider: "paypal", adminTest: isAdmin && adminTestMode });
     try {
       const res = await authFetch("/api/billing/paypal/create-subscription", {
         method: "POST",

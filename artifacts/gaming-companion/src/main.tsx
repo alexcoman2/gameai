@@ -1,8 +1,11 @@
 import { createRoot } from "react-dom/client";
 import { Router as WouterRouter } from "wouter";
 import { Sentry } from "@/lib/sentry";
+import { initPostHog } from "@/lib/posthog";
 import App from "./App";
 import "./index.css";
+
+initPostHog();
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 

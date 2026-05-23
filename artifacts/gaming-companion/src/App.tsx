@@ -4,6 +4,8 @@ import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/reac
 import { ClerkProvider, SignIn, SignUp, useClerk, useAuth } from "@clerk/react";
 import { setAuthTokenGetter as setApiClientAuthTokenGetter } from "@workspace/api-client-react";
 import { setAuthTokenGetter } from "@/lib/auth-fetch";
+import { identifyUser, resetUser, trackPageview } from "@/lib/posthog";
+import { useUser } from "@clerk/react";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
 import { Toaster } from "@/components/ui/toaster";
@@ -148,6 +150,34 @@ function ClerkAuthTokenBridge() {
   return null;
 }
 
+// Mirrors Clerk auth state into PostHog: identify on sign-in, reset on
+// sign-out, and emits $pageview on every wouter route change so SPA
+// navigation shows up in funnels.
+function AnalyticsBridge() {
+  const { user, isLoaded } = useUser();
+  const [location] = useLocation();
+  const lastUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+    const id = user?.id ?? null;
+    if (id && id !== lastUserIdRef.current) {
+      identifyUser(id, {
+        email: user?.primaryEmailAddress?.emailAddress,
+      });
+    } else if (!id && lastUserIdRef.current) {
+      resetUser();
+    }
+    lastUserIdRef.current = id;
+  }, [user, isLoaded]);
+
+  useEffect(() => {
+    trackPageview(location);
+  }, [location]);
+
+  return null;
+}
+
 function ClerkQueryClientCacheInvalidator() {
   const { addListener } = useClerk();
   const qc = useQueryClient();
@@ -201,6 +231,7 @@ function WrappedAppRoutes() {
 
   return (
     <Layout>
+      <AnalyticsBridge />
       <AppRoutes />
     </Layout>
   );
