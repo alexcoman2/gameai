@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 const settingsSchema = z.object({
-  screenshotInterval: z.number().min(10).max(300),
+  screenshotInterval: z.number().min(5).max(300),
   autoCapture: z.boolean(),
   steamApiKey: z.string(),
 });
@@ -35,7 +35,7 @@ export default function Settings() {
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
-      screenshotInterval: 30,
+      screenshotInterval: 5,
       autoCapture: true,
       steamApiKey: "",
     },
@@ -147,9 +147,9 @@ export default function Settings() {
                       </div>
                       <FormControl>
                         <Slider
-                          min={10}
+                          min={5}
                           max={300}
-                          step={10}
+                          step={5}
                           value={[field.value]}
                           onValueChange={(vals) => field.onChange(vals[0])}
                           disabled={!form.watch("autoCapture")}

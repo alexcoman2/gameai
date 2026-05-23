@@ -437,7 +437,7 @@ components:
       properties:
         screenshotInterval:
           type: ["integer", "null"]
-          description: Auto-screenshot interval in seconds (10-300)
+          description: Auto-screenshot interval in seconds (5-300)
         autoCapture:
           type: ["boolean", "null"]
         steamApiKey:

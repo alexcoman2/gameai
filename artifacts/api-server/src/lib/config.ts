@@ -12,7 +12,7 @@ const CONFIG_DIR = path.join(os.homedir(), ".gaming-companion");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
 const DEFAULT_CONFIG: AppConfig = {
-  screenshotInterval: 30,
+  screenshotInterval: 5,
   autoCapture: true,
   steamApiKey: "",
 };
@@ -25,7 +25,7 @@ export function loadConfig(): AppConfig {
       return {
         screenshotInterval:
           typeof parsed.screenshotInterval === "number"
-            ? Math.max(10, Math.min(300, parsed.screenshotInterval))
+            ? Math.max(5, Math.min(300, parsed.screenshotInterval))
             : DEFAULT_CONFIG.screenshotInterval,
         autoCapture:
           typeof parsed.autoCapture === "boolean"
@@ -48,7 +48,7 @@ export function saveConfig(updates: Partial<AppConfig>): AppConfig {
   const next: AppConfig = {
     screenshotInterval:
       updates.screenshotInterval !== undefined
-        ? Math.max(10, Math.min(300, updates.screenshotInterval))
+        ? Math.max(5, Math.min(300, updates.screenshotInterval))
         : current.screenshotInterval,
     autoCapture:
       updates.autoCapture !== undefined
