@@ -4,7 +4,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   useDetectGame, getDetectGameQueryKey,
   useCaptureScreenshot,
-  useSendChatMessage,
   useGetSettings, getGetSettingsQueryKey,
   useGetLatestScreenshot, getGetLatestScreenshotQueryKey,
   useListSessions, getListSessionsQueryKey,
@@ -229,13 +228,13 @@ export default function Home() {
   const renameSessionMutation = useRenameSession();
   const clearSessionMutation = useClearSession();
   const captureMutation = useCaptureScreenshot();
-  const sendMutation = useSendChatMessage();
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, sendMutation.isPending]);
+  }, [messages, sending]);
 
   useEffect(() => {
     if (sessionInitialized || isLoadingSessions) return;
@@ -635,7 +634,8 @@ export default function Home() {
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || sendMutation.isPending) return;
+    if (!input.trim() || sending) return;
+    setSending(true);
 
     // Electron: use IPC-captured screenshot; Web: fall back to server-side capture
     const latestImgData = isElectron
@@ -661,51 +661,61 @@ export default function Home() {
     setIncludeScreenshot(false);
     setPendingScreenshot(null);
 
+    // Streaming send. Append empty assistant turn, mutate as deltas arrive.
+    const assistantId = (Date.now() + 1).toString();
+    const assistantTimestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    addMessage({
+      id: assistantId,
+      role: "assistant",
+      content: "",
+      timestamp: assistantTimestamp,
+    });
+
     try {
-      const response = await sendMutation.mutateAsync({
-        data: {
+      const { streamChatMessage } = await import("@/lib/chat-stream");
+      const result = await streamChatMessage(
+        {
           message: messageContent,
           gameName: gameNameOverride.trim() || visionDetectedGame || gameDetection?.gameName || gameDetection?.processName,
-          // In Electron, send the screenshot image directly so the server never
-          // needs to do a local capture lookup. On web, rely on includeScreenshot.
           ...(isElectron && sentScreenshot
             ? { imageData: sentScreenshot, includeScreenshot: false }
             : { includeScreenshot: shouldSendScreenshot }),
           sessionId: activeSessionId,
           ...(watchLog.length > 0 ? { watchLog } : {}),
           ...(isElectron ? { watchMode } : {}),
+        },
+        {
+          onDelta: (chunk) => {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId ? { ...m, content: m.content + chunk } : m
+              )
+            );
+          },
         }
-      });
+      );
 
-      addMessage({
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: response.reply,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      });
+      const finalReply = result.reply || "";
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? { ...m, content: finalReply } : m))
+      );
 
-      if (ttsOn && response.reply) speak(response.reply);
+      if (ttsOn && finalReply) speak(finalReply);
 
       if (activeSessionId) {
         queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
       }
 
-      // Fire 80% / 100% allowance warnings once per period. Best-effort —
-      // failure here must not break the chat flow.
       void checkUsageWarnings(toast);
     } catch (err: unknown) {
-      const apiErr = err as { response?: { data?: { error?: string } }; message?: string };
-      const errMsg =
-        apiErr?.response?.data?.error ||
-        apiErr?.message ||
-        "Communication link failed. Unable to reach AI core.";
-
-      addMessage({
-        id: (Date.now() + 1).toString(),
-        role: "assistant",
-        content: `ERROR: ${errMsg}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      });
+      const errMsg = err instanceof Error ? err.message : "Communication link failed. Unable to reach AI core.";
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId ? { ...m, content: `ERROR: ${errMsg}` } : m
+        )
+      );
+    } finally {
+      setSending(false);
     }
   };
 
@@ -1039,7 +1049,7 @@ export default function Home() {
             })
           )}
 
-          {sendMutation.isPending && (
+          {sending && (
             <div className="flex flex-col max-w-[85%] mr-auto items-start">
               <div className={`flex items-center gap-2 ${compact ? "mb-0" : "mb-1"}`}>
                 <span className={`font-mono font-bold uppercase text-primary/80 ${compact ? "text-[9px]" : "text-xs"}`}>
@@ -1077,7 +1087,7 @@ export default function Home() {
           <Button
             type="button"
             onClick={() => void toggleMic()}
-            disabled={isTranscribing || sendMutation.isPending}
+            disabled={isTranscribing || sending}
             title={isRecording ? "Stop & transcribe" : "Speak"}
             className={`rounded-none font-mono uppercase tracking-wider transition-all ${
               isRecording
@@ -1114,11 +1124,11 @@ export default function Home() {
             onChange={(e) => setInput(e.target.value)}
             placeholder={isRecording ? "LISTENING..." : isTranscribing ? "TRANSCRIBING..." : "ENTER COMMAND OR QUERY..."}
             className={`flex-1 min-w-[160px] font-mono rounded-none border-border focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/50 bg-card/50 placeholder:tracking-widest ${compact ? "h-8 text-xs" : "h-12"}`}
-            disabled={sendMutation.isPending || isRecording || isTranscribing}
+            disabled={sending || isRecording || isTranscribing}
           />
           <Button
             type="submit"
-            disabled={!input.trim() || sendMutation.isPending}
+            disabled={!input.trim() || sending}
             className={`rounded-none bg-primary text-primary-foreground hover:bg-primary/90 font-mono uppercase tracking-wider transition-all ${compact ? "h-8 px-3" : "h-12 px-6"}`}
           >
             <Send className={compact ? "w-3 h-3" : "w-4 h-4 mr-2"} />

@@ -214,57 +214,61 @@ export default function OverlayPage() {
     try {
       const sessionId = await resolveOverlaySessionId();
       const watchState = readWatchState();
-      const res = await authFetch("/api/chat/message", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          ...(screenshot ? { imageData: screenshot } : {}),
-          ...(sessionId ? { sessionId } : {}),
-          ...(watchState.log.length > 0 ? { watchLog: watchState.log } : {}),
-          watchMode: watchState.mode,
-        }),
-      });
 
-      if (res.status === 401) {
-        setTurns((prev) => [
-          ...prev,
-          {
-            id: `e-${Date.now()}`,
-            role: "error",
-            content: "Sign in via the main window to use the overlay.",
-          },
-        ]);
-        return;
-      }
-
-      const data = (await res.json().catch(() => ({}))) as {
-        reply?: string;
-        error?: string;
-      };
-
-      if (!res.ok) {
-        setTurns((prev) => [
-          ...prev,
-          {
-            id: `e-${Date.now()}`,
-            role: "error",
-            content: data.error || `Request failed (${res.status})`,
-          },
-        ]);
-        return;
-      }
-
-      const reply = data.reply || "(empty response)";
+      // Streaming: append an empty assistant turn we mutate as deltas arrive.
+      const assistantId = `a-${Date.now()}`;
       setTurns((prev) => [
         ...prev,
-        {
-          id: `a-${Date.now()}`,
-          role: "assistant",
-          content: reply,
-        },
+        { id: assistantId, role: "assistant", content: "" },
       ]);
-      if (ttsOn && data.reply) speak(data.reply);
+
+      const { streamChatMessage, StreamChatError } = await import("@/lib/chat-stream");
+      try {
+        const result = await streamChatMessage(
+          {
+            message,
+            ...(screenshot ? { imageData: screenshot } : {}),
+            ...(sessionId ? { sessionId } : {}),
+            ...(watchState.log.length > 0 ? { watchLog: watchState.log } : {}),
+            watchMode: watchState.mode,
+          },
+          {
+            onDelta: (chunk) => {
+              setTurns((prev) =>
+                prev.map((t) =>
+                  t.id === assistantId ? { ...t, content: t.content + chunk } : t
+                )
+              );
+            },
+          }
+        );
+        const finalReply = result.reply || "(empty response)";
+        // Make sure the final reply text matches (in case any deltas were lost)
+        setTurns((prev) =>
+          prev.map((t) => (t.id === assistantId ? { ...t, content: finalReply } : t))
+        );
+        if (ttsOn && finalReply) speak(finalReply);
+      } catch (e) {
+        // Replace the streaming bubble with an error
+        setTurns((prev) => prev.filter((t) => t.id !== assistantId));
+        if (e instanceof StreamChatError && e.status === 401) {
+          setTurns((prev) => [
+            ...prev,
+            {
+              id: `e-${Date.now()}`,
+              role: "error",
+              content: "Sign in via the main window to use the overlay.",
+            },
+          ]);
+          return;
+        }
+        const msg = e instanceof Error ? e.message : "Request failed";
+        setTurns((prev) => [
+          ...prev,
+          { id: `e-${Date.now()}`, role: "error", content: msg },
+        ]);
+        return;
+      }
     } catch (err) {
       setTurns((prev) => [
         ...prev,
