@@ -10,6 +10,7 @@ import { startAutoCapture } from "./lib/screenshot-state.js";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
+  clerkProxyPassthroughMiddleware,
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware.js";
 import { paddleWebhookHandler } from "./routes/paddle-webhook.js";
@@ -39,8 +40,16 @@ app.use(
   }),
 );
 
-// Clerk proxy must be mounted before body parsers (it streams raw bytes)
-app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
+// Clerk proxy must be mounted before body parsers (it streams raw bytes).
+// In proxy mode (local Electron), the local server has no Clerk secret key,
+// so it just reverse-proxies the /api/__clerk/* path to the hosted server's
+// own /api/__clerk endpoint. This makes clerk-js's XHRs first-party on the
+// local origin (no SameSite / third-party-cookie blocking) while the real
+// Clerk middleware still runs on the hosted side.
+app.use(
+  CLERK_PROXY_PATH,
+  IS_PROXY ? clerkProxyPassthroughMiddleware() : clerkProxyMiddleware(),
+);
 
 // Paddle webhook needs the raw body for signature verification — must be
 // mounted before the global express.json() parser consumes it.

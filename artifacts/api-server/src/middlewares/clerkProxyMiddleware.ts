@@ -132,3 +132,56 @@ export function clerkProxyMiddleware(): RequestHandler {
     },
   }) as RequestHandler;
 }
+
+/**
+ * Passthrough variant mounted by the LOCAL api-server when running inside
+ * the Electron desktop app (IS_PROXY). The local server has no Clerk
+ * secret key — the real `clerkProxyMiddleware` above lives on the hosted
+ * deployment. This middleware simply reverse-proxies the local
+ * `/api/__clerk/*` path to the hosted server's `/api/__clerk/*` path,
+ * preserving the URL prefix.
+ *
+ * The purpose is to make clerk-js's XHRs first-party from the renderer's
+ * perspective. clerk-js running at http://127.0.0.1:8765 calls
+ * `/api/__clerk/v1/*` on its own origin — the browser includes the local
+ * Clerk cookies automatically (no SameSite or third-party-cookie issues).
+ * This local proxy forwards request + cookies to the hosted proxy, which
+ * authenticates against Clerk FAPI with the secret key. Set-Cookie
+ * responses flow back through local → browser and land first-party on
+ * 127.0.0.1, completing the loop without ever needing the renderer to
+ * make a cross-site call.
+ *
+ * Without this, clerk-js was hitting `https://game-companion-ai.replit
+ * .app/api/__clerk/v1/client` cross-site from 127.0.0.1, the browser
+ * stripped the `SameSite=Lax` Clerk cookies from the request, FAPI
+ * returned "signed out", and the page rendered signed-out even though
+ * the cookie mirror had successfully populated 127.0.0.1's cookie jar.
+ */
+export function clerkProxyPassthroughMiddleware(): RequestHandler {
+  const hostedUrl =
+    process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
+  if (!hostedUrl) {
+    // No upstream configured (e.g. dev mode without UNSTUCK_API_URL) — fall
+    // through so the request 404s instead of hanging.
+    return (_req, _res, next) => next();
+  }
+  return createProxyMiddleware({
+    target: hostedUrl,
+    changeOrigin: true,
+    // No pathRewrite — hosted server expects the same /api/__clerk/*
+    // prefix, so just forward the path as-is.
+    on: {
+      proxyRes: (proxyRes) => {
+        // Defensive: hosted proxy already strips Domain from Set-Cookie,
+        // but if anything slips through, scope it to the local host so
+        // the browser actually stores it on 127.0.0.1.
+        const setCookie = proxyRes.headers["set-cookie"];
+        if (setCookie && Array.isArray(setCookie)) {
+          proxyRes.headers["set-cookie"] = setCookie.map((c) =>
+            c.replace(/;\s*Domain=[^;]+/gi, ""),
+          );
+        }
+      },
+    },
+  }) as RequestHandler;
+}
