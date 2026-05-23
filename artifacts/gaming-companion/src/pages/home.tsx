@@ -158,6 +158,13 @@ export default function Home() {
       return;
     }
     if (sessions.length === 0) {
+      // Guard against repeated POSTs: if a previous create attempt is still
+      // in flight, or has already errored, do NOT fire another one. Without
+      // this, a failing /api/sessions endpoint would be hammered indefinitely
+      // (one POST per refetch of the empty sessions list).
+      if (createSessionMutation.isPending || createSessionMutation.isError) {
+        return;
+      }
       createSessionMutation.mutate(
         { data: { name: "Session 1" } },
         {
@@ -166,7 +173,14 @@ export default function Home() {
             setActiveSessionId(session.id);
             setMessages([]);
             setSessionInitialized(true);
-          }
+          },
+          onError: (err) => {
+            // Surface the failure so the user can see why the sidebar is
+            // empty instead of silently spamming the network tab.
+            // eslint-disable-next-line no-console
+            console.error("[Unstuck] failed to create default session:", err);
+            setSessionInitialized(true);
+          },
         }
       );
     } else {

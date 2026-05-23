@@ -113,6 +113,21 @@ export function clerkProxyMiddleware(): RequestHandler {
               : "Origin";
           }
         }
+
+        // Clerk's FAPI sets cookies with `Domain=clerk.<…>` and
+        // `Domain=.<something>.clerk.dev`. The browser sees the response
+        // coming back from our proxy host (e.g. game-companion-ai.replit.app)
+        // and REJECTS those cookies as a domain mismatch — so the
+        // `__client` and `__session` cookies never get stored, and the
+        // user is signed out the moment the Clerk JWT expires (or the app
+        // is relaunched). Strip the Domain attribute so the browser scopes
+        // each cookie to the proxy host instead.
+        const setCookie = proxyRes.headers["set-cookie"];
+        if (setCookie && Array.isArray(setCookie)) {
+          proxyRes.headers["set-cookie"] = setCookie.map((c) =>
+            c.replace(/;\s*Domain=[^;]+/gi, ""),
+          );
+        }
       },
     },
   }) as RequestHandler;
