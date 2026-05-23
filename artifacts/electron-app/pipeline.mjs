@@ -59,6 +59,13 @@ async function main() {
         PORT: "20618",
         BASE_PATH: "/",
         NODE_ENV: "production",
+        // Electron renders at http://127.0.0.1:PORT. Clerk's `clerk.*`
+        // proxy subdomain doesn't have a valid TLS cert outside the
+        // Replit edge, so we route all Clerk FAPI traffic through the
+        // hosted backend's same-origin proxy instead.
+        VITE_CLERK_PROXY_URL:
+          process.env.VITE_CLERK_PROXY_URL ||
+          "https://game-companion-ai.replit.app/api/__clerk",
       },
     }
   );
