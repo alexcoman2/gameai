@@ -53,7 +53,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   });
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground overflow-hidden selection:bg-primary selection:text-primary-foreground">
+    <div className="flex flex-col min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
       {/* HUD Header */}
       <header className="border-b border-border bg-card/80 backdrop-blur-sm px-6 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-4">
