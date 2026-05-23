@@ -11,6 +11,7 @@ import billingRouter from "./billing.js";
 import adminRouter from "./admin.js";
 import meRouter from "./me.js";
 import profilesRouter from "./profiles.js";
+import gamesLibraryRouter from "./games-library.js";
 import { IS_LOCAL_ROUTES_ENABLED } from "../lib/server-mode.js";
 
 const router: IRouter = Router();
@@ -24,6 +25,7 @@ router.use(billingRouter);
 router.use(adminRouter);
 router.use(meRouter);
 router.use(profilesRouter);
+router.use(gamesLibraryRouter);
 
 // Per-machine local routes. Disabled on the hosted server because they expose
 // shared per-process filesystem/memory state (sessions, captured screenshots,
