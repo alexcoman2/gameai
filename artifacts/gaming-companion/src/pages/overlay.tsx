@@ -318,8 +318,31 @@ export default function OverlayPage() {
     }
     try {
       recorderRef.current = createVoiceRecorder();
-      await recorderRef.current.start();
       isPttRef.current = source === "ptt";
+      await recorderRef.current.start({
+        onAutoStop: (reason) => {
+          if (reason === "no-speech") {
+            // No words ever detected — skip Whisper entirely, just reset
+            // and tell the user. Saves an API call on pure silence.
+            try { recorderRef.current?.cancel(); } catch { /* ignore */ }
+            setIsRecording(false);
+            isPttRef.current = false;
+            setTurns((prev) => [
+              ...prev,
+              {
+                id: `e-${Date.now()}`,
+                role: "error",
+                content: "No speech detected. Try again a bit louder.",
+              },
+            ]);
+            return;
+          }
+          // Silence after speech — fire the normal stop+transcribe path.
+          // toggleMic will see isRecording=true and take the stop branch,
+          // which honors isPttRef so PTT recordings still auto-send.
+          void toggleMicRef.current("mic");
+        },
+      });
       setIsRecording(true);
     } catch (err) {
       isPttRef.current = false;

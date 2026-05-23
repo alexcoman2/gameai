@@ -116,13 +116,34 @@ export default function Home() {
     }
     try {
       recorderRef.current = createVoiceRecorder();
-      await recorderRef.current.start();
+      await recorderRef.current.start({
+        onAutoStop: (reason) => {
+          if (reason === "no-speech") {
+            try { recorderRef.current?.cancel(); } catch { /* ignore */ }
+            setIsRecording(false);
+            toast({
+              title: "No speech detected",
+              description: "I didn't catch any words. Try again a bit louder or closer to the mic.",
+            });
+            return;
+          }
+          // Silence-after-speech: fall through to the normal stop+transcribe
+          // path. toggleMicRef ensures we use the latest closure so the
+          // transcript lands in the current `input` state.
+          void toggleMicRef.current();
+        },
+      });
       setIsRecording(true);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not access microphone.";
       toast({ title: "Microphone error", description: msg, variant: "destructive" });
     }
   };
+
+  // Ref to the latest toggleMic so VAD's onAutoStop (captured at start time)
+  // calls the current closure, not a stale one with stale `input` state.
+  const toggleMicRef = useRef(toggleMic);
+  toggleMicRef.current = toggleMic;
 
   const toggleTts = () => {
     const next = !ttsOn;

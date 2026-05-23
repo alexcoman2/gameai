@@ -223,8 +223,23 @@ export function isLikelyHallucination(text: string): boolean {
 
 export type RecorderState = "idle" | "recording" | "transcribing";
 
+export interface VadOptions {
+  // Fired once when sustained silence is detected after speech, OR when
+  // the user never speaks at all within initialSilenceMs of starting.
+  onAutoStop: (reason: "silence-after-speech" | "no-speech") => void;
+  // ms of continuous silence AFTER first detected speech before auto-stop.
+  // Default 1400ms — long enough to ride out "uhh" pauses, short enough
+  // to feel snappy.
+  silenceMs?: number;
+  // ms to wait for ANY speech before giving up. Default 6000ms.
+  initialSilenceMs?: number;
+  // RMS threshold for "is this speech". Default 0.015. Mic preamp varies
+  // wildly, so this is a compromise; could be made adaptive later.
+  thresholdRms?: number;
+}
+
 export interface VoiceRecorder {
-  start: () => Promise<void>;
+  start: (vad?: VadOptions) => Promise<void>;
   stopAndTranscribe: () => Promise<string>;
   cancel: () => void;
   getState: () => RecorderState;
@@ -271,7 +286,38 @@ export function createVoiceRecorder(): VoiceRecorder {
   let mimeType = "audio/webm";
   let state: RecorderState = "idle";
 
+  // VAD plumbing. Stays null when VAD isn't requested.
+  let audioCtx: AudioContext | null = null;
+  let analyser: AnalyserNode | null = null;
+  let vadTimer: ReturnType<typeof setInterval> | null = null;
+  let vadFired = false;
+
+  // Memoized in-flight stopAndTranscribe promise. Both the user clicking
+  // stop AND VAD firing can race to call stopAndTranscribe() in the same
+  // ~80ms window. Without this guard the second call would call
+  // recorder.stop() twice (InvalidStateError) and overwrite recorder.onstop,
+  // leaving the first promise hung forever. Re-entrant callers await the
+  // same promise instead.
+  let stopPromise: Promise<string> | null = null;
+
+  const stopVad = () => {
+    if (vadTimer) {
+      clearInterval(vadTimer);
+      vadTimer = null;
+    }
+    if (analyser) {
+      try { analyser.disconnect(); } catch { /* ignore */ }
+      analyser = null;
+    }
+    if (audioCtx) {
+      void audioCtx.close().catch(() => { /* ignore */ });
+      audioCtx = null;
+    }
+    vadFired = false;
+  };
+
   const cleanup = () => {
+    stopVad();
     if (stream) {
       stream.getTracks().forEach((t) => t.stop());
       stream = null;
@@ -283,7 +329,7 @@ export function createVoiceRecorder(): VoiceRecorder {
   return {
     getState: () => state,
 
-    async start() {
+    async start(vad?: VadOptions) {
       if (state !== "idle") return;
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mimeType = pickMimeType();
@@ -294,49 +340,136 @@ export function createVoiceRecorder(): VoiceRecorder {
       };
       recorder.start();
       state = "recording";
+
+      if (vad) {
+        // setInterval (not rAF) so VAD keeps running when the overlay
+        // window is occluded by a fullscreen game — rAF throttles to 0
+        // on hidden windows and the auto-stop would never fire.
+        const silenceMs = vad.silenceMs ?? 1400;
+        const initialSilenceMs = vad.initialSilenceMs ?? 6000;
+        const thresholdRms = vad.thresholdRms ?? 0.015;
+        const startedAt = Date.now();
+        let lastVoiceAt = 0;
+        let hasSpokenYet = false;
+
+        try {
+          const Ctor =
+            (window.AudioContext as typeof AudioContext | undefined) ??
+            (window as unknown as { webkitAudioContext?: typeof AudioContext })
+              .webkitAudioContext;
+          if (!Ctor) return; // VAD unsupported, recorder still works
+          audioCtx = new Ctor();
+          const src = audioCtx.createMediaStreamSource(stream);
+          analyser = audioCtx.createAnalyser();
+          analyser.fftSize = 1024;
+          analyser.smoothingTimeConstant = 0.4;
+          src.connect(analyser);
+          const buf = new Float32Array(analyser.fftSize);
+
+          vadTimer = setInterval(() => {
+            // Latch + state check: never fire after manual stop has begun
+            // (state flipped to "transcribing" or "idle") or after VAD
+            // already fired once for this session.
+            if (vadFired || !analyser || state !== "recording") return;
+            analyser.getFloatTimeDomainData(buf);
+            // RMS of the time-domain samples.
+            let sumSq = 0;
+            for (let i = 0; i < buf.length; i++) sumSq += buf[i] * buf[i];
+            const rms = Math.sqrt(sumSq / buf.length);
+            const now = Date.now();
+
+            if (rms > thresholdRms) {
+              hasSpokenYet = true;
+              lastVoiceAt = now;
+              return;
+            }
+            if (hasSpokenYet) {
+              if (now - lastVoiceAt > silenceMs) {
+                vadFired = true;
+                stopVad();
+                vad.onAutoStop("silence-after-speech");
+              }
+            } else if (now - startedAt > initialSilenceMs) {
+              vadFired = true;
+              stopVad();
+              vad.onAutoStop("no-speech");
+            }
+          }, 80);
+        } catch {
+          // VAD setup failed (no AudioContext, blocked, etc.) — degrade
+          // gracefully: recording still works, user just has to stop
+          // manually. Don't surface this as an error.
+          stopVad();
+        }
+      }
     },
 
     async stopAndTranscribe() {
+      // Re-entrant call (user click + VAD fire interleaved). Hand back the
+      // same promise; never call recorder.stop() twice.
+      if (stopPromise) return stopPromise;
       if (state !== "recording" || !recorder) {
         cleanup();
         state = "idle";
         return "";
       }
 
-      // Wait for the recorder to flush its final dataavailable event.
-      const stopped = new Promise<void>((resolve) => {
-        recorder!.onstop = () => resolve();
-      });
-      recorder.stop();
-      await stopped;
+      // Stop VAD immediately so its interval can't fire onAutoStop again
+      // mid-teardown. (Defense in depth — VAD also self-latches via vadFired.)
+      stopVad();
 
-      const blob = new Blob(chunks, { type: mimeType });
-      cleanup();
-      state = "transcribing";
+      const localRecorder = recorder;
+      stopPromise = (async () => {
+        try {
+          // Wait for the recorder to flush its final dataavailable event.
+          // 2s timeout fallback: if stop() throws because the recorder is
+          // already inactive (browser tore it down on stream end, etc.),
+          // onstop will never fire and we'd hang forever. The chunks we
+          // already have are still valid; better to transcribe a slightly
+          // short clip than to leave the UI stuck on TRANSCRIBING.
+          const stopped = new Promise<void>((resolve) => {
+            localRecorder.onstop = () => resolve();
+            setTimeout(resolve, 2000);
+          });
+          try { localRecorder.stop(); } catch { /* already stopped */ }
+          await stopped;
 
-      try {
-        if (blob.size === 0) {
+          const blob = new Blob(chunks, { type: mimeType });
+          cleanup();
+          state = "transcribing";
+
+          if (blob.size === 0) {
+            state = "idle";
+            return "";
+          }
+          const base64 = await blobToBase64(blob);
+          const res = await authFetch("/api/voice/transcribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ audio: base64, mimeType }),
+          });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error((err as { error?: string }).error || `Transcription failed (${res.status})`);
+          }
+          const data = (await res.json()) as { text?: string };
+          return (data.text ?? "").trim();
+        } finally {
           state = "idle";
-          return "";
+          stopPromise = null;
         }
-        const base64 = await blobToBase64(blob);
-        const res = await authFetch("/api/voice/transcribe", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audio: base64, mimeType }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error((err as { error?: string }).error || `Transcription failed (${res.status})`);
-        }
-        const data = (await res.json()) as { text?: string };
-        return (data.text ?? "").trim();
-      } finally {
-        state = "idle";
-      }
+      })();
+
+      return stopPromise;
     },
 
     cancel() {
+      // If a stop is already in flight, just let it finish — calling
+      // recorder.stop() again would throw InvalidStateError. The caller
+      // discards the resulting transcript anyway.
+      if (stopPromise) {
+        return;
+      }
       if (recorder && state === "recording") {
         try {
           recorder.onstop = null;
