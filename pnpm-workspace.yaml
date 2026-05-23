@@ -69,10 +69,14 @@ catalog:
 autoInstallPeers: false
 
 onlyBuiltDependencies:
+  - '@clerk/shared'
   - '@swc/core'
   - esbuild
   - electron
+  - electron-builder
   - msw
+  - screenshot-desktop
+  - sharp
   - unrs-resolver
 
 overrides:

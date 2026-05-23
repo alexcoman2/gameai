@@ -1,0 +1,22 @@
+$ pnpm --filter @workspace/electron-app run package
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies", "pnpm.supportedArchitectures". See https://pnpm.io/settings for the new home of each setting.
+[WARN] The "pnpm" field in package.json is no longer read by pnpm. The following keys were ignored: "pnpm.onlyBuiltDependencies", "pnpm.supportedArchitectures". See https://pnpm.io/settings for the new home of each setting.
+Scope: all 10 workspace projects
+Lockfile is up to date, resolution step is skipped
+Already up to date
+[ERR_PNPM_IGNORED_BUILDS] Ignored build scripts: @clerk/shared@3.47.5, @clerk/shared@4.13.0, electron@36.9.5, esbuild@0.27.3, sharp@0.34.5
+
+Run "pnpm approve-builds" to pick which dependencies should be allowed to run scripts.
+[ERROR] Command failed with exit code 1: "C:\Users\Stepan\AppData\Local\pnpm\global\v11\125c-19e54b40fe9\node_modules\@pnpm\exe\pnpm.exe" install
+
+pnpm: Command failed with exit code 1: "C:\Users\Stepan\AppData\Local\pnpm\global\v11\125c-19e54b40fe9\node_modules\@pnpm\exe\pnpm.exe" install
+    at getFinalError (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:29448:14)
+    at makeError (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:31755:21)
+    at getSyncResult (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:33599:10)
+    at spawnSubprocessSync (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:33559:14)
+    at execaCoreSync (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:33489:23)
+    at callBoundExeca (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:36017:23)
+    at boundExeca (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:35994:49)
+    at sync (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:36153:10)
+    at runPnpmCli (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:213259:5)
+    at runDepsStatusCheck (file:///C:/Users/Stepan/AppData/Local/pnpm/store/v11/links/@pnpm/exe/11.2.2/6a5517fc237d6cee7f10c8bfd33b7a9dbebd5c38270fec3d954a5a932f45e4de/node_modules/@pnpm/exe/dist/pnpm.mjs:214967:7)
