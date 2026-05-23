@@ -12,6 +12,13 @@ import * as http from "http";
 import * as path from "path";
 
 const SERVER_PORT = 8765;
+// The bundled api-server binds to 127.0.0.1 (IPv4) in proxy mode. We MUST
+// use the literal "127.0.0.1" here too — on Windows, "localhost" resolves
+// to IPv6 (::1) first, the server isn't listening on ::1, every probe is
+// refused, waitForServer times out at 20s, and the app silently quits.
+// That's exactly the "process appears in task manager then disappears
+// after a few seconds" symptom.
+const SERVER_HOST = "127.0.0.1";
 const OVERLAY_HOTKEY_PRIMARY = "Control+Shift+Space";
 const OVERLAY_HOTKEY_FALLBACK = "Alt+Space";
 const OVERLAY_WIDTH = 440;
@@ -48,7 +55,7 @@ function waitForServer(port: number): Promise<void> {
     let attempts = 0;
 
     const check = () => {
-      const req = http.get(`http://localhost:${port}/api/healthz`, (res) => {
+      const req = http.get(`http://${SERVER_HOST}:${port}/api/healthz`, (res) => {
         res.resume();
         if (res.statusCode === 200) {
           resolve();
@@ -120,7 +127,7 @@ function createWindow(): void {
     autoHideMenuBar: true,
   });
 
-  void mainWindow.loadURL(`http://localhost:${SERVER_PORT}`);
+  void mainWindow.loadURL(`http://${SERVER_HOST}:${SERVER_PORT}`);
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
@@ -200,7 +207,7 @@ function createOverlayWindow(): void {
   overlayWindow.setAlwaysOnTop(true, "screen-saver");
   overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
 
-  void overlayWindow.loadURL(`http://localhost:${SERVER_PORT}/overlay`);
+  void overlayWindow.loadURL(`http://${SERVER_HOST}:${SERVER_PORT}/overlay`);
 
   // NOTE: Intentionally NO `blur` → hide. The whole point of the overlay is
   // that the user can click back into their game while a response streams in
