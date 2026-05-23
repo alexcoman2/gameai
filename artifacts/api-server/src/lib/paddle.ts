@@ -1,11 +1,25 @@
 import { Paddle, Environment, LogLevel } from "@paddle/paddle-node-sdk";
 import { logger } from "./logger.js";
 
-// Trim — pasted secrets very commonly carry a trailing newline or stray
-// whitespace, and the Paddle SDK puts the raw value straight into the
-// Authorization header, which then 401s with "Authentication header
-// included, but incorrectly formatted."
-const apiKey = process.env.PADDLE_API_KEY?.trim() || undefined;
+// Defensive parse: pasted secrets commonly carry stray whitespace,
+// surrounding quotes from a copy-paste out of a JSON config, or a
+// leading "Bearer " from a curl example. Any of these would make the
+// Paddle SDK 401 with "Authentication header included, but incorrectly
+// formatted." Strip them all before handing the key to the SDK.
+function sanitizeApiKey(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  let k = raw.trim();
+  // Strip surrounding single or double quotes.
+  if ((k.startsWith('"') && k.endsWith('"')) || (k.startsWith("'") && k.endsWith("'"))) {
+    k = k.slice(1, -1).trim();
+  }
+  // Strip a leading "Bearer " prefix from curl-style pasting.
+  if (k.toLowerCase().startsWith("bearer ")) {
+    k = k.slice(7).trim();
+  }
+  return k || undefined;
+}
+const apiKey = sanitizeApiKey(process.env.PADDLE_API_KEY);
 
 // Older Paddle keys are prefixed pdl_sdbx_* / pdl_live_*, but newer keys
 // (post-2024) drop the environment marker and start with just pdl_apikey_*.
@@ -86,10 +100,16 @@ export function validatePaddleConfig(): void {
   const overageProductId = process.env.PADDLE_OVERAGE_PRODUCT_ID;
   const webhookSecret = process.env.PADDLE_WEBHOOK_SECRET;
 
+  // Safe diagnostic fingerprint — first 4 + last 2 chars + length. Enough
+  // to verify the secret is the expected one without exposing it.
+  const fp = apiKey
+    ? `${apiKey.slice(0, 4)}…${apiKey.slice(-2)} (len ${apiKey.length})`
+    : "none";
   logger.info(
     {
       environment: isLive ? "production" : "sandbox",
       hasApiKey: !!apiKey,
+      apiKeyFingerprint: fp,
       hasWebhookSecret: !!webhookSecret,
       hasProPriceId: !!proId,
       hasElitePriceId: !!eliteId,
