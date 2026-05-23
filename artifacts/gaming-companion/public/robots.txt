@@ -1,2 +1,10 @@
 User-agent: *
 Allow: /
+Disallow: /sign-in
+Disallow: /sign-up
+Disallow: /settings
+Disallow: /admin
+Disallow: /overlay
+Disallow: /api/
+
+Sitemap: https://unstuckai.co/sitemap.xml
