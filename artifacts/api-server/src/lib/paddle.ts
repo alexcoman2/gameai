@@ -3,13 +3,26 @@ import { logger } from "./logger.js";
 
 const apiKey = process.env.PADDLE_API_KEY;
 
-// Paddle keys are prefixed: pdl_sdbx_* for sandbox, pdl_live_* for production.
-// Auto-detect so we don't need a separate PADDLE_ENVIRONMENT env var.
+// Older Paddle keys are prefixed pdl_sdbx_* / pdl_live_*, but newer keys
+// (post-2024) drop the environment marker and start with just pdl_apikey_*.
+// For those keys the only reliable signal is an explicit env var, so we
+// honor PADDLE_ENVIRONMENT first and fall back to prefix sniffing for
+// legacy keys.
 function detectEnvironment(): Environment {
+  const explicit = process.env.PADDLE_ENVIRONMENT?.trim().toLowerCase();
+  if (explicit === "production" || explicit === "live") {
+    return Environment.production;
+  }
+  if (explicit === "sandbox") {
+    return Environment.sandbox;
+  }
   if (!apiKey) return Environment.sandbox;
-  return apiKey.startsWith("pdl_live_")
-    ? Environment.production
-    : Environment.sandbox;
+  if (apiKey.startsWith("pdl_live_")) return Environment.production;
+  if (apiKey.startsWith("pdl_sdbx_")) return Environment.sandbox;
+  // New-format key with no environment marker — default to sandbox to
+  // avoid accidentally charging real cards, and rely on the operator
+  // setting PADDLE_ENVIRONMENT=production explicitly when they're ready.
+  return Environment.sandbox;
 }
 
 export const paddleEnvironment = detectEnvironment();

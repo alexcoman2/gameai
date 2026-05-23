@@ -35,6 +35,7 @@ externalPort = 3000
 
 [userenv.shared]
 ADMIN_EMAILS = "comanalex972@gmail.com"
+PADDLE_ENVIRONMENT = "production"
 
 [nix]
 channel = "stable-25_05"
