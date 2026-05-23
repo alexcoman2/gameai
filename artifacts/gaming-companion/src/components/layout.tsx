@@ -134,6 +134,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="absolute inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
         {children}
       </main>
+
+      {/* Footer — required for Paddle live-mode verification (must surface
+          Terms / Privacy / Refund links from every page on the public site). */}
+      <footer className="border-t border-border bg-card/50 px-6 py-4 text-[11px] font-mono uppercase tracking-widest text-muted-foreground flex flex-wrap items-center justify-between gap-3">
+        <span>© {new Date().getFullYear()} Unstuck</span>
+        <nav className="flex flex-wrap gap-x-5 gap-y-1">
+          <Link href="/about" className="hover:text-primary">About</Link>
+          <Link href="/legal/terms" className="hover:text-primary">Terms</Link>
+          <Link href="/legal/privacy" className="hover:text-primary">Privacy</Link>
+          <Link href="/legal/refund" className="hover:text-primary">Refunds</Link>
+        </nav>
+      </footer>
     </div>
   );
 }

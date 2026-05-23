@@ -1,0 +1,431 @@
+import { Link } from "wouter";
+import { SITE_CONFIG } from "@/lib/site-config";
+
+function LegalShell({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex-1 px-6 py-12 max-w-3xl mx-auto w-full">
+      <Link
+        href="/about"
+        className="text-xs font-mono uppercase tracking-wider text-muted-foreground hover:text-primary"
+      >
+        ← Back to Unstuck
+      </Link>
+      <h1 className="mt-4 text-3xl font-bold font-mono tracking-wider text-primary">
+        {title}
+      </h1>
+      <p className="mt-2 text-xs font-mono text-muted-foreground uppercase tracking-widest">
+        Effective {SITE_CONFIG.legalEffectiveDate}
+      </p>
+      <div className="prose prose-invert mt-8 max-w-none text-sm leading-relaxed text-foreground/90 [&_h2]:mt-8 [&_h2]:text-base [&_h2]:font-mono [&_h2]:uppercase [&_h2]:tracking-wider [&_h2]:text-primary [&_h3]:mt-6 [&_h3]:font-semibold [&_p]:mt-3 [&_ul]:mt-3 [&_ul]:list-disc [&_ul]:pl-5 [&_li]:mt-1 [&_a]:text-primary [&_a]:underline">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function AboutPage() {
+  return (
+    <div className="flex-1 px-6 py-16 max-w-4xl mx-auto w-full">
+      <h1 className="text-5xl font-bold font-mono tracking-wider text-primary">
+        {SITE_CONFIG.productName}
+      </h1>
+      <p className="mt-4 text-xl text-muted-foreground">
+        An AI gaming companion that watches your screen and helps you get
+        unstuck — boss fights, puzzles, builds, quests, anything.
+      </p>
+
+      <div className="mt-10 grid gap-6 md:grid-cols-3">
+        <Tile
+          title="Ask"
+          body="Type or screenshot a question. Get a concise answer grounded in your current game."
+        />
+        <Tile
+          title="Watch Mode"
+          body="Unstuck observes your screen every few seconds and proactively offers tips."
+        />
+        <Tile
+          title="Game-aware"
+          body="Detects what you're playing and tailors answers to that game's mechanics."
+        />
+      </div>
+
+      <h2 className="mt-12 text-base font-mono uppercase tracking-wider text-primary">
+        Pricing
+      </h2>
+      <ul className="mt-3 text-sm space-y-2 text-foreground/90">
+        <li>
+          <b>Free</b> — 25 chats and 30 minutes of Watch Mode per month. Hard
+          cap; no overage.
+        </li>
+        <li>
+          <b>Pro — $29/month</b> — 200 chats and 2 hours of Watch Mode included,
+          then $0.05 / chat and $0.20 / minute of Watch Mode usage.
+        </li>
+        <li>
+          <b>Elite — $99/month</b> — 750 chats and 8 hours of Watch Mode
+          included, then $0.04 / chat and $0.15 / minute of Watch Mode usage.
+        </li>
+      </ul>
+      <p className="mt-2 text-xs text-muted-foreground">
+        Subscriptions auto-renew monthly. Overage is billed at the end of each
+        billing period via Paddle. A $5/day per-user safety fuse caps any
+        single day's spend.
+      </p>
+
+      <h2 className="mt-12 text-base font-mono uppercase tracking-wider text-primary">
+        System requirements
+      </h2>
+      <ul className="mt-3 text-sm space-y-1 text-foreground/90">
+        <li>Windows 10 or Windows 11 (64-bit)</li>
+        <li>At least 4 GB RAM available to the app</li>
+        <li>Internet connection</li>
+      </ul>
+
+      <h2 className="mt-12 text-base font-mono uppercase tracking-wider text-primary">
+        Company & contact
+      </h2>
+      <p className="mt-3 text-sm text-foreground/90">
+        {SITE_CONFIG.legalEntityName}. For support, write to{" "}
+        <a
+          className="text-primary underline"
+          href={`mailto:${SITE_CONFIG.contactEmail}`}
+        >
+          {SITE_CONFIG.contactEmail}
+        </a>
+        .
+      </p>
+
+      <div className="mt-12 flex flex-wrap gap-x-6 gap-y-2 text-xs font-mono uppercase tracking-wider">
+        <Link href="/legal/terms" className="text-muted-foreground hover:text-primary">
+          Terms of Service
+        </Link>
+        <Link href="/legal/privacy" className="text-muted-foreground hover:text-primary">
+          Privacy Policy
+        </Link>
+        <Link href="/legal/refund" className="text-muted-foreground hover:text-primary">
+          Refund Policy
+        </Link>
+        <Link href="/sign-in" className="text-primary hover:underline">
+          Open the app →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function Tile({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="border border-border bg-card/40 p-5">
+      <div className="text-xs font-mono uppercase tracking-widest text-primary">
+        {title}
+      </div>
+      <p className="mt-2 text-sm text-foreground/90">{body}</p>
+    </div>
+  );
+}
+
+export function TermsPage() {
+  return (
+    <LegalShell title="Terms of Service">
+      <p>
+        These Terms of Service ("Terms") govern your access to and use of{" "}
+        {SITE_CONFIG.productName} (the "Service"), operated by{" "}
+        {SITE_CONFIG.legalEntityName} ("we", "us"). By creating an account or
+        using the Service you agree to these Terms.
+      </p>
+
+      <h2>1. The Service</h2>
+      <p>
+        {SITE_CONFIG.productName} is a desktop application and accompanying
+        cloud service that watches the user's screen (with their consent) and
+        responds to questions about the game they are playing, using
+        third-party large language models. The Service is provided on an
+        "as-is" basis and may produce inaccurate or incomplete answers.
+      </p>
+
+      <h2>2. Accounts</h2>
+      <p>
+        You need an account to use the Service. You are responsible for the
+        security of your credentials and for all activity that occurs under
+        your account. You must be at least 13 years old (or the minimum age of
+        digital consent in your jurisdiction, whichever is higher).
+      </p>
+
+      <h2>3. Subscriptions and Billing</h2>
+      <p>
+        Paid subscriptions are sold by Paddle.com Market Limited (or its
+        affiliates), which acts as our Merchant of Record. Plan prices,
+        included monthly allowances, and overage rates are displayed in the
+        app's Upgrade screen and on our public website.
+      </p>
+      <p>
+        Subscriptions renew automatically each month at the then-current
+        price. If your usage in a billing period exceeds the included
+        allowance, the additional usage is billed at the per-unit overage
+        rates shown when you subscribed. Overage is charged at the end of
+        each billing period.
+      </p>
+      <p>
+        You can cancel at any time from the in-app Upgrade screen. Cancellation
+        takes effect at the end of the current billing period.
+      </p>
+
+      <h2>4. Acceptable use</h2>
+      <ul>
+        <li>
+          Do not use the Service to violate the terms of any game you play,
+          to facilitate cheating in competitive online games, or to abuse
+          anti-cheat systems.
+        </li>
+        <li>Do not share your account credentials.</li>
+        <li>
+          Do not use the Service to send us screenshots that contain other
+          people's private information.
+        </li>
+        <li>
+          Do not attempt to bypass usage limits, the daily spend safety cap,
+          or any rate-limiting we apply.
+        </li>
+      </ul>
+
+      <h2>5. Content and intellectual property</h2>
+      <p>
+        You retain all rights to the screenshots and prompts you submit. By
+        submitting them you grant us a limited license to process them through
+        our third-party AI providers solely to generate your responses. We do
+        not use your content to train models.
+      </p>
+
+      <h2>6. Disclaimers</h2>
+      <p>
+        Game advice provided by the Service is generated by AI and may be
+        wrong, out of date, or inappropriate for your situation. Use it at your
+        own risk. We are not affiliated with the publishers of any games you
+        play.
+      </p>
+
+      <h2>7. Limitation of liability</h2>
+      <p>
+        To the maximum extent permitted by law, our total liability for any
+        claim arising out of or relating to the Service will not exceed the
+        amount you paid us in the 12 months immediately preceding the event
+        that gave rise to the claim.
+      </p>
+
+      <h2>8. Termination</h2>
+      <p>
+        We may suspend or terminate your access if you materially breach these
+        Terms (including by repeatedly hitting the daily spend safety cap from
+        abusive use). You may stop using the Service at any time.
+      </p>
+
+      <h2>9. Governing law</h2>
+      <p>
+        These Terms are governed by the laws of {SITE_CONFIG.jurisdiction},
+        without regard to its conflict-of-laws principles.
+      </p>
+
+      <h2>10. Changes to the Terms</h2>
+      <p>
+        We may update these Terms from time to time. The "Effective" date at
+        the top of this page reflects the most recent change. Continued use
+        of the Service after a change means you accept the new Terms.
+      </p>
+
+      <h2>11. Contact</h2>
+      <p>
+        Questions? Write to{" "}
+        <a href={`mailto:${SITE_CONFIG.contactEmail}`}>
+          {SITE_CONFIG.contactEmail}
+        </a>
+        .
+      </p>
+    </LegalShell>
+  );
+}
+
+export function PrivacyPage() {
+  return (
+    <LegalShell title="Privacy Policy">
+      <p>
+        This Privacy Policy explains what personal data we collect when you
+        use {SITE_CONFIG.productName}, why we collect it, and who we share it
+        with.
+      </p>
+
+      <h2>1. What we collect</h2>
+      <ul>
+        <li>
+          <b>Account data</b> — your email address and an opaque user ID,
+          provided by our authentication provider (Clerk).
+        </li>
+        <li>
+          <b>Conversation content</b> — the chat messages and screenshots you
+          submit to the Service, along with the AI's responses, stored on our
+          servers so you can resume past sessions.
+        </li>
+        <li>
+          <b>Game detection data</b> — the name and process identifier of the
+          foreground game on your machine while the app is running.
+        </li>
+        <li>
+          <b>Usage records</b> — the number of chats and seconds of Watch Mode
+          you used, along with the cost of the underlying AI calls, used for
+          billing and the daily spend safety cap.
+        </li>
+        <li>
+          <b>Billing data</b> — the subscription tier you are on and a
+          customer/subscription identifier from Paddle. We do not see or
+          store your full payment card details.
+        </li>
+      </ul>
+
+      <h2>2. Who we share it with (processors)</h2>
+      <ul>
+        <li>
+          <b>Anthropic</b> — to generate AI responses to your prompts.
+        </li>
+        <li>
+          <b>Exa</b> — to retrieve web search results that ground the AI's
+          answers, when relevant.
+        </li>
+        <li>
+          <b>Clerk</b> — to authenticate your account.
+        </li>
+        <li>
+          <b>Paddle</b> — to process payments and manage your subscription
+          (acting as Merchant of Record).
+        </li>
+        <li>
+          <b>Replit</b> — to host the cloud portion of the Service.
+        </li>
+      </ul>
+      <p>
+        We do not sell your personal data to anyone, and we do not use your
+        prompts or screenshots to train AI models.
+      </p>
+
+      <h2>3. Retention</h2>
+      <p>
+        Conversation history is kept while your account exists so you can
+        resume past sessions. Usage records are kept for as long as needed
+        for billing reconciliation and tax compliance (typically 7 years).
+        Screenshots that drive Watch Mode are processed and deleted within
+        minutes of the AI call.
+      </p>
+
+      <h2>4. Your rights</h2>
+      <p>
+        You may request a copy of the personal data we hold about you, ask
+        us to correct it, or ask us to delete your account by writing to{" "}
+        <a href={`mailto:${SITE_CONFIG.privacyEmail}`}>
+          {SITE_CONFIG.privacyEmail}
+        </a>
+        . We respond within 30 days. Depending on your jurisdiction you may
+        have additional rights under GDPR, UK GDPR, or CCPA.
+      </p>
+
+      <h2>5. Cookies</h2>
+      <p>
+        The web portion of the Service uses strictly necessary cookies set by
+        our authentication provider to keep you signed in. We do not use
+        advertising or analytics cookies.
+      </p>
+
+      <h2>6. Security</h2>
+      <p>
+        We protect data in transit with TLS, and at rest with the encryption
+        provided by our hosting and database providers. Authentication tokens
+        from Clerk are short-lived. Access to production systems is limited
+        to people who need it.
+      </p>
+
+      <h2>7. Changes</h2>
+      <p>
+        We will update this policy from time to time. Material changes will
+        be announced inside the app or by email to the address on file.
+      </p>
+
+      <h2>8. Contact</h2>
+      <p>
+        Privacy questions:{" "}
+        <a href={`mailto:${SITE_CONFIG.privacyEmail}`}>
+          {SITE_CONFIG.privacyEmail}
+        </a>
+        .
+      </p>
+    </LegalShell>
+  );
+}
+
+export function RefundPage() {
+  return (
+    <LegalShell title="Refund Policy">
+      <p>
+        We want you to feel good about paying for {SITE_CONFIG.productName}.
+        This page explains when refunds are available and how to request one.
+      </p>
+
+      <h2>1. Cancelling a subscription</h2>
+      <p>
+        You can cancel at any time from the in-app Upgrade screen. Cancellation
+        stops automatic renewal — you will continue to have paid access until
+        the end of the current billing period.
+      </p>
+
+      <h2>2. 14-day satisfaction window</h2>
+      <p>
+        If you upgrade to a paid plan and decide it is not for you, write to{" "}
+        <a href={`mailto:${SITE_CONFIG.refundsEmail}`}>
+          {SITE_CONFIG.refundsEmail}
+        </a>{" "}
+        within 14 days of the upgrade and we will refund that subscription
+        period in full, provided you have not used substantially all of the
+        included monthly allowance (we consider over 80% of either the chat
+        or Watch Mode allowance to be "substantially used").
+      </p>
+
+      <h2>3. Overage charges</h2>
+      <p>
+        Usage above the plan's included allowance is billed at the per-unit
+        overage rates shown on the Upgrade screen at the time you subscribed.
+        Overage charges are based on usage that has already occurred and are
+        non-refundable, except where required by law or where we made a
+        billing error.
+      </p>
+
+      <h2>4. Billing errors</h2>
+      <p>
+        If you believe you were billed incorrectly, contact{" "}
+        <a href={`mailto:${SITE_CONFIG.refundsEmail}`}>
+          {SITE_CONFIG.refundsEmail}
+        </a>{" "}
+        within 60 days of the charge and we will investigate and refund any
+        amount that was charged in error.
+      </p>
+
+      <h2>5. Statutory consumer rights</h2>
+      <p>
+        Nothing in this policy limits any non-waivable rights you have under
+        the consumer-protection laws of your country (for example, the EU
+        consumer right of withdrawal). Refunds are processed by Paddle, our
+        Merchant of Record, back to the original payment method.
+      </p>
+
+      <h2>6. Contact</h2>
+      <p>
+        Refund requests:{" "}
+        <a href={`mailto:${SITE_CONFIG.refundsEmail}`}>
+          {SITE_CONFIG.refundsEmail}
+        </a>
+        .
+      </p>
+    </LegalShell>
+  );
+}
