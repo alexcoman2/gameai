@@ -117,6 +117,19 @@ router.post("/billing/checkout", ...protect, async (req, res) => {
     res.status(400).json({ error: "tier must be 'pro', 'pro_plus', or 'elite'" });
     return;
   }
+
+  // Admin accounts already bypass usage caps — block them from creating real
+  // Paddle transactions so we don't accidentally charge ourselves.
+  const adminRows = await db
+    .select({ isAdmin: usersTable.isAdmin })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  if (adminRows[0]?.isAdmin) {
+    res.status(403).json({ error: "Admin accounts cannot purchase subscriptions." });
+    return;
+  }
+
   const priceId = priceIdForTier(tier);
   if (!priceId) {
     res.status(500).json({ error: `No price configured for ${tier} tier` });

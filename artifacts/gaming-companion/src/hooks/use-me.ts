@@ -5,7 +5,7 @@ import { authFetch } from "@/lib/auth-fetch";
 export type Me = {
   id: string;
   email: string | null;
-  plan: "free" | "pro" | "elite";
+  plan: "free" | "pro" | "pro_plus" | "elite";
   isAdmin: boolean;
 };
 

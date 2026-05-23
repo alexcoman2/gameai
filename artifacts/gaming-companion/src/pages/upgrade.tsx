@@ -5,6 +5,7 @@ import { Check, Loader2, ExternalLink, Crown, Zap, Gift, Mic, Rocket } from "luc
 import { openCheckout } from "@/lib/paddle-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
+import { useMe } from "@/hooks/use-me";
 
 type PlanTier = "free" | "pro" | "pro_plus" | "elite";
 
@@ -83,11 +84,13 @@ const TIERS = [
 
 export default function Upgrade() {
   const { user } = useUser();
+  const { me } = useMe();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [loadingTier, setLoadingTier] = useState<PaidTier | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const isAdmin = me?.isAdmin ?? false;
 
   useEffect(() => {
     authFetch("/api/billing/status")
@@ -186,6 +189,16 @@ export default function Upgrade() {
         </Show>
 
         <Show when="signed-in">
+          {isAdmin && (
+            <div className="mb-8 border border-primary/60 bg-primary/10 p-4 text-center">
+              <p className="text-sm font-mono text-primary uppercase tracking-wider">
+                Admin account — billing bypassed
+              </p>
+              <p className="text-xs font-mono text-muted-foreground mt-1">
+                You have unlimited usage and cannot purchase subscriptions.
+              </p>
+            </div>
+          )}
           {status?.hasSubscription && (
             <div className="mb-8 border border-border bg-card p-4 flex items-center justify-between">
               <div>
@@ -298,7 +311,7 @@ export default function Upgrade() {
                 {isUpgradeable && (
                   <button
                     type="button"
-                    disabled={isCurrent || loadingTier !== null}
+                    disabled={isCurrent || loadingTier !== null || isAdmin}
                     onClick={() => handleUpgrade(tier.id as PaidTier)}
                     className={`w-full py-3 font-mono text-xs uppercase tracking-wider border transition-colors ${
                       highlight
