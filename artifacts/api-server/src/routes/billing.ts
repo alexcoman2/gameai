@@ -20,6 +20,38 @@ import type { PlanTier } from "@workspace/db";
 
 const router: IRouter = Router();
 
+// Pull the most informative string out of whatever the Paddle SDK throws.
+// Their ApiError carries `code`, `detail`, plus a `.errors` array — none
+// of which JSON-stringify cleanly, so error.message ends up as "[object
+// Object]" in the log without this helper.
+function extractPaddleErrorDetail(e: unknown): string {
+  if (e && typeof e === "object") {
+    const obj = e as Record<string, unknown>;
+    const code = typeof obj.code === "string" ? obj.code : undefined;
+    const detail = typeof obj.detail === "string" ? obj.detail : undefined;
+    const message = typeof obj.message === "string" ? obj.message : undefined;
+    const status = typeof obj.status === "number" ? obj.status : undefined;
+    const errs = Array.isArray(obj.errors)
+      ? (obj.errors as Array<Record<string, unknown>>)
+          .map((er) => {
+            const f = typeof er.field === "string" ? er.field : undefined;
+            const m = typeof er.message === "string" ? er.message : undefined;
+            return f && m ? `${f}: ${m}` : m ?? "";
+          })
+          .filter(Boolean)
+          .join("; ")
+      : "";
+    const parts = [
+      status ? `HTTP ${status}` : undefined,
+      code,
+      detail ?? message,
+      errs || undefined,
+    ].filter(Boolean) as string[];
+    if (parts.length) return parts.join(" — ");
+  }
+  return e instanceof Error ? e.message : "Unknown error";
+}
+
 // In proxy mode, forward billing calls to the hosted Replit server (which has
 // Paddle creds + Clerk auth). In hosted/dev mode, handle them locally.
 const HOSTED_URL = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
@@ -170,8 +202,15 @@ router.post("/billing/checkout", ...protect, async (req, res) => {
     } as Parameters<typeof paddle.transactions.create>[0]);
     res.json({ transactionId: tx.id, email });
   } catch (e) {
-    logger.error({ err: e, userId, tier }, "Failed to create Paddle transaction");
-    res.status(500).json({ error: "Failed to start checkout" });
+    // Surface the actual Paddle SDK error to the client (admin-test-mode
+    // shows it in a toast) so failures don't manifest as a generic
+    // "Failed to start checkout" with no diagnostic info. The Paddle
+    // SDK error is also pulled into the server log with full context.
+    const detail = extractPaddleErrorDetail(e);
+    logger.error({ err: e, detail, userId, tier, priceId }, "Failed to create Paddle transaction");
+    res.status(500).json({
+      error: `Failed to start checkout: ${detail}`,
+    });
   }
 });
 
