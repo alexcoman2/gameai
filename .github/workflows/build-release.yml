@@ -44,6 +44,11 @@ jobs:
           $tag = if ($ref -match '^v') { $ref } elseif ($input_tag -ne '') { $input_tag } else { $null }
           if ($tag -match '^v(.+)$') {
             $version = $Matches[1]
+            # electron-builder requires full semver MAJOR.MINOR.PATCH.
+            # Pad short tags so v2 -> 2.0.0 and v2.0 -> 2.0.0.
+            $parts = $version.Split('.')
+            while ($parts.Length -lt 3) { $parts += '0' }
+            $version = ($parts -join '.')
             $pkgPath = "artifacts/electron-app/package.json"
             $pkg = Get-Content $pkgPath -Raw | ConvertFrom-Json
             $pkg.version = $version
