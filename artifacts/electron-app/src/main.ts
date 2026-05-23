@@ -367,6 +367,20 @@ function createWindow(): void {
       );
       evt.preventDefault();
       void mainWindow?.loadURL(rewritten);
+      return;
+    }
+    // Returning home from the hosted OAuth callback: the per-event mirror
+    // typically only catches __client. Pull a full snapshot of every
+    // Clerk cookie from the proxy host onto the local origin BEFORE the
+    // page loads, so clerk-js initializes against a coherent state.
+    if (url.startsWith(mainUrl)) {
+      const currentUrl = mainWindow?.webContents.getURL() ?? "";
+      if (currentUrl.includes("game-companion-ai.replit.app")) {
+        evt.preventDefault();
+        void syncAllClerkCookiesFromProxy().finally(() => {
+          void mainWindow?.loadURL(url);
+        });
+      }
     }
   });
   mainWindow.webContents.on("will-navigate", (evt, url) => {
@@ -608,19 +622,60 @@ function installClerkCookieMirror(): void {
   };
 
   // One-shot: copy any cookies already in the store (re-launch case).
-  void cookies
-    .get({ domain: PROXY_HOST_SUFFIX })
-    .then(async (existing) => {
-      for (const c of existing) {
-        await mirrorCookie(c, "explicit", false);
-      }
-    })
-    .catch(() => {});
+  void syncAllClerkCookiesFromProxy();
 
   // Live: mirror every future change.
   cookies.on("changed", (_evt, cookie, cause, removed) => {
     void mirrorCookie(cookie, cause, removed);
   });
+}
+
+// Bulk pull: snapshot every Clerk cookie currently scoped to the proxy
+// host and re-set it on the local origin. Used at startup and after the
+// OAuth round-trip lands back on http://127.0.0.1:8765 — at that moment
+// the per-event listener has only seen Set-Cookie for __client (the only
+// header in the final callback response), but clerk-js on the local
+// page needs __client_uat* and __session* to recognize the user as
+// signed in. Pulling everything in one shot guarantees a coherent snap-
+// shot regardless of which individual events fired or were missed.
+async function syncAllClerkCookiesFromProxy(): Promise<void> {
+  const cookies = session.defaultSession.cookies;
+  const PROXY_HOST_SUFFIX = "game-companion-ai.replit.app";
+  const LOCAL_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
+  const isClerkCookie = (name: string): boolean =>
+    name.startsWith("__client") ||
+    name.startsWith("__session") ||
+    name.startsWith("__refresh") ||
+    name.startsWith("__clerk");
+  try {
+    const existing = await cookies.get({ domain: PROXY_HOST_SUFFIX });
+    let synced = 0;
+    for (const c of existing) {
+      if (!isClerkCookie(c.name)) continue;
+      try {
+        await cookies.set({
+          url: LOCAL_URL,
+          name: c.name,
+          value: c.value,
+          path: c.path || "/",
+          httpOnly: c.httpOnly,
+          secure: false,
+          sameSite:
+            c.sameSite === "no_restriction" ? "lax" : c.sameSite,
+          expirationDate: c.expirationDate,
+        });
+        synced++;
+      } catch {
+        // Skip individual failures; continue the rest of the snapshot.
+      }
+    }
+    appendServerLog(
+      `[main] clerk cookie mirror: full sync copied ${synced} cookies to local\n`,
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    appendServerLog(`[main] clerk cookie mirror: full sync failed: ${msg}\n`);
+  }
 }
 
 app.whenReady().then(() => {
