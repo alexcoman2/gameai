@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Show, useUser } from "@clerk/react";
 import { Check, Loader2, ExternalLink, Crown, Zap, Gift, Mic, Rocket } from "lucide-react";
-import { openCheckout } from "@/lib/paddle-client";
+import { openCheckout, getPaddleConfig } from "@/lib/paddle-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import { useMe } from "@/hooks/use-me";
@@ -89,8 +89,16 @@ export default function Upgrade() {
   const { toast } = useToast();
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [loadingTier, setLoadingTier] = useState<PaidTier | null>(null);
+  const [loadingPaypalTier, setLoadingPaypalTier] = useState<PaidTier | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [paypalEnabled, setPaypalEnabled] = useState(false);
   const isAdmin = me?.isAdmin ?? false;
+
+  useEffect(() => {
+    getPaddleConfig()
+      .then((cfg) => setPaypalEnabled(!!cfg.paypal?.enabled))
+      .catch(() => setPaypalEnabled(false));
+  }, []);
 
   useEffect(() => {
     authFetch("/api/billing/status")
@@ -113,6 +121,65 @@ export default function Upgrade() {
           .then((d) => setStatus(d));
       }, 3000);
     }
+    // PayPal redirect-back: ?paypal=success&subscription_id=I-...
+    // Confirm with the server so the user's plan flips immediately
+    // instead of waiting on the webhook. Keep the query params until
+    // we get a definitive success response — that way a transient 401
+    // (Clerk not warmed up yet) or 500 leaves the user able to refresh
+    // and retry, instead of stranding them on free with no recourse
+    // until the webhook catches up.
+    if (params.get("paypal") === "success") {
+      const subId = params.get("subscription_id");
+      if (!subId) {
+        toast({
+          title: "PayPal returned, but no subscription ID was provided.",
+          variant: "destructive",
+        });
+        window.history.replaceState({}, "", window.location.pathname);
+      } else {
+        authFetch("/api/billing/paypal/confirm", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subscriptionId: subId }),
+        })
+          .then(async (r) => {
+            if (!r.ok) {
+              const body = await r.json().catch(() => ({}));
+              throw new Error(body.error ?? `HTTP ${r.status}`);
+            }
+            return r.json() as Promise<{ plan: string; status: string; active: boolean }>;
+          })
+          .then((body) => {
+            if (body.active) {
+              toast({
+                title: "PayPal subscription active",
+                description: "Your plan has been upgraded.",
+              });
+            } else {
+              toast({
+                title: "PayPal subscription pending",
+                description: `Status: ${body.status}. We'll update your plan once PayPal activates it.`,
+              });
+            }
+            // Only clean the URL on a definitive answer so refresh+retry
+            // works after transient errors.
+            window.history.replaceState({}, "", window.location.pathname);
+            return authFetch("/api/billing/status")
+              .then((r) => (r.ok ? r.json() : null))
+              .then((d) => setStatus(d));
+          })
+          .catch((e) => {
+            toast({
+              title: "PayPal confirmation failed — refresh to retry",
+              description: e instanceof Error ? e.message : "Unknown error",
+              variant: "destructive",
+            });
+          });
+      }
+    } else if (params.get("paypal") === "cancel") {
+      toast({ title: "PayPal checkout cancelled" });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
   }, [toast]);
 
   async function handleUpgrade(tier: PaidTier) {
@@ -131,6 +198,38 @@ export default function Upgrade() {
       });
     } finally {
       setLoadingTier(null);
+    }
+  }
+
+  // PayPal redirect flow: ask server for an approval URL, then navigate
+  // the browser to PayPal. Server creates the subscription with our
+  // custom_id=userId, so the webhook + confirm endpoint can both bind
+  // the resulting subscription to the right user.
+  async function handlePaypalUpgrade(tier: PaidTier) {
+    if (!user) {
+      setLocation("/sign-in");
+      return;
+    }
+    setLoadingPaypalTier(tier);
+    try {
+      const res = await authFetch("/api/billing/paypal/create-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      const { approveUrl } = (await res.json()) as { approveUrl: string };
+      window.location.href = approveUrl;
+    } catch (e) {
+      toast({
+        title: "PayPal checkout failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+      setLoadingPaypalTier(null);
     }
   }
 
@@ -309,29 +408,48 @@ export default function Upgrade() {
                   </div>
                 )}
                 {isUpgradeable && (
-                  <button
-                    type="button"
-                    disabled={isCurrent || loadingTier !== null || isAdmin}
-                    onClick={() => handleUpgrade(tier.id as PaidTier)}
-                    className={`w-full py-3 font-mono text-xs uppercase tracking-wider border transition-colors ${
-                      highlight
-                        ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
-                        : "bg-transparent text-foreground border-border hover:bg-muted"
-                    } disabled:opacity-50 disabled:cursor-not-allowed`}
-                  >
-                    {loadingTier === tier.id ? (
-                      <span className="flex items-center justify-center gap-2">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        Loading...
-                      </span>
-                    ) : isCurrent ? (
-                      "Active"
-                    ) : currentPlan !== "free" ? (
-                      `Switch to ${tier.name}`
-                    ) : (
-                      `Upgrade to ${tier.name}`
+                  <>
+                    <button
+                      type="button"
+                      disabled={isCurrent || loadingTier !== null || loadingPaypalTier !== null || isAdmin}
+                      onClick={() => handleUpgrade(tier.id as PaidTier)}
+                      className={`w-full py-3 font-mono text-xs uppercase tracking-wider border transition-colors ${
+                        highlight
+                          ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
+                          : "bg-transparent text-foreground border-border hover:bg-muted"
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {loadingTier === tier.id ? (
+                        <span className="flex items-center justify-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Loading...
+                        </span>
+                      ) : isCurrent ? (
+                        "Active"
+                      ) : currentPlan !== "free" ? (
+                        `Switch to ${tier.name}`
+                      ) : (
+                        `Upgrade to ${tier.name}`
+                      )}
+                    </button>
+                    {paypalEnabled && !isCurrent && (
+                      <button
+                        type="button"
+                        disabled={loadingTier !== null || loadingPaypalTier !== null || isAdmin}
+                        onClick={() => handlePaypalUpgrade(tier.id as PaidTier)}
+                        className="mt-2 w-full py-2 font-mono text-[11px] uppercase tracking-wider border border-[#ffc439]/60 text-[#ffc439] bg-transparent hover:bg-[#ffc439]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {loadingPaypalTier === tier.id ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            Redirecting...
+                          </span>
+                        ) : (
+                          "Or pay with PayPal"
+                        )}
+                      </button>
                     )}
-                  </button>
+                  </>
                 )}
                 {!isUpgradeable && (
                   <div className="w-full py-3 text-center font-mono text-xs uppercase tracking-wider text-muted-foreground border border-dashed border-border">

@@ -5,6 +5,7 @@ type PaddleConfig = {
   clientToken: string | null;
   environment: "sandbox" | "production";
   prices: { pro: string | null; pro_plus: string | null; elite: string | null };
+  paypal?: { enabled: boolean; environment: "sandbox" | "live" };
 };
 
 let _paddle: Paddle | null = null;

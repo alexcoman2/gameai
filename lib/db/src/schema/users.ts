@@ -10,7 +10,7 @@ export const usersTable = pgTable("users", {
   // Provider-agnostic billing fields. We're starting with Paddle but may
   // swap providers — keep column names neutral so a future swap is just a
   // config change, not a schema migration.
-  billingProvider: text("billing_provider").$type<"paddle" | "stripe" | null>(),
+  billingProvider: text("billing_provider").$type<"paddle" | "paypal" | "stripe" | null>(),
   billingCustomerId: text("billing_customer_id"),
   billingSubscriptionId: text("billing_subscription_id"),
   subscriptionStatus: text("subscription_status"),

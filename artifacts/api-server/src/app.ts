@@ -14,7 +14,9 @@ import {
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware.js";
 import { paddleWebhookHandler } from "./routes/paddle-webhook.js";
+import { paypalWebhookHandler } from "./routes/paypal-webhook.js";
 import { validatePaddleConfig } from "./lib/paddle.js";
+import { validatePaypalConfig } from "./lib/paypal.js";
 import { IS_PROXY, IS_HOSTED } from "./lib/server-mode.js";
 import path from "path";
 
@@ -57,6 +59,14 @@ app.post(
   "/api/webhooks/paddle",
   express.raw({ type: "application/json" }),
   paddleWebhookHandler,
+);
+
+// PayPal webhook — same constraint: must see the raw body so we can
+// pass it through PayPal's notifications/verify-webhook-signature API.
+app.post(
+  "/api/webhooks/paypal",
+  express.raw({ type: "application/json" }),
+  paypalWebhookHandler,
 );
 
 // CORS posture per mode:
@@ -157,5 +167,6 @@ if (hasDisplay && config.autoCapture) {
 // most insidious foot-gun: sandbox price IDs left over from testing
 // that would 404 on every checkout in production.
 validatePaddleConfig();
+validatePaypalConfig();
 
 export default app;

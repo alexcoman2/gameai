@@ -6,6 +6,7 @@ import { getOrCreateUser } from "../lib/usage.js";
 import { DAILY_HARD_CAP_CENTS } from "../lib/plans.js";
 import { logger } from "../lib/logger.js";
 import { IS_PROXY } from "../lib/server-mode.js";
+import { setupProductsAndPlans, isPaypalConfigured } from "../lib/paypal.js";
 
 const router: IRouter = Router();
 
@@ -227,9 +228,14 @@ router.get("/admin/usage", ...protect, async (req, res) => {
       })
       .from(usersTable)
       .groupBy(usersTable.plan);
-    const subscribers = { free: 0, pro: 0, elite: 0 };
+    const subscribers = { free: 0, pro: 0, pro_plus: 0, elite: 0 };
     for (const r of subscriberRows) {
-      if (r.plan === "free" || r.plan === "pro" || r.plan === "elite") {
+      if (
+        r.plan === "free" ||
+        r.plan === "pro" ||
+        r.plan === "pro_plus" ||
+        r.plan === "elite"
+      ) {
         subscribers[r.plan] = Number(r.count);
       }
     }
@@ -336,6 +342,41 @@ router.get("/admin/webhook-health", ...protect, async (req, res) => {
   } catch (e) {
     logger.error({ err: e, userId }, "Failed to build webhook health snapshot");
     res.status(500).json({ error: "Failed to load webhook health" });
+  }
+});
+
+// One-shot PayPal setup. Admin hits this once after providing
+// PAYPAL_CLIENT_ID/SECRET, gets back the product + 3 plan IDs, then
+// pastes them into Replit Secrets as PAYPAL_PRO_PLAN_ID etc and
+// restarts. We don't store the IDs server-side — they live in secrets
+// alongside the Paddle price IDs for symmetry.
+router.post("/admin/paypal/setup-plans", ...protect, async (req, res) => {
+  if (IS_PROXY) {
+    await proxyToHosted(req, res, "/api/admin/paypal/setup-plans");
+    return;
+  }
+  const userId = req.userId!;
+  const email = req.userEmail ?? null;
+  try {
+    const me = await getOrCreateUser(userId, email);
+    if (!me.isAdmin) {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+    if (!isPaypalConfigured()) {
+      res.status(400).json({ error: "PayPal credentials not configured" });
+      return;
+    }
+    const result = await setupProductsAndPlans();
+    logger.info({ result }, "PayPal product + plans created");
+    res.json({
+      ...result,
+      next: "Paste these into Replit Secrets as PAYPAL_PRO_PLAN_ID, PAYPAL_PRO_PLUS_PLAN_ID, PAYPAL_ELITE_PLAN_ID, then restart the server.",
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    logger.error({ err: e, userId }, "PayPal setup failed");
+    res.status(500).json({ error: msg });
   }
 });
 
