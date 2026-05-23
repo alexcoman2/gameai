@@ -138,15 +138,21 @@ router.post("/billing/checkout", ...protect, async (req, res) => {
   }
 
   // Admin accounts already bypass usage caps — block them from creating real
-  // Paddle transactions so we don't accidentally charge ourselves.
+  // Paddle transactions so we don't accidentally charge ourselves. Admins can
+  // opt INTO a real checkout for end-to-end testing by sending `adminTest:true`
+  // in the body (they're prompted on the client first).
   const adminRows = await db
     .select({ isAdmin: usersTable.isAdmin })
     .from(usersTable)
     .where(eq(usersTable.id, userId))
     .limit(1);
-  if (adminRows[0]?.isAdmin) {
+  const adminTest = req.body?.adminTest === true;
+  if (adminRows[0]?.isAdmin && !adminTest) {
     res.status(403).json({ error: "Admin accounts cannot purchase subscriptions." });
     return;
+  }
+  if (adminRows[0]?.isAdmin && adminTest) {
+    logger.warn({ userId, tier }, "ADMIN TEST CHECKOUT — real Paddle transaction will be created");
   }
 
   const priceId = priceIdForTier(tier);
@@ -219,15 +225,20 @@ router.post("/billing/paypal/create-subscription", ...protect, async (req, res) 
     return;
   }
 
-  // Block admin checkouts (same posture as Paddle).
+  // Block admin checkouts (same posture as Paddle). Admins may opt in via
+  // `adminTest:true` for end-to-end testing.
   const adminRows = await db
     .select({ isAdmin: usersTable.isAdmin })
     .from(usersTable)
     .where(eq(usersTable.id, userId))
     .limit(1);
-  if (adminRows[0]?.isAdmin) {
+  const adminTest = req.body?.adminTest === true;
+  if (adminRows[0]?.isAdmin && !adminTest) {
     res.status(403).json({ error: "Admin accounts cannot purchase subscriptions." });
     return;
+  }
+  if (adminRows[0]?.isAdmin && adminTest) {
+    logger.warn({ userId, tier }, "ADMIN TEST CHECKOUT — real PayPal subscription will be created");
   }
 
   const planId = paypalPlanIdForTier(tier);

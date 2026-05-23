@@ -93,6 +93,10 @@ export default function Upgrade() {
   const [portalLoading, setPortalLoading] = useState(false);
   const [paypalEnabled, setPaypalEnabled] = useState(false);
   const isAdmin = me?.isAdmin ?? false;
+  // Admin-only toggle: lets the admin bypass the "no purchases" block and run
+  // a real checkout end-to-end to verify the payment portal. Real money will
+  // be charged — the warning banner makes this explicit.
+  const [adminTestMode, setAdminTestMode] = useState(false);
 
   useEffect(() => {
     getPaddleConfig()
@@ -189,7 +193,7 @@ export default function Upgrade() {
     }
     setLoadingTier(tier);
     try {
-      await openCheckout({ tier });
+      await openCheckout({ tier, adminTest: isAdmin && adminTestMode });
     } catch (e) {
       toast({
         title: "Checkout failed",
@@ -215,7 +219,7 @@ export default function Upgrade() {
       const res = await authFetch("/api/billing/paypal/create-subscription", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ tier, adminTest: isAdmin && adminTestMode }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -289,13 +293,30 @@ export default function Upgrade() {
 
         <Show when="signed-in">
           {isAdmin && (
-            <div className="mb-8 border border-primary/60 bg-primary/10 p-4 text-center">
-              <p className="text-sm font-mono text-primary uppercase tracking-wider">
-                Admin account — billing bypassed
-              </p>
-              <p className="text-xs font-mono text-muted-foreground mt-1">
-                You have unlimited usage and cannot purchase subscriptions.
-              </p>
+            <div className={`mb-8 border p-4 ${adminTestMode ? "border-destructive/60 bg-destructive/10" : "border-primary/60 bg-primary/10"}`}>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="text-left">
+                  <p className={`text-sm font-mono uppercase tracking-wider ${adminTestMode ? "text-destructive" : "text-primary"}`}>
+                    {adminTestMode ? "Admin test checkout: ON — real charges will apply" : "Admin account — billing bypassed"}
+                  </p>
+                  <p className="text-xs font-mono text-muted-foreground mt-1">
+                    {adminTestMode
+                      ? "Buttons below run REAL Paddle / PayPal checkouts. Use a test card or cancel after the portal opens."
+                      : "You have unlimited usage and cannot purchase subscriptions."}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdminTestMode((v) => !v)}
+                  className={`shrink-0 px-3 py-2 font-mono text-[11px] uppercase tracking-widest border transition-colors ${
+                    adminTestMode
+                      ? "border-destructive text-destructive hover:bg-destructive hover:text-destructive-foreground"
+                      : "border-primary text-primary hover:bg-primary hover:text-primary-foreground"
+                  }`}
+                >
+                  {adminTestMode ? "Disable test mode" : "Enable test checkout"}
+                </button>
+              </div>
             </div>
           )}
           {status?.hasSubscription && (
@@ -411,7 +432,7 @@ export default function Upgrade() {
                   <>
                     <button
                       type="button"
-                      disabled={isCurrent || loadingTier !== null || loadingPaypalTier !== null || isAdmin}
+                      disabled={isCurrent || loadingTier !== null || loadingPaypalTier !== null || (isAdmin && !adminTestMode)}
                       onClick={() => handleUpgrade(tier.id as PaidTier)}
                       className={`w-full py-3 font-mono text-xs uppercase tracking-wider border transition-colors ${
                         highlight
@@ -435,7 +456,7 @@ export default function Upgrade() {
                     {paypalEnabled && !isCurrent && (
                       <button
                         type="button"
-                        disabled={loadingTier !== null || loadingPaypalTier !== null || isAdmin}
+                        disabled={loadingTier !== null || loadingPaypalTier !== null || (isAdmin && !adminTestMode)}
                         onClick={() => handlePaypalUpgrade(tier.id as PaidTier)}
                         className="mt-2 w-full py-2 font-mono text-[11px] uppercase tracking-wider border border-[#ffc439]/60 text-[#ffc439] bg-transparent hover:bg-[#ffc439]/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >

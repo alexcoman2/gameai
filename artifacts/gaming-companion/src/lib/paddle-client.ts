@@ -45,6 +45,7 @@ export async function loadPaddle(): Promise<Paddle | null> {
 
 export async function openCheckout(opts: {
   tier: "pro" | "pro_plus" | "elite";
+  adminTest?: boolean;
 }): Promise<void> {
   const paddle = await loadPaddle();
   if (!paddle) {
@@ -56,7 +57,7 @@ export async function openCheckout(opts: {
   const res = await authFetch("/api/billing/checkout", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tier: opts.tier }),
+    body: JSON.stringify({ tier: opts.tier, adminTest: opts.adminTest === true }),
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
