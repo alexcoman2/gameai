@@ -99,8 +99,8 @@ export async function checkUsageCap(
     };
   }
 
-  // Free plan: hard-block at monthly chat allowance (no overage).
-  if (plan === "free" && kind === "chat" && monthly.chats >= cfg.monthlyChats) {
+  // No-overage plans (currently free): hard-block at the allowance.
+  if (!cfg.allowsOverage && kind === "chat" && monthly.chats >= cfg.monthlyChats) {
     return {
       allowed: false,
       reason: `Free plan limit reached (${cfg.monthlyChats} chats / month). Upgrade to Pro for more.`,
@@ -109,10 +109,19 @@ export async function checkUsageCap(
       daily,
     };
   }
+  if (!cfg.allowsOverage && kind === "watch" && monthly.watchSeconds >= cfg.monthlyWatchSeconds) {
+    const mins = Math.round(cfg.monthlyWatchSeconds / 60);
+    return {
+      allowed: false,
+      reason: `Free Watch trial used (${mins} min / month). Upgrade to Pro for ongoing Watch Mode.`,
+      plan,
+      monthly,
+      daily,
+    };
+  }
 
-  // Paid plans: enforce monthly allowance + overage absorbed by daily $5 cap.
-  // Hard stop at 5x the included allowance to prevent runaway usage even with overage.
-  if ((plan === "pro" || plan === "elite") && kind === "chat") {
+  // Metered plans: allowance + overage, with 5x hard ceiling + daily $5 fuse.
+  if (cfg.allowsOverage && kind === "chat") {
     const hardCeiling = cfg.monthlyChats * 5;
     if (monthly.chats >= hardCeiling) {
       return {
@@ -124,7 +133,7 @@ export async function checkUsageCap(
       };
     }
   }
-  if ((plan === "pro" || plan === "elite") && kind === "watch") {
+  if (cfg.allowsOverage && kind === "watch") {
     const hardCeiling = cfg.monthlyWatchSeconds * 5;
     if (monthly.watchSeconds >= hardCeiling) {
       return {

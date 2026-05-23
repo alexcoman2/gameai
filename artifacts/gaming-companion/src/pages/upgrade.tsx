@@ -21,39 +21,43 @@ const TIERS = [
     icon: Gift,
     features: [
       "25 chats / month",
+      "30 min Watch Mode trial",
       "Game detection",
-      "Manual screenshot capture",
       "Conversation history",
     ],
-    notIncluded: ["Watch Mode (continuous screen vision)"],
+    notIncluded: ["No overage — hard caps"],
+    overage: null,
   },
   {
     id: "pro" as const,
     name: "Pro",
-    price: "$17.99",
+    price: "$29",
     period: "month",
     icon: Zap,
     highlight: true,
     features: [
-      "200 chats / month",
-      "5 hours of Watch Mode",
-      "Everything in Free",
+      "200 chats included",
+      "2 hours Watch Mode included",
+      "5-second observation sampling",
+      "Pay-as-you-go beyond included",
     ],
     notIncluded: [],
+    overage: "Then $0.05 / chat, $0.20 / min watch",
   },
   {
     id: "elite" as const,
     name: "Elite",
-    price: "$35",
+    price: "$99",
     period: "month",
     icon: Crown,
     features: [
-      "500 chats / month",
-      "15 hours of Watch Mode",
+      "750 chats included",
+      "8 hours Watch Mode included",
+      "Lower overage rates",
       "Priority during peak load",
-      "Everything in Pro",
     ],
     notIncluded: [],
+    overage: "Then $0.04 / chat, $0.15 / min watch",
   },
 ];
 
@@ -226,7 +230,7 @@ export default function Upgrade() {
                     / {tier.period}
                   </span>
                 </div>
-                <ul className="flex-1 space-y-2 mb-6">
+                <ul className="flex-1 space-y-2 mb-4">
                   {tier.features.map((f) => (
                     <li
                       key={f}
@@ -239,13 +243,23 @@ export default function Upgrade() {
                   {tier.notIncluded.map((f) => (
                     <li
                       key={f}
-                      className="flex items-start gap-2 text-sm text-muted-foreground font-mono line-through opacity-60"
+                      className="flex items-start gap-2 text-xs text-muted-foreground font-mono opacity-60"
                     >
                       <span className="w-4 h-4 mt-0.5 shrink-0" />
                       <span>{f}</span>
                     </li>
                   ))}
                 </ul>
+                {tier.overage && (
+                  <div className="mb-4 pb-4 border-b border-border/50">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground mb-1">
+                      Overage
+                    </p>
+                    <p className="text-xs font-mono text-foreground/80">
+                      {tier.overage}
+                    </p>
+                  </div>
+                )}
                 {isUpgradeable && (
                   <button
                     type="button"
