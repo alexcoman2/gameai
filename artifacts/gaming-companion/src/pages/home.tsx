@@ -31,6 +31,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { useChat } from "@/context/chat-context";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
+import { checkUsageWarnings } from "@/lib/usage-warnings";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -311,6 +312,9 @@ export default function Home() {
               if (data.gameName) {
                 setVisionDetectedGame(data.gameName);
               }
+              // Watch ticks accumulate ~12 minutes/hour of allowance — fire
+              // 80%/100% warnings here too so users see them in real time.
+              void checkUsageWarnings(toast);
             }
           } catch {
             // Silent fail — observation is best-effort
@@ -523,6 +527,10 @@ export default function Home() {
       if (activeSessionId) {
         queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
       }
+
+      // Fire 80% / 100% allowance warnings once per period. Best-effort —
+      // failure here must not break the chat flow.
+      void checkUsageWarnings(toast);
     } catch (err: unknown) {
       const apiErr = err as { response?: { data?: { error?: string } }; message?: string };
       const errMsg =
