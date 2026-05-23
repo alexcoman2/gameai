@@ -92,7 +92,7 @@ export type CapCheck = {
 
 export async function checkUsageCap(
   userId: string,
-  kind: "chat" | "watch",
+  kind: "chat" | "watch" | "voice",
   email?: string | null,
 ): Promise<CapCheck> {
   const user = await getOrCreateUser(userId, email);
@@ -117,6 +117,19 @@ export async function checkUsageCap(
     return {
       allowed: false,
       reason: `Daily spend safety cap reached ($${(DAILY_HARD_CAP_CENTS / 100).toFixed(2)}). Resets at 00:00 UTC.`,
+      plan,
+      monthly,
+      daily,
+    };
+  }
+
+  // Voice mode is a paid feature — block Free even before the daily fuse
+  // check above can fire. (The fuse check still runs above so admins are
+  // exempt and pre-check totals stay accurate.)
+  if (kind === "voice" && !cfg.allowsVoice) {
+    return {
+      allowed: false,
+      reason: "Voice mode requires a Pro, Pro+, or Elite subscription. Upgrade to enable voice.",
       plan,
       monthly,
       daily,

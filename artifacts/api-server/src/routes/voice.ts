@@ -2,9 +2,8 @@ import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { IS_HOSTED } from "../lib/server-mode.js";
 import { logger } from "../lib/logger.js";
-import { getOrCreateUser, recordUsage } from "../lib/usage.js";
+import { checkUsageCap, recordUsage } from "../lib/usage.js";
 import {
-  PLAN_CONFIGS,
   VOICE_STT_MICROCENTS_PER_SECOND,
   VOICE_TTS_MICROCENTS_PER_CHAR,
 } from "../lib/plans.js";
@@ -12,26 +11,6 @@ import {
 const router = Router();
 
 const protect = IS_HOSTED ? [requireAuth] : [];
-
-// Voice is a paid feature — gate on hosted mode where Clerk auth is enforced
-// and we have a real userId. Returns 403 if the user's plan does not include
-// voice; the client surfaces this as an upgrade prompt.
-async function ensureVoiceAllowed(
-  userId: string,
-  email: string | null | undefined,
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  const user = await getOrCreateUser(userId, email);
-  if (user.isAdmin) return { ok: true };
-  const cfg = PLAN_CONFIGS[user.plan];
-  if (!cfg.allowsVoice) {
-    return {
-      ok: false,
-      status: 403,
-      error: "Voice mode requires a Pro, Pro+, or Elite subscription. Upgrade to enable voice.",
-    };
-  }
-  return { ok: true };
-}
 
 // Speech-to-text via OpenAI Whisper.
 //
@@ -86,6 +65,16 @@ router.post("/voice/transcribe", ...protect, async (req, res) => {
   if (!apiKey) {
     res.status(500).json({ error: "Transcription is not configured on the server." });
     return;
+  }
+
+  // Gate: plan must include voice AND the user must not have tripped the
+  // daily $5 fuse. checkUsageCap handles both, plus admin bypass.
+  if (req.userId) {
+    const cap = await checkUsageCap(req.userId, "voice", req.userEmail);
+    if (!cap.allowed) {
+      res.status(403).json({ error: cap.reason ?? "Voice not allowed" });
+      return;
+    }
   }
 
   try {
@@ -234,6 +223,15 @@ router.post("/voice/speak", ...protect, async (req, res) => {
   if (!apiKey) {
     res.status(500).json({ error: "TTS is not configured on the server." });
     return;
+  }
+
+  // Gate: plan must include voice AND daily fuse must not be tripped.
+  if (req.userId) {
+    const cap = await checkUsageCap(req.userId, "voice", req.userEmail);
+    if (!cap.allowed) {
+      res.status(403).json({ error: cap.reason ?? "Voice not allowed" });
+      return;
+    }
   }
 
   try {
