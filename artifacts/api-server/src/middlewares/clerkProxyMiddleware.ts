@@ -95,6 +95,25 @@ export function clerkProxyMiddleware(): RequestHandler {
           proxyReq.setHeader("X-Forwarded-For", clientIp);
         }
       },
+      proxyRes: (proxyRes, req) => {
+        // We rewrote the upstream Origin to satisfy Clerk's same-origin
+        // check, so FAPI's CORS response headers come back addressed to
+        // the proxy domain — which the browser will reject as a mismatch
+        // against its own (different) Origin. Rewrite the CORS headers
+        // back to the original client Origin so the browser accepts them.
+        const clientOrigin = req.headers["origin"];
+        if (clientOrigin) {
+          proxyRes.headers["access-control-allow-origin"] = clientOrigin;
+          proxyRes.headers["access-control-allow-credentials"] = "true";
+          const vary = proxyRes.headers["vary"];
+          const varyStr = Array.isArray(vary) ? vary.join(", ") : vary || "";
+          if (!/\borigin\b/i.test(varyStr)) {
+            proxyRes.headers["vary"] = varyStr
+              ? `${varyStr}, Origin`
+              : "Origin";
+          }
+        }
+      },
     },
   }) as RequestHandler;
 }
