@@ -1,7 +1,43 @@
 import { Link, useLocation } from "wouter";
-import { Settings, MessageSquare, Crosshair } from "lucide-react";
+import { Settings, MessageSquare, Crosshair, LogIn, LogOut } from "lucide-react";
+import { Show, useUser, useClerk } from "@clerk/react";
 import { useDetectGame, getDetectGameQueryKey } from "@workspace/api-client-react";
 import { useGameContext } from "@/context/game-context";
+
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+function AuthPill() {
+  const { user } = useUser();
+  const { signOut } = useClerk();
+  return (
+    <>
+      <Show when="signed-out">
+        <Link
+          href="/sign-in"
+          className="flex items-center gap-2 px-3 py-2 border border-primary/40 text-primary text-xs font-mono uppercase tracking-wider hover:bg-primary hover:text-primary-foreground transition-colors"
+        >
+          <LogIn className="w-4 h-4" />
+          Sign in
+        </Link>
+      </Show>
+      <Show when="signed-in">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider hidden sm:inline">
+            {user?.primaryEmailAddress?.emailAddress ?? user?.id?.slice(0, 8)}
+          </span>
+          <button
+            type="button"
+            onClick={() => signOut({ redirectUrl: basePath || "/" })}
+            title="Sign out"
+            className="p-2 border border-transparent text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+        </div>
+      </Show>
+    </>
+  );
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -85,6 +121,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link href="/settings" className={`p-2 border transition-colors hover:bg-primary hover:text-primary-foreground ${location === "/settings" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
             <Settings className="w-5 h-5" />
           </Link>
+          <div className="w-px h-6 bg-border" />
+          <AuthPill />
         </nav>
       </header>
 

@@ -75,14 +75,16 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@clerk/react": "^6.7.0",
+    "@clerk/themes": "^2.4.57",
     "@radix-ui/react-visually-hidden": "^1.2.4"
   },
   "optionalDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "*",
     "@rollup/rollup-linux-x64-gnu": "*",
-    "lightningcss-win32-x64-msvc": "*",
-    "lightningcss-linux-x64-gnu": "*",
+    "@rollup/rollup-win32-x64-msvc": "*",
+    "@tailwindcss/oxide-linux-x64-gnu": "*",
     "@tailwindcss/oxide-win32-x64-msvc": "*",
-    "@tailwindcss/oxide-linux-x64-gnu": "*"
+    "lightningcss-linux-x64-gnu": "*",
+    "lightningcss-win32-x64-msvc": "*"
   }
 }

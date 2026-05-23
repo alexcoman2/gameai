@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 56" width="200" height="56">
+  <g fill="none" stroke="hsl(154 100% 50%)" stroke-width="2">
+    <circle cx="28" cy="28" r="14"/>
+    <line x1="28" y1="8" x2="28" y2="20"/>
+    <line x1="28" y1="36" x2="28" y2="48"/>
+    <line x1="8" y1="28" x2="20" y2="28"/>
+    <line x1="36" y1="28" x2="48" y2="28"/>
+  </g>
+  <text x="62" y="36" font-family="'Space Mono', monospace" font-size="22" font-weight="700" fill="hsl(154 100% 50%)" letter-spacing="2">UNSTUCK</text>
+</svg>
