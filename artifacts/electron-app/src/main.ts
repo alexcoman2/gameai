@@ -311,7 +311,47 @@ function createWindow(): void {
     autoHideMenuBar: true,
   });
 
-  void mainWindow.loadURL(`http://${SERVER_HOST}:${SERVER_PORT}`);
+  const mainUrl = `http://${SERVER_HOST}:${SERVER_PORT}`;
+  appendServerLog(`[main] mainWindow.loadURL → ${mainUrl}\n`);
+
+  // Hard diagnostic: log every navigation, every load failure, and every
+  // window-open attempt. If anything ever sends us off-origin (e.g. away
+  // from 127.0.0.1:8765 to the hosted Replit URL) it will be recorded here
+  // with the source URL, the destination URL, and the reason.
+  mainWindow.webContents.on("did-start-loading", () => {
+    appendServerLog(`[main] webContents did-start-loading\n`);
+  });
+  mainWindow.webContents.on(
+    "did-navigate",
+    (_evt, url, httpResponseCode, httpStatusText) => {
+      appendServerLog(
+        `[main] did-navigate url=${url} code=${httpResponseCode} status=${httpStatusText}\n`,
+      );
+    },
+  );
+  mainWindow.webContents.on("did-navigate-in-page", (_evt, url) => {
+    appendServerLog(`[main] did-navigate-in-page url=${url}\n`);
+  });
+  mainWindow.webContents.on(
+    "will-redirect",
+    (_evt, url) => {
+      appendServerLog(`[main] will-redirect → ${url}\n`);
+    },
+  );
+  mainWindow.webContents.on(
+    "did-fail-load",
+    (_evt, errorCode, errorDescription, validatedURL, isMainFrame) => {
+      appendServerLog(
+        `[main] did-fail-load mainFrame=${isMainFrame} url=${validatedURL} code=${errorCode} desc=${errorDescription}\n`,
+      );
+    },
+  );
+  mainWindow.webContents.setWindowOpenHandler((details) => {
+    appendServerLog(`[main] window-open intercepted url=${details.url}\n`);
+    return { action: "deny" };
+  });
+
+  void mainWindow.loadURL(mainUrl);
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
