@@ -99,7 +99,12 @@ export default function Home() {
         setIsTranscribing(true);
         const text = await recorderRef.current!.stopAndTranscribe();
         if (text && !isLikelyHallucination(text)) {
-          setInput((prev) => (prev ? `${prev} ${text}` : text));
+          // End-to-end voice: auto-send the transcript instead of dumping it
+          // into the composer. If the user has typed something into the
+          // composer already, prepend that so we don't silently lose it.
+          const composed = input.trim() ? `${input.trim()} ${text}` : text;
+          setInput("");
+          void handleSend(composed);
         } else {
           toast({
             title: "No speech detected",
@@ -668,9 +673,17 @@ export default function Home() {
     );
   };
 
-  const handleSend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || sending) return;
+  const handleSend = async (eOrOverride?: React.FormEvent | string) => {
+    // Voice path auto-sends the transcript by passing a string here, bypassing
+    // the composer. Form submit path passes the event. This mirrors the
+    // override pattern already used by overlay.tsx for PTT auto-send.
+    const override =
+      typeof eOrOverride === "string" ? eOrOverride : undefined;
+    if (eOrOverride && typeof eOrOverride !== "string") {
+      eOrOverride.preventDefault();
+    }
+    const messageText = (override ?? input).trim();
+    if (!messageText || sending) return;
     void import("@/lib/posthog").then(({ trackEvent }) =>
       trackEvent("chat_message_sent", {
         game: gameNameOverride.trim() || visionDetectedGame || gameDetection?.gameName || gameDetection?.processName || null,
@@ -697,14 +710,17 @@ export default function Home() {
     const userMessage = {
       id: Date.now().toString(),
       role: "user" as const,
-      content: input,
+      content: messageText,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       screenshot: sentScreenshot
     };
 
     addMessage(userMessage);
-    const messageContent = input;
-    setInput("");
+    const messageContent = messageText;
+    // Only clear the composer when the send came from typed input — the voice
+    // auto-send path never touched it and the user may have parked a
+    // half-finished follow-up question there.
+    if (override === undefined) setInput("");
 
     setIncludeScreenshot(false);
     setPendingScreenshot(null);
