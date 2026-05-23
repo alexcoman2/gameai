@@ -72,10 +72,19 @@ export function clerkProxyMiddleware(): RequestHandler {
       proxyReq: (proxyReq, req) => {
         const protocol = req.headers["x-forwarded-proto"] || "https";
         const host = getClerkProxyHost(req) || "";
-        const proxyUrl = `${protocol}://${host}${CLERK_PROXY_PATH}`;
+        const proxyOrigin = `${protocol}://${host}`;
+        const proxyUrl = `${proxyOrigin}${CLERK_PROXY_PATH}`;
 
         proxyReq.setHeader("Clerk-Proxy-Url", proxyUrl);
         proxyReq.setHeader("Clerk-Secret-Key", secretKey);
+
+        // Clerk Production keys validate that the incoming Origin header
+        // matches (or is a subdomain of) the proxy URL. When the request
+        // comes from a desktop client (e.g. Electron at 127.0.0.1), the
+        // browser-supplied Origin won't match. Rewrite Origin and Referer
+        // to the proxy's own origin so FAPI accepts the call.
+        proxyReq.setHeader("Origin", proxyOrigin);
+        proxyReq.setHeader("Referer", `${proxyOrigin}/`);
 
         const xff = req.headers["x-forwarded-for"];
         const clientIp =
