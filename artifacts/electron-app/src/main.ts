@@ -57,6 +57,12 @@ const SERVER_PORT = 8765;
 const SERVER_HOST = "127.0.0.1";
 const OVERLAY_HOTKEY_PRIMARY = "Control+Shift+Space";
 const OVERLAY_HOTKEY_FALLBACK = "Alt+Space";
+// Push-to-talk: tap once to start recording, tap again to stop & auto-send.
+// Lets the user ask a quick voice question mid-game without ever reaching
+// for the mouse. Different keys from the overlay-show hotkey so a stuck
+// game-input doesn't trigger both at once.
+const PTT_HOTKEY_PRIMARY = "Control+Shift+V";
+const PTT_HOTKEY_FALLBACK = "Alt+V";
 const OVERLAY_WIDTH = 440;
 const OVERLAY_HEIGHT = 560;
 
@@ -521,6 +527,10 @@ function createOverlayWindow(): void {
 
   overlayWindow.on("closed", () => {
     overlayWindow = null;
+    // Next overlay launch will mount a fresh renderer that must
+    // re-handshake before PTT events can be delivered.
+    pttListenerReady = false;
+    pendingPttToggles = 0;
   });
 }
 
@@ -554,6 +564,34 @@ function toggleOverlay(): void {
   }
 }
 
+// Tracks whether the overlay renderer has registered its PTT listener.
+// Set false whenever a new overlay window is created (cold launch or
+// after the user has fully closed it) and flipped true by the renderer's
+// `overlay-ptt-ready` handshake. Any PTT presses arriving while false
+// are queued and replayed once the renderer signals it's listening, so
+// the first tap on a cold launch actually starts a recording instead
+// of being silently dropped against a not-yet-mounted React listener.
+let pttListenerReady = false;
+let pendingPttToggles = 0;
+
+function pttHotkeyPressed(): void {
+  // Ensure the overlay is visible first — the user needs to see the
+  // recording pulse + transcript appear so they know it's listening.
+  const fresh = !overlayWindow || overlayWindow.isDestroyed();
+  if (fresh) {
+    createOverlayWindow();
+    showOverlay();
+  } else if (overlayWindow && !overlayWindow.isVisible()) {
+    showOverlay();
+  }
+  if (pttListenerReady && overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.webContents.send("overlay-ptt-toggle");
+  } else {
+    // Queue it — `overlay-ptt-ready` will drain.
+    pendingPttToggles += 1;
+  }
+}
+
 function registerOverlayHotkeys(): void {
   // Register BOTH bindings when available. Some fullscreen games intercept
   // one of them at a low level (e.g. Ctrl+Shift+Space), so giving the user
@@ -561,6 +599,8 @@ function registerOverlayHotkeys(): void {
   // overlay.
   globalShortcut.register(OVERLAY_HOTKEY_PRIMARY, toggleOverlay);
   globalShortcut.register(OVERLAY_HOTKEY_FALLBACK, toggleOverlay);
+  globalShortcut.register(PTT_HOTKEY_PRIMARY, pttHotkeyPressed);
+  globalShortcut.register(PTT_HOTKEY_FALLBACK, pttHotkeyPressed);
 }
 
 process.on("uncaughtException", (err) => {
@@ -857,6 +897,30 @@ ipcMain.handle("overlay-get-hotkey", () => {
   }
   if (globalShortcut.isRegistered(OVERLAY_HOTKEY_FALLBACK)) {
     return OVERLAY_HOTKEY_FALLBACK;
+  }
+  return null;
+});
+
+ipcMain.on("overlay-ptt-ready", () => {
+  pttListenerReady = true;
+  // Replay any presses captured before the renderer was listening.
+  // Coalesce: if the user hammered the key three times before the window
+  // mounted, that's still just "start now". Anything more granular would
+  // get the user into a tangled half-recording state.
+  if (pendingPttToggles > 0 && overlayWindow && !overlayWindow.isDestroyed()) {
+    pendingPttToggles = 0;
+    overlayWindow.webContents.send("overlay-ptt-toggle");
+  } else {
+    pendingPttToggles = 0;
+  }
+});
+
+ipcMain.handle("overlay-get-ptt-hotkey", () => {
+  if (globalShortcut.isRegistered(PTT_HOTKEY_PRIMARY)) {
+    return PTT_HOTKEY_PRIMARY;
+  }
+  if (globalShortcut.isRegistered(PTT_HOTKEY_FALLBACK)) {
+    return PTT_HOTKEY_FALLBACK;
   }
   return null;
 });

@@ -19,10 +19,20 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("overlay-open-main"),
   overlayGetHotkey: (): Promise<string | null> =>
     ipcRenderer.invoke("overlay-get-hotkey"),
+  overlayGetPttHotkey: (): Promise<string | null> =>
+    ipcRenderer.invoke("overlay-get-ptt-hotkey"),
   onOverlayShown: (cb: () => void): (() => void) => {
     const listener = () => cb();
     ipcRenderer.on("overlay-shown", listener);
     return () => ipcRenderer.removeListener("overlay-shown", listener);
+  },
+  onPttToggle: (cb: () => void): (() => void) => {
+    const listener = () => cb();
+    ipcRenderer.on("overlay-ptt-toggle", listener);
+    // Tell main that a listener is live — main may have queued PTT
+    // presses captured before the renderer mounted.
+    ipcRenderer.send("overlay-ptt-ready");
+    return () => ipcRenderer.removeListener("overlay-ptt-toggle", listener);
   },
 
   isElectron: true as const,

@@ -16,7 +16,9 @@ type ElectronAPI = {
   overlayHide?: () => Promise<boolean>;
   overlayOpenMain?: () => Promise<boolean>;
   overlayGetHotkey?: () => Promise<string | null>;
+  overlayGetPttHotkey?: () => Promise<string | null>;
   onOverlayShown?: (cb: () => void) => () => void;
+  onPttToggle?: (cb: () => void) => () => void;
 };
 
 function getElectronAPI(): ElectronAPI | null {
@@ -114,16 +116,22 @@ export default function OverlayPage() {
   const [sending, setSending] = useState(false);
   const [attachScreenshot, setAttachScreenshot] = useState(true);
   const [hotkey, setHotkey] = useState<string | null>(null);
+  const [pttHotkey, setPttHotkey] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  // True when the current recording was initiated by the PTT hotkey, false
+  // when it came from the mic button. Determines whether stopping auto-sends
+  // the transcript or just pastes it into the composer.
+  const isPttRef = useRef(false);
   const [ttsOn, setTtsOn] = useState(isTtsEnabled());
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<ReturnType<typeof createVoiceRecorder> | null>(null);
 
-  // Resolve the actual registered hotkey label to show in the empty state.
+  // Resolve the actual registered hotkey labels to show in the empty state.
   useEffect(() => {
     void electronAPI?.overlayGetHotkey?.().then((h) => setHotkey(h));
+    void electronAPI?.overlayGetPttHotkey?.().then((h) => setPttHotkey(h));
   }, [electronAPI]);
 
   // Auto-focus the input each time the overlay is shown via hotkey.
@@ -156,8 +164,11 @@ export default function OverlayPage() {
     }
   }, [turns, sending]);
 
-  const handleSend = async () => {
-    const message = input.trim();
+  const handleSend = async (override?: string) => {
+    // PTT (push-to-talk) auto-sends a transcribed message directly without
+    // touching the composer state, so it can pass the text via `override`.
+    // The regular submit path leaves it undefined and we read from `input`.
+    const message = (override ?? input).trim();
     if (!message || sending) return;
 
     let screenshot: string | null = null;
@@ -176,7 +187,9 @@ export default function OverlayPage() {
       screenshot,
     };
     setTurns((prev) => [...prev, userTurn]);
-    setInput("");
+    // Only clear the composer if the send came from typed input — PTT never
+    // touched it and the user may have a half-finished question parked there.
+    if (override === undefined) setInput("");
     setSending(true);
 
     try {
@@ -257,16 +270,27 @@ export default function OverlayPage() {
     }
   };
 
-  const toggleMic = async () => {
+  const toggleMic = async (source: "mic" | "ptt" = "mic") => {
     if (isTranscribing) return;
     if (isRecording) {
+      // Honor the source the recording was started from, not the source
+      // that ended it. (PTT-started recording always auto-sends, even if
+      // the user happens to click the mic button to stop it.)
+      const wasPtt = isPttRef.current;
+      isPttRef.current = false;
       try {
         setIsRecording(false);
         setIsTranscribing(true);
         const text = await recorderRef.current!.stopAndTranscribe();
         if (text && !isLikelyHallucination(text)) {
-          setInput((prev) => (prev ? `${prev} ${text}` : text));
-          requestAnimationFrame(() => inputRef.current?.focus());
+          if (wasPtt) {
+            // Auto-send: PTT is meant to be hands-free, so we skip the
+            // composer entirely. handleSend(text) bypasses input state.
+            void handleSend(text);
+          } else {
+            setInput((prev) => (prev ? `${prev} ${text}` : text));
+            requestAnimationFrame(() => inputRef.current?.focus());
+          }
         } else {
           setTurns((prev) => [
             ...prev,
@@ -295,8 +319,10 @@ export default function OverlayPage() {
     try {
       recorderRef.current = createVoiceRecorder();
       await recorderRef.current.start();
+      isPttRef.current = source === "ptt";
       setIsRecording(true);
     } catch (err) {
+      isPttRef.current = false;
       setTurns((prev) => [
         ...prev,
         {
@@ -307,6 +333,19 @@ export default function OverlayPage() {
       ]);
     }
   };
+
+  // Subscribe to the global PTT hotkey fired from the Electron main process.
+  // Refs (not state) for toggleMic so the listener doesn't need to re-bind
+  // every render and we don't fight stale closures.
+  const toggleMicRef = useRef(toggleMic);
+  toggleMicRef.current = toggleMic;
+  useEffect(() => {
+    if (!electronAPI?.onPttToggle) return;
+    const off = electronAPI.onPttToggle(() => {
+      void toggleMicRef.current("ptt");
+    });
+    return off;
+  }, [electronAPI]);
 
   const toggleTts = () => {
     const next = !ttsOn;
@@ -326,6 +365,9 @@ export default function OverlayPage() {
 
   const hotkeyLabel = hotkey
     ? hotkey.replace("Control", "Ctrl").replace(/\+/g, " + ")
+    : null;
+  const pttHotkeyLabel = pttHotkey
+    ? pttHotkey.replace("Control", "Ctrl").replace(/\+/g, " + ")
     : null;
 
   return (
@@ -416,6 +458,15 @@ export default function OverlayPage() {
                   <span className="px-1.5 py-0.5 border border-primary/30 text-primary/90">
                     {hotkeyLabel}
                   </span>
+                </div>
+              )}
+              {pttHotkeyLabel && (
+                <div className="text-[10px] text-muted-foreground/70">
+                  Push-to-talk{" "}
+                  <span className="px-1.5 py-0.5 border border-primary/30 text-primary/90">
+                    {pttHotkeyLabel}
+                  </span>{" "}
+                  — tap to start, tap again to send
                 </div>
               )}
               {isLoaded && !isSignedIn && (
