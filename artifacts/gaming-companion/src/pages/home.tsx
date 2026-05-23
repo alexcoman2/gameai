@@ -647,7 +647,7 @@ export default function Home() {
       <Card className="flex-1 flex flex-col min-h-0 border-border rounded-none bg-card/50 overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
 
-        <div className="flex items-center justify-between px-4 pt-3 pb-0">
+        <div className="flex items-center justify-between gap-2 flex-wrap px-4 pt-3 pb-0 min-w-0">
           <Sheet open={sessionsOpen} onOpenChange={setSessionsOpen}>
             <SheetTrigger asChild>
               <Button
@@ -805,7 +805,7 @@ export default function Home() {
             </SheetContent>
           </Sheet>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 flex-wrap justify-end min-w-0">
             {isElectron && (
               <div className="flex items-center">
                 <Button
@@ -992,7 +992,7 @@ export default function Home() {
           </div>
         )}
 
-        <form onSubmit={handleSend} className="flex gap-2">
+        <form onSubmit={handleSend} className="flex flex-wrap gap-2 min-w-0">
           <Button
             type="button"
             onClick={() => void toggleMic()}
@@ -1032,7 +1032,7 @@ export default function Home() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder={isRecording ? "LISTENING..." : isTranscribing ? "TRANSCRIBING..." : "ENTER COMMAND OR QUERY..."}
-            className={`flex-1 font-mono rounded-none border-border focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/50 bg-card/50 placeholder:tracking-widest ${compact ? "h-8 text-xs" : "h-12"}`}
+            className={`flex-1 min-w-[160px] font-mono rounded-none border-border focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/50 bg-card/50 placeholder:tracking-widest ${compact ? "h-8 text-xs" : "h-12"}`}
             disabled={sendMutation.isPending || isRecording || isTranscribing}
           />
           <Button
@@ -1045,8 +1045,8 @@ export default function Home() {
           </Button>
         </form>
 
-        {!compact && <div className="flex flex-col gap-2 p-3 bg-card/50 border border-border">
-          <div className="flex items-center gap-4">
+        {!compact && <div className="flex flex-col gap-2 p-3 bg-card/50 border border-border min-w-0">
+          <div className="flex items-center gap-4 flex-wrap min-w-0">
             <Button
               type="button"
               variant="outline"
@@ -1075,9 +1075,9 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap min-w-0">
             <span className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground whitespace-nowrap">Game Override:</span>
-            <div className="relative flex-1 flex items-center">
+            <div className="relative flex-1 min-w-[140px] flex items-center">
               <Input
                 value={gameNameOverride}
                 onChange={(e) => setGameNameOverride(e.target.value)}
