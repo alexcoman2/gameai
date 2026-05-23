@@ -6,6 +6,7 @@ import {
   desktopCapturer,
   globalShortcut,
   screen,
+  session,
   shell,
   utilityProcess,
   type UtilityProcess,
@@ -540,8 +541,82 @@ process.on("unhandledRejection", (reason) => {
   appendServerLog(`[main] unhandledRejection: ${String(reason)}\n`);
 });
 
+// Clerk's OAuth callback lands on the hosted proxy host
+// (game-companion-ai.replit.app) and sets cookies scoped there. Our app
+// runs at http://127.0.0.1:8765, so document.cookie at that origin can't
+// see them and Clerk reports "signed out". Mirror Clerk-related cookies
+// from the hosted proxy host onto the local origin inside Electron's
+// shared cookie store so the local app sees the session.
+function installClerkCookieMirror(): void {
+  const cookies = session.defaultSession.cookies;
+  const PROXY_HOST_SUFFIX = "game-companion-ai.replit.app";
+  const LOCAL_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
+  // Clerk cookies: __client, __session, __client_uat, __clerk_db_jwt,
+  // and any __refresh_* / __session_* variants. Mirror anything that
+  // looks Clerk-shaped so we don't have to chase new names.
+  const isClerkCookie = (name: string): boolean =>
+    name.startsWith("__client") ||
+    name.startsWith("__session") ||
+    name.startsWith("__refresh") ||
+    name.startsWith("__clerk");
+
+  const mirrorCookie = async (
+    cookie: Electron.Cookie,
+    removed: boolean,
+  ): Promise<void> => {
+    if (!isClerkCookie(cookie.name)) return;
+    const domain = cookie.domain ?? "";
+    if (!domain.endsWith(PROXY_HOST_SUFFIX)) return;
+    try {
+      if (removed) {
+        await cookies.remove(LOCAL_URL, cookie.name);
+        appendServerLog(
+          `[main] clerk cookie mirror: removed ${cookie.name} on local\n`,
+        );
+        return;
+      }
+      await cookies.set({
+        url: LOCAL_URL,
+        name: cookie.name,
+        value: cookie.value,
+        path: cookie.path || "/",
+        httpOnly: cookie.httpOnly,
+        // http://127.0.0.1 cannot accept Secure cookies; force off.
+        secure: false,
+        // SameSite=None requires Secure; downgrade to Lax for localhost.
+        sameSite: cookie.sameSite === "no_restriction" ? "lax" : cookie.sameSite,
+        expirationDate: cookie.expirationDate,
+      });
+      appendServerLog(
+        `[main] clerk cookie mirror: set ${cookie.name} on local (from ${domain})\n`,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      appendServerLog(
+        `[main] clerk cookie mirror: failed for ${cookie.name}: ${msg}\n`,
+      );
+    }
+  };
+
+  // One-shot: copy any cookies already in the store (re-launch case).
+  void cookies
+    .get({ domain: PROXY_HOST_SUFFIX })
+    .then(async (existing) => {
+      for (const c of existing) {
+        await mirrorCookie(c, false);
+      }
+    })
+    .catch(() => {});
+
+  // Live: mirror every future change.
+  cookies.on("changed", (_evt, cookie, _cause, removed) => {
+    void mirrorCookie(cookie, removed);
+  });
+}
+
 app.whenReady().then(() => {
   setupLogFile();
+  installClerkCookieMirror();
   startServer()
     .then(() => {
       createWindow();
