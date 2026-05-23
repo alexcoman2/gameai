@@ -1,0 +1,21 @@
+name: Diagnostic Ping
+
+# Manual-only. Used to verify that GitHub Actions runners can pick up
+# this repo's jobs at all. If this runs but build-release.yml stays
+# queued, the issue is windows-latest runner availability. If this
+# also gets stuck queued, the issue is account-level.
+on:
+  workflow_dispatch:
+
+jobs:
+  ping-ubuntu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hello
+        run: echo "ubuntu runner picked up the job"
+
+  ping-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Hello
+        run: echo "windows runner picked up the job"
