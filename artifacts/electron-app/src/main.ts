@@ -1,13 +1,16 @@
 import {
   app,
   BrowserWindow,
+  dialog,
   ipcMain,
   desktopCapturer,
   globalShortcut,
   screen,
+  shell,
   utilityProcess,
   type UtilityProcess,
 } from "electron";
+import * as fs from "fs";
 import * as http from "http";
 import * as path from "path";
 
@@ -29,6 +32,74 @@ let overlayWindow: BrowserWindow | null = null;
 let serverProcess: UtilityProcess | null = null;
 let lastGameScreenshot: string | null = null;
 let backgroundCaptureTimer: ReturnType<typeof setInterval> | null = null;
+let logStream: fs.WriteStream | null = null;
+let logFilePath = "";
+const recentServerOutput: string[] = [];
+
+// ── Diagnostics ────────────────────────────────────────────────────────────
+// Packaged Electron apps on Windows have no visible stdout/stderr. When the
+// bundled server crashes, the user sees the process disappear from Task
+// Manager with no clue what happened. We fix that by:
+//   1. Mirroring everything the api-server writes to a real log file in
+//      app.getPath("logs"), and keeping the last ~200 lines in memory.
+//   2. If startup fails (server times out OR crashes early), pop a dialog
+//      showing the last lines + a button to open the full log file.
+//   3. Catching uncaught exceptions/rejections in the main process and
+//      surfacing them the same way before quitting.
+
+function setupLogFile(): void {
+  try {
+    const logsDir = app.getPath("logs");
+    fs.mkdirSync(logsDir, { recursive: true });
+    logFilePath = path.join(logsDir, "unstuck.log");
+    logStream = fs.createWriteStream(logFilePath, { flags: "a" });
+    const stamp = new Date().toISOString();
+    logStream.write(
+      `\n\n========== Unstuck launched ${stamp} (v${app.getVersion()}, ${process.platform} ${process.arch}) ==========\n`,
+    );
+  } catch {
+    // Disk full / permissions denied — log silently to avoid an infinite
+    // failure loop. The fallback dialog below will still fire.
+  }
+}
+
+function appendServerLog(chunk: string): void {
+  logStream?.write(chunk);
+  // Keep last ~200 lines in memory for the failure dialog.
+  recentServerOutput.push(chunk);
+  if (recentServerOutput.length > 200) {
+    recentServerOutput.splice(0, recentServerOutput.length - 200);
+  }
+}
+
+function showStartupFailureDialog(reason: string): void {
+  const tail = recentServerOutput.join("").split("\n").slice(-30).join("\n");
+  const detail = [
+    `Unstuck could not start its background service.`,
+    ``,
+    `Reason: ${reason}`,
+    ``,
+    `Last server output:`,
+    tail || "(no output captured)",
+    ``,
+    `Full log: ${logFilePath || "(unavailable)"}`,
+  ].join("\n");
+  const choice = dialog.showMessageBoxSync({
+    type: "error",
+    title: "Unstuck failed to start",
+    message: "Unstuck failed to start.",
+    detail,
+    buttons: logFilePath
+      ? ["Open log folder", "Quit"]
+      : ["Quit"],
+    defaultId: 0,
+    cancelId: logFilePath ? 1 : 0,
+    noLink: true,
+  });
+  if (logFilePath && choice === 0) {
+    void shell.showItemInFolder(logFilePath);
+  }
+}
 
 function getResourcePaths(): { serverEntry: string; staticDir: string } {
   if (app.isPackaged) {
@@ -86,6 +157,16 @@ function waitForServer(port: number): Promise<void> {
 async function startServer(): Promise<void> {
   const { serverEntry, staticDir } = getResourcePaths();
 
+  appendServerLog(
+    `[main] starting api-server\n  entry: ${serverEntry}\n  static: ${staticDir}\n  exists: ${fs.existsSync(serverEntry)}\n`,
+  );
+
+  if (!fs.existsSync(serverEntry)) {
+    throw new Error(
+      `api-server bundle missing at expected path: ${serverEntry}`,
+    );
+  }
+
   serverProcess = utilityProcess.fork(serverEntry, [], {
     env: {
       ...process.env,
@@ -101,13 +182,42 @@ async function startServer(): Promise<void> {
     stdio: "pipe",
   });
 
+  // Pipe server stdout/stderr to disk so we can actually see what went wrong
+  // on a user's machine. utilityProcess exposes these as Readable streams
+  // when stdio is "pipe".
+  serverProcess.stdout?.on("data", (chunk: Buffer) => {
+    appendServerLog(`[server stdout] ${chunk.toString("utf8")}`);
+  });
+  serverProcess.stderr?.on("data", (chunk: Buffer) => {
+    appendServerLog(`[server stderr] ${chunk.toString("utf8")}`);
+  });
+
+  let earlyExit: { code: number | null } | null = null;
   serverProcess.on("exit", (code) => {
+    appendServerLog(`[main] server process exited with code ${code}\n`);
     if (code !== 0 && code !== null) {
-      console.error(`Server process exited with code ${code}`);
+      earlyExit = { code };
     }
   });
 
-  await waitForServer(SERVER_PORT);
+  // If the server dies before becoming ready, fail fast with that error
+  // instead of waiting out the full 20s timeout.
+  const earlyExitPromise = new Promise<never>((_resolve, reject) => {
+    const check = setInterval(() => {
+      if (earlyExit) {
+        clearInterval(check);
+        reject(
+          new Error(
+            `server process exited with code ${earlyExit.code} before becoming ready`,
+          ),
+        );
+      }
+    }, 200);
+    // Stop watching after the wait window closes.
+    setTimeout(() => clearInterval(check), 25_000);
+  });
+
+  await Promise.race([waitForServer(SERVER_PORT), earlyExitPromise]);
 }
 
 function createWindow(): void {
@@ -259,7 +369,16 @@ function registerOverlayHotkeys(): void {
   globalShortcut.register(OVERLAY_HOTKEY_FALLBACK, toggleOverlay);
 }
 
+process.on("uncaughtException", (err) => {
+  appendServerLog(`[main] uncaughtException: ${err.stack ?? String(err)}\n`);
+  if (app.isReady()) showStartupFailureDialog(`uncaughtException: ${err.message}`);
+});
+process.on("unhandledRejection", (reason) => {
+  appendServerLog(`[main] unhandledRejection: ${String(reason)}\n`);
+});
+
 app.whenReady().then(() => {
+  setupLogFile();
   startServer()
     .then(() => {
       createWindow();
@@ -267,7 +386,9 @@ app.whenReady().then(() => {
       registerOverlayHotkeys();
     })
     .catch((err: unknown) => {
-      console.error("Failed to start backend server:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      appendServerLog(`[main] startServer failed: ${msg}\n`);
+      showStartupFailureDialog(msg);
       app.quit();
     });
 
