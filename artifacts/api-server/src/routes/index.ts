@@ -6,6 +6,7 @@ import chatRouter from "./chat.js";
 import watchRouter from "./watch.js";
 import settingsRouter from "./settings.js";
 import sessionsRouter from "./sessions.js";
+import billingRouter from "./billing.js";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(chatRouter);
 router.use(watchRouter);
 router.use(settingsRouter);
 router.use(sessionsRouter);
+router.use(billingRouter);
 
 export default router;

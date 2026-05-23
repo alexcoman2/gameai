@@ -12,6 +12,7 @@ import {
   clerkProxyMiddleware,
   getClerkProxyHost,
 } from "./middlewares/clerkProxyMiddleware.js";
+import { paddleWebhookHandler } from "./routes/paddle-webhook.js";
 import path from "path";
 
 const app: Express = express();
@@ -38,6 +39,14 @@ app.use(
 
 // Clerk proxy must be mounted before body parsers (it streams raw bytes)
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
+
+// Paddle webhook needs the raw body for signature verification — must be
+// mounted before the global express.json() parser consumes it.
+app.post(
+  "/api/webhooks/paddle",
+  express.raw({ type: "application/json" }),
+  paddleWebhookHandler,
+);
 
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json({ limit: "50mb" }));

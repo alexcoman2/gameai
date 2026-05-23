@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { Settings, MessageSquare, Crosshair, LogIn, LogOut } from "lucide-react";
+import { Settings, MessageSquare, Crosshair, LogIn, LogOut, Crown } from "lucide-react";
 import { Show, useUser, useClerk } from "@clerk/react";
 import { useDetectGame, getDetectGameQueryKey } from "@workspace/api-client-react";
 import { useGameContext } from "@/context/game-context";
@@ -117,6 +117,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <nav className="flex items-center gap-4">
           <Link href="/" className={`p-2 border transition-colors hover:bg-primary hover:text-primary-foreground ${location === "/" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
             <MessageSquare className="w-5 h-5" />
+          </Link>
+          <Link href="/upgrade" className={`p-2 border transition-colors hover:bg-primary hover:text-primary-foreground ${location === "/upgrade" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`} title="Plans & billing">
+            <Crown className="w-5 h-5" />
           </Link>
           <Link href="/settings" className={`p-2 border transition-colors hover:bg-primary hover:text-primary-foreground ${location === "/settings" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
             <Settings className="w-5 h-5" />
