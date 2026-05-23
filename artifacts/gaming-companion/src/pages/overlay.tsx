@@ -3,7 +3,7 @@ import { useAuth } from "@clerk/react";
 import { authFetch } from "@/lib/auth-fetch";
 import {
   Loader2, Send, X, Maximize2, Camera, CameraOff,
-  Mic, MicOff, Volume2, VolumeX, Radio,
+  Mic, MicOff, Volume2, VolumeX, Radio, Eye,
 } from "lucide-react";
 import {
   createVoiceRecorder, speak, cancelSpeech, primeTtsPlayback,
@@ -12,7 +12,9 @@ import {
   VOICE_BLOCKED_EVENT, TTS_ENABLED_LS_KEY, HANDS_FREE_LS_KEY,
 } from "@/lib/voice";
 import { useMe } from "@/hooks/use-me";
-import { readWatchState } from "@/lib/watch-state";
+import {
+  readWatchState, requestWatchMode, WATCH_STATE_LS_KEY,
+} from "@/lib/watch-state";
 
 type ElectronAPI = {
   captureScreenshot?: () => Promise<string>;
@@ -128,6 +130,10 @@ export default function OverlayPage() {
   const isPttRef = useRef(false);
   const [ttsOn, setTtsOn] = useState(isTtsEnabled());
   const [handsFree, setHandsFree] = useState(isHandsFreeEnabled());
+  // Mirror of main window's watchMode — driven by the WATCH_STATE_LS_KEY
+  // that main publishes to. We only display + emit toggle requests; the
+  // capture loop itself lives in the main window.
+  const [watchOn, setWatchOn] = useState<boolean>(() => readWatchState().mode);
   // Plan gate: voice is a paid feature. Server hard-blocks /api/voice/* with
   // 403 for free users, but we also disable the buttons here so they don't
   // waste a mic-permission prompt to learn that. Clicking a locked button
@@ -212,10 +218,35 @@ export default function OverlayPage() {
         setHandsFree(e.newValue === "1");
         return;
       }
+      if (e.key === WATCH_STATE_LS_KEY) {
+        // Re-read through the helper so the staleness guard applies (mode
+        // is treated as OFF if the main window hasn't heartbeated in 60s).
+        setWatchOn(readWatchState().mode);
+        return;
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+
+  // Heartbeat watchdog: if the main window crashes / is closed, no more
+  // storage events fire. Re-poll readWatchState every 30s so the button
+  // flips back to OFF once the published state goes stale.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setWatchOn(readWatchState().mode);
+    }, 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const toggleWatch = () => {
+    const next = !watchOn;
+    // Optimistic local flip so the button responds instantly. The main
+    // window will publish back authoritative state within ~1s, which the
+    // storage listener above picks up and reconciles.
+    setWatchOn(next);
+    requestWatchMode(next);
+  };
 
   // Esc hides the overlay; never quits.
   useEffect(() => {
@@ -606,6 +637,28 @@ export default function OverlayPage() {
             className="flex items-center gap-1"
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           >
+            <button
+              type="button"
+              onClick={toggleWatch}
+              disabled={isLoaded && !isSignedIn}
+              title={
+                watchOn
+                  ? "Watch Mode: ON — observing your screen every 5s. Click to stop."
+                  : "Watch Mode: OFF — click to let Unstuck observe your screen"
+              }
+              className={`h-6 px-1.5 flex items-center gap-1 text-[10px] font-mono uppercase tracking-widest transition ${
+                watchOn
+                  ? "text-amber-400 bg-amber-400/10 hover:bg-amber-400/20"
+                  : "text-muted-foreground hover:text-amber-400 hover:bg-amber-400/10"
+              } disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              {watchOn ? (
+                <Radio className="w-3 h-3 animate-pulse" />
+              ) : (
+                <Eye className="w-3 h-3" />
+              )}
+              Watch
+            </button>
             <button
               type="button"
               onClick={() => void electronAPI?.overlayOpenMain?.()}

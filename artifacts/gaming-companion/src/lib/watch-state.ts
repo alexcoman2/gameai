@@ -12,6 +12,32 @@
 
 export const WATCH_STATE_LS_KEY = "unstuck:watch:state";
 
+// Cross-window toggle channel.
+//
+// The capture loop lives in the main window (only place with the React tree
+// that owns the screenshot interval). The overlay needs a way to ask main
+// to flip watch on/off without IPC plumbing — we use a separate localStorage
+// key whose `storage` event main listens to. Value is "1" (on) or "0" (off).
+// Stamped with a timestamp suffix so two consecutive identical requests
+// (e.g. user toggles off then on again) both fire `storage` events.
+export const WATCH_REQUEST_LS_KEY = "unstuck:watch:request";
+
+export function requestWatchMode(on: boolean): void {
+  try {
+    localStorage.setItem(WATCH_REQUEST_LS_KEY, `${on ? "1" : "0"}:${Date.now()}`);
+  } catch {
+    // ignore
+  }
+}
+
+export function parseWatchRequest(raw: string | null): boolean | null {
+  if (!raw) return null;
+  const first = raw.charAt(0);
+  if (first === "1") return true;
+  if (first === "0") return false;
+  return null;
+}
+
 export type WatchLogEntry = {
   time: string;
   note: string;

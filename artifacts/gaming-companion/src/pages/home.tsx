@@ -31,7 +31,7 @@ import {
   isHandsFreeEnabled, setHandsFreeEnabled, HANDS_FREE_LS_KEY, TTS_ENABLED_LS_KEY,
   VOICE_BLOCKED_EVENT,
 } from "@/lib/voice";
-import { publishWatchState } from "@/lib/watch-state";
+import { publishWatchState, WATCH_REQUEST_LS_KEY, parseWatchRequest } from "@/lib/watch-state";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
@@ -598,6 +598,29 @@ export default function Home() {
     const id = setInterval(() => publishWatchState(true, watchLog), 20_000);
     return () => clearInterval(id);
   }, [watchMode, watchLog]);
+
+  // Cross-window toggle: when the overlay window writes to WATCH_REQUEST_LS_KEY,
+  // mirror it into our local watchMode state so the capture loop starts/stops.
+  // Without this, the overlay button would be a dead UI — only the main window
+  // can own the screenshot interval.
+  useEffect(() => {
+    if (!isElectron) return;
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== WATCH_REQUEST_LS_KEY) return;
+      const next = parseWatchRequest(e.newValue);
+      if (next === null) return;
+      setWatchMode((prev) => {
+        if (prev === next) return prev;
+        if (prev && !next) setVisionDetectedGame(null);
+        void import("@/lib/posthog").then(({ trackEvent }) =>
+          trackEvent("watch_mode_toggled", { enabled: next, source: "overlay" }),
+        );
+        return next;
+      });
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [isElectron]);
 
   // Keep game name accessible to the watch effect without re-creating the interval
   useEffect(() => {
