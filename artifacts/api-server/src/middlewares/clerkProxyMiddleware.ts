@@ -166,67 +166,135 @@ export function clerkProxyPassthroughMiddleware(): RequestHandler {
     return (_req, _res, next) => next();
   }
   const hostedRoot = hostedUrl.replace(/\/$/, "");
-  return createProxyMiddleware({
-    target: hostedUrl,
-    changeOrigin: true,
-    // Follow upstream redirects server-side. The hosted /api/__clerk
-    // endpoint returns a 307 for unversioned clerk-js URLs (e.g. the
-    // initial `.../clerk-js@6/...` request redirects to the pinned
-    // `.../clerk-js@6.12.0/...` URL). If we forward the 307 to the
-    // browser, the renderer makes a second request and the response
-    // chain becomes ambiguous (and historically got cached as HTML).
-    // With followRedirects: true the proxy walks the chain itself and
-    // returns a single 200 + the real JS body to the browser. No
-    // Location header to rewrite, no second round-trip, no cache
-    // poisoning surface.
-    followRedirects: true,
-    // No pathRewrite — hosted server expects the same /api/__clerk/*
-    // prefix, so just forward the path as-is.
-    on: {
-      proxyReq: (proxyReq) => {
-        // Defensive cache-poisoning guard. Earlier versions of this
-        // proxy returned an HTML 307 body for the unversioned
-        // clerk.browser.js URL; the browser cached that bad body, and
-        // on every subsequent launch its conditional re-validation
-        // (If-None-Match / If-Modified-Since) won a 304 and the
-        // poisoned body kept being served. Stripping the conditional
-        // headers here forces the upstream to send the full current
-        // body every time, so a fixed upstream immediately overwrites
-        // any stale cached entry.
-        proxyReq.removeHeader("if-none-match");
-        proxyReq.removeHeader("if-modified-since");
-        proxyReq.removeHeader("if-none-range");
-      },
-      proxyRes: (proxyRes) => {
-        // Belt-and-suspenders: even with followRedirects: true above,
-        // if any 3xx ever slips through, rewrite hosted-origin Location
-        // headers to local-relative so the browser stays on 127.0.0.1
-        // and the chain remains first-party / same-origin.
-        const loc = proxyRes.headers["location"];
-        if (typeof loc === "string" && loc.startsWith(hostedRoot)) {
-          proxyRes.headers["location"] = loc.slice(hostedRoot.length);
+  const hostedHost = new URL(hostedUrl).host;
+
+  // Hand-rolled fetch-based reverse proxy.
+  //
+  // Why not http-proxy-middleware: v4 is a from-scratch rewrite that
+  // silently ignores the `followRedirects` option. The hosted
+  // /api/__clerk/.../clerk-js@6/... endpoint returns a 307 redirect to
+  // the pinned `.../clerk-js@6.12.0/...` URL. v4 forwarded the 307
+  // (content-length: 0) straight to the browser; the renderer parsed
+  // the empty/HTML body as JS and threw "Unexpected token <",
+  // permanently breaking clerk-js initialization. v2.0.22 and v2.0.23
+  // both failed on this.
+  //
+  // Native fetch follows redirects by default (redirect: "follow"), so
+  // the browser only ever sees a single 200 + the real JS body. No
+  // ambiguous redirect chain, no cache-poisoning surface, no opaque
+  // proxy-library behavior.
+  return async (req, res, next) => {
+    try {
+      // Reconstruct the upstream URL. req.originalUrl includes the
+      // /api/__clerk prefix and any query string, which is exactly
+      // what the hosted server expects.
+      const upstreamUrl = `${hostedRoot}${req.originalUrl}`;
+
+      // Forward request headers, dropping ones that don't transfer:
+      // - host: set to the hosted host (changeOrigin)
+      // - content-length: fetch will recompute
+      // - connection / keep-alive / transfer-encoding: hop-by-hop
+      // - if-none-match / if-modified-since: avoid 304 cache poisoning
+      const headers = new Headers();
+      for (const [name, value] of Object.entries(req.headers)) {
+        if (value === undefined) continue;
+        const lower = name.toLowerCase();
+        if (
+          lower === "host" ||
+          lower === "content-length" ||
+          lower === "connection" ||
+          lower === "keep-alive" ||
+          lower === "transfer-encoding" ||
+          lower === "upgrade" ||
+          lower === "if-none-match" ||
+          lower === "if-modified-since" ||
+          lower === "if-none-range"
+        ) {
+          continue;
         }
-        // Force no-store on every /api/__clerk response. The browser
-        // disk cache was the root cause of the v2.0.20→v2.0.22 stuck-
-        // state: a bad response got cached, conditional revalidation
-        // kept the bad body alive across versions, and the server-side
-        // fix never had a chance to land. Disallowing caching of this
-        // path eliminates the entire class of failure. clerk-js bundles
-        // are tiny and the local proxy is on loopback, so the perf
-        // cost is negligible.
-        proxyRes.headers["cache-control"] = "no-store";
-        delete proxyRes.headers["etag"];
-        delete proxyRes.headers["last-modified"];
-        // Defensive: hosted proxy already strips Domain from Set-Cookie,
-        // but if anything slips through, scope it to the local host so
-        // the browser actually stores it on 127.0.0.1.
-        const setCookie = proxyRes.headers["set-cookie"];
-        if (setCookie && Array.isArray(setCookie)) {
-          proxyRes.headers["set-cookie"] = setCookie.map((c) =>
-            c.replace(/;\s*Domain=[^;]+/gi, ""),
-          );
+        if (Array.isArray(value)) {
+          for (const v of value) headers.append(name, v);
+        } else {
+          headers.set(name, value);
         }
-      },
-    },
-  }) as RequestHandler;
+      }
+      headers.set("host", hostedHost);
+
+      // Body: only for methods that have one. Express has not yet
+      // parsed JSON for this path (clerk proxy is mounted before
+      // express.json), so req is a raw Readable stream.
+      const hasBody = !["GET", "HEAD"].includes(req.method.toUpperCase());
+      const init: RequestInit = {
+        method: req.method,
+        headers,
+        redirect: "follow",
+      };
+      if (hasBody) {
+        // Buffer the body. Clerk requests are small (cookies + tiny
+        // JSON payloads); streaming isn't worth the complexity.
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        }
+        init.body = Buffer.concat(chunks);
+        // Node fetch requires duplex: 'half' when sending a body that
+        // isn't a string/Buffer/etc., but Buffer is fine and doesn't
+        // need it.
+      }
+
+      const upstreamRes = await fetch(upstreamUrl, init);
+
+      // Copy response headers, dropping hop-by-hop / encoding ones
+      // (fetch already decoded the body, so content-encoding /
+      // content-length from upstream would lie). Force no-store on
+      // every response to make stale-cache poisoning impossible.
+      const setCookies: string[] = [];
+      upstreamRes.headers.forEach((value, name) => {
+        const lower = name.toLowerCase();
+        if (
+          lower === "content-encoding" ||
+          lower === "content-length" ||
+          lower === "transfer-encoding" ||
+          lower === "connection" ||
+          lower === "keep-alive" ||
+          lower === "etag" ||
+          lower === "last-modified" ||
+          lower === "cache-control"
+        ) {
+          return;
+        }
+        if (lower === "set-cookie") {
+          // Headers.forEach folds set-cookie into a single comma-
+          // joined string, which is wrong for cookies. Use getSetCookie
+          // below instead.
+          return;
+        }
+        res.setHeader(name, value);
+      });
+      // getSetCookie returns each Set-Cookie value as a separate entry
+      // (Node 20+). Strip Domain= so cookies land on 127.0.0.1.
+      const rawSetCookies =
+        typeof upstreamRes.headers.getSetCookie === "function"
+          ? upstreamRes.headers.getSetCookie()
+          : [];
+      for (const cookie of rawSetCookies) {
+        setCookies.push(cookie.replace(/;\s*Domain=[^;]+/gi, ""));
+      }
+      if (setCookies.length > 0) {
+        res.setHeader("set-cookie", setCookies);
+      }
+      res.setHeader("cache-control", "no-store");
+
+      res.status(upstreamRes.status);
+
+      // Stream body to the client. fetch's body is a web ReadableStream;
+      // for small Clerk payloads buffering is simplest and safest.
+      const buf = Buffer.from(await upstreamRes.arrayBuffer());
+      res.end(buf);
+    } catch (err) {
+      // Pass to express error handler so a bad proxy hop doesn't hang
+      // the renderer forever.
+      next(err);
+    }
+  };
 }
