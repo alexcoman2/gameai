@@ -2,15 +2,39 @@ import { db, usersTable, usageRecordsTable, type User, type PlanTier } from "@wo
 import { eq, and, gte, sql } from "drizzle-orm";
 import { PLAN_CONFIGS, DAILY_HARD_CAP_CENTS } from "./plans.js";
 
+function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const raw = process.env.ADMIN_EMAILS;
+  if (!raw) return false;
+  const needle = email.trim().toLowerCase();
+  return raw
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean)
+    .includes(needle);
+}
+
 export async function getOrCreateUser(userId: string, email?: string | null): Promise<User> {
+  const shouldBeAdmin = isAdminEmail(email);
   // Race-safe upsert — concurrent first-time requests for a new user could
   // otherwise both insert and one would crash with unique-constraint error.
   await db
     .insert(usersTable)
-    .values({ id: userId, email: email ?? null, plan: "free" })
+    .values({ id: userId, email: email ?? null, plan: "free", isAdmin: shouldBeAdmin })
     .onConflictDoNothing({ target: usersTable.id });
   const rows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
-  return rows[0];
+  const user = rows[0];
+  // Reconcile admin status against the env var on every load so adding /
+  // removing an email from ADMIN_EMAILS takes effect on the user's next
+  // request — no manual SQL, no restart required.
+  if (user && user.isAdmin !== shouldBeAdmin) {
+    await db
+      .update(usersTable)
+      .set({ isAdmin: shouldBeAdmin, updatedAt: new Date() })
+      .where(eq(usersTable.id, userId));
+    user.isAdmin = shouldBeAdmin;
+  }
+  return user;
 }
 
 type Period = { since: Date; label: string };
@@ -78,6 +102,14 @@ export async function checkUsageCap(
     totalsFor(userId, month.since),
     totalsFor(userId, day.since),
   ]);
+
+  // Admin bypass — owner / staff accounts skip every cap (plan allowance,
+  // daily $5 cost fuse, 5x hard ceiling, Watch-Mode gating). Usage is
+  // still recorded so we can see real cost in the analytics, but nothing
+  // will ever block them.
+  if (user.isAdmin) {
+    return { allowed: true, plan, monthly, daily };
+  }
 
   if (daily.costMicrocents / 10_000 >= DAILY_HARD_CAP_CENTS) {
     return {

@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 
 export const PLAN_TIERS = ["free", "pro", "elite"] as const;
 export type PlanTier = (typeof PLAN_TIERS)[number];
@@ -22,6 +22,10 @@ export const usersTable = pgTable("users", {
   // matches this value, we skip the overage calculation.
   overageBilledThrough: timestamp("overage_billed_through"),
   totalLifetimeCostCents: integer("total_lifetime_cost_cents").notNull().default(0),
+  // Owner / staff accounts: bypass all usage caps and billing. Synced
+  // from the ADMIN_EMAILS env var on every getOrCreateUser call so a
+  // single env change promotes / demotes admins without manual SQL.
+  isAdmin: boolean("is_admin").notNull().default(false),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
