@@ -96,7 +96,9 @@ export default function Home() {
   // prompt and a recording just to see a "voice not allowed" toast.
   const { me } = useMe();
   const [, navigate] = useLocation();
-  const voiceLocked = !me || me.plan === "free";
+  // Admins bypass plan gates (matches the server's checkUsageCap admin
+  // bypass) so staff accounts on any tier can use voice for testing.
+  const voiceLocked = !!me && !me.isAdmin && me.plan === "free";
   const goUpgrade = () => navigate("/upgrade");
   // Refs that the rearm setTimeout / TTS onAllDone callback (both fire
   // outside React render) need to read fresh — closure values would be

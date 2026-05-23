@@ -133,7 +133,9 @@ export default function OverlayPage() {
   // waste a mic-permission prompt to learn that. Clicking a locked button
   // pops open the main window so the user can navigate to /upgrade.
   const { me } = useMe();
-  const voiceLocked = !!me && me.plan === "free";
+  // Admins bypass plan gates (matches the server's checkUsageCap admin
+  // bypass) so staff accounts on any tier can use voice for testing.
+  const voiceLocked = !!me && !me.isAdmin && me.plan === "free";
   const openMainForUpgrade = () => {
     void electronAPI?.overlayOpenMain?.();
     setTurns((prev) => [
