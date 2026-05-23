@@ -45,10 +45,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const { effectiveGameName } = useGameContext();
   const { me } = useMe();
 
+  // Game detection + the Settings page rely on Electron-only features
+  // (process scanning, screenshot capture, hotkeys, overlay window). On the
+  // public website neither makes sense — game detection would always say
+  // "AWAITING TARGET" and Settings exposes desktop-only toggles. Hide both
+  // when we're not running inside the desktop app.
+  const isElectron = !!(window as Window & {
+    electronAPI?: { isElectron?: boolean };
+  }).electronAPI?.isElectron;
+
   const { data: gameDetection, isLoading: isDetecting } = useDetectGame({
     query: {
       refetchInterval: 10000,
       queryKey: getDetectGameQueryKey(),
+      enabled: isElectron,
     }
   });
 
@@ -63,6 +73,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
           <div>
             <h1 className="text-xl font-bold font-mono tracking-wider text-primary">UNSTUCK</h1>
+            {isElectron && (
             <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground uppercase tracking-widest mt-1">
               <span>STATUS:</span>
               {isDetecting ? (
@@ -114,6 +125,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
 
@@ -127,9 +139,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link href="/upgrade" className={`p-2 border transition-colors hover:bg-primary hover:text-primary-foreground ${location === "/upgrade" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`} title="Plans & billing">
             <Crown className="w-5 h-5" />
           </Link>
-          <Link href="/settings" className={`p-2 border transition-colors hover:bg-primary hover:text-primary-foreground ${location === "/settings" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
-            <Settings className="w-5 h-5" />
-          </Link>
+          {isElectron && (
+            <Link href="/settings" className={`p-2 border transition-colors hover:bg-primary hover:text-primary-foreground ${location === "/settings" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
+              <Settings className="w-5 h-5" />
+            </Link>
+          )}
           {me?.isAdmin && (
             <Link
               href="/admin/usage"
