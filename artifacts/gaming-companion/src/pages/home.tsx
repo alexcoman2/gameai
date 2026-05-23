@@ -26,6 +26,7 @@ import {
 import {
   createVoiceRecorder, speak, cancelSpeech, primeTtsPlayback, VOICE_ERROR_EVENT,
   isTtsEnabled, setTtsEnabled, isLikelyHallucination,
+  isHandsFreeEnabled, setHandsFreeEnabled, HANDS_FREE_LS_KEY, TTS_ENABLED_LS_KEY,
   VOICE_BLOCKED_EVENT,
 } from "@/lib/voice";
 import { publishWatchState } from "@/lib/watch-state";
@@ -86,6 +87,16 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [ttsOn, setTtsOn] = useState(isTtsEnabled());
+  const [handsFree, setHandsFree] = useState(isHandsFreeEnabled());
+  // Refs that the rearm setTimeout / TTS onAllDone callback (both fire
+  // outside React render) need to read fresh — closure values would be
+  // stale by the time they run.
+  const handsFreeRef = useRef(handsFree);
+  handsFreeRef.current = handsFree;
+  const isRecordingRef = useRef(isRecording);
+  isRecordingRef.current = isRecording;
+  const isTranscribingRef = useRef(isTranscribing);
+  isTranscribingRef.current = isTranscribing;
   const recorderRef = useRef<ReturnType<typeof createVoiceRecorder> | null>(null);
 
   const toggleMic = async () => {
@@ -163,6 +174,50 @@ export default function Home() {
     // the mic (typed message + TTS-on path).
     else primeTtsPlayback();
   };
+
+  const toggleHandsFree = () => {
+    const next = !handsFree;
+    setHandsFree(next);
+    setHandsFreeEnabled(next);
+    if (next) {
+      // Silent hands-free is useless — auto-enable TTS so the assistant
+      // talks back, and prime audio under this click for the first reply.
+      if (!ttsOn) {
+        setTtsOn(true);
+        setTtsEnabled(true);
+      }
+      primeTtsPlayback();
+      // If idle, start listening immediately so the user can just talk.
+      if (!sending && !isRecording && !isTranscribing) {
+        void toggleMicRef.current();
+      }
+    } else {
+      // Going back to tap-to-talk should silence a hot mic too.
+      if (isRecording) {
+        try { recorderRef.current?.cancel(); } catch { /* ignore */ }
+        setIsRecording(false);
+      }
+    }
+  };
+
+  // Cross-window sync: when the overlay flips TTS or hands-free, mirror
+  // it in the main window (same origin, same localStorage).
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === TTS_ENABLED_LS_KEY) {
+        const next = e.newValue === "1";
+        setTtsOn(next);
+        if (!next) cancelSpeech();
+        return;
+      }
+      if (e.key === HANDS_FREE_LS_KEY) {
+        setHandsFree(e.newValue === "1");
+        return;
+      }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   // Release the mic + cancel TTS on unmount so an in-progress recording
   // doesn't keep the mic light on after you navigate away.
@@ -698,6 +753,25 @@ export default function Home() {
     if (ttsOn) primeTtsPlayback();
     setSending(true);
 
+    // Hands-free re-arm (mirrors overlay.tsx): fire the mic exactly once
+    // per turn whether the trigger came from TTS finishing playback
+    // (preferred when ttsOn) or from the request finishing without TTS.
+    // The `rearmed` closure guard prevents double-firing if both paths
+    // race on a very short reply.
+    let rearmed = false;
+    const rearmIfHandsFree = () => {
+      if (rearmed) return;
+      if (!handsFreeRef.current) return;
+      rearmed = true;
+      // Small delay so the audio device fully releases and React state
+      // (sending=false) has a tick to settle before toggleMic runs.
+      setTimeout(() => {
+        if (!handsFreeRef.current) return;
+        if (isRecordingRef.current || isTranscribingRef.current) return;
+        void toggleMicRef.current();
+      }, 250);
+    };
+
     // Electron: use IPC-captured screenshot; Web: fall back to server-side capture
     const latestImgData = isElectron
       ? (watchMode && watchScreenshot ? watchScreenshot : electronAutoScreenshot)
@@ -741,7 +815,9 @@ export default function Home() {
       // playing as soon as the first sentence is generated instead of
       // waiting for the full reply (saves ~3-4s of dead air).
       const { createSentenceSpeaker } = await import("@/lib/voice");
-      const speaker = ttsOn ? createSentenceSpeaker() : null;
+      const speaker = ttsOn
+        ? createSentenceSpeaker({ onAllDone: rearmIfHandsFree })
+        : null;
       const result = await streamChatMessage(
         {
           message: messageContent,
@@ -791,6 +867,11 @@ export default function Home() {
       );
     } finally {
       setSending(false);
+      // Non-TTS hands-free path: no speaker callback will ever fire, so
+      // trigger the rearm here. When ttsOn this is a no-op because the
+      // speaker.onAllDone path already flipped the `rearmed` guard
+      // (or will shortly, gated by the same guard).
+      if (!ttsOn) rearmIfHandsFree();
     }
   };
 
@@ -1197,6 +1278,22 @@ export default function Home() {
             ) : (
               <VolumeX className={compact ? "w-3 h-3" : "w-4 h-4"} />
             )}
+          </Button>
+          <Button
+            type="button"
+            onClick={toggleHandsFree}
+            title={
+              handsFree
+                ? "Hands-free voice chat ON — mic re-arms after each reply. Click to stop."
+                : "Hands-free voice chat OFF — click to start a continuous voice conversation"
+            }
+            className={`rounded-none font-mono uppercase tracking-wider transition-all border ${
+              handsFree
+                ? "bg-primary/15 text-primary border-primary/40 hover:bg-primary/25 animate-pulse"
+                : "bg-secondary text-muted-foreground border-border hover:text-foreground"
+            } ${compact ? "h-8 px-2" : "h-12 px-3"}`}
+          >
+            <Radio className={compact ? "w-3 h-3" : "w-4 h-4"} />
           </Button>
           <Input
             value={input}
