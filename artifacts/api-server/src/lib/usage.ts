@@ -181,6 +181,72 @@ export async function checkUsageCap(
   return { allowed: true, plan, monthly, daily };
 }
 
+export type UsageSnapshot = {
+  plan: PlanTier;
+  isAdmin: boolean;
+  allowance: {
+    monthlyChats: number;
+    monthlyWatchSeconds: number;
+    allowsWatch: boolean;
+    allowsOverage: boolean;
+    overageChatMicrocents: number;
+    overageWatchSecMicrocents: number;
+  };
+  monthly: UsageTotals;
+  daily: UsageTotals;
+  dailyHardCapCents: number;
+  estimatedOverageMicrocents: {
+    chat: number;
+    watch: number;
+    total: number;
+  };
+  periodStart: string;
+};
+
+export async function getUsageSnapshot(
+  userId: string,
+  email?: string | null,
+): Promise<UsageSnapshot> {
+  const user = await getOrCreateUser(userId, email);
+  const cfg = PLAN_CONFIGS[user.plan];
+  const month = monthStart();
+  const day = dayStart();
+  const [monthly, daily] = await Promise.all([
+    totalsFor(userId, month.since),
+    totalsFor(userId, day.since),
+  ]);
+
+  const chatOver = cfg.allowsOverage
+    ? Math.max(0, monthly.chats - cfg.monthlyChats) * cfg.overageChatMicrocents
+    : 0;
+  const watchOver = cfg.allowsOverage
+    ? Math.max(0, monthly.watchSeconds - cfg.monthlyWatchSeconds) *
+      cfg.overageWatchSecMicrocents
+    : 0;
+
+  return {
+    plan: user.plan,
+    isAdmin: user.isAdmin,
+    allowance: {
+      monthlyChats: cfg.monthlyChats,
+      monthlyWatchSeconds: cfg.monthlyWatchSeconds,
+      allowsWatch: cfg.allowsWatch,
+      allowsOverage: cfg.allowsOverage,
+      overageChatMicrocents: cfg.overageChatMicrocents,
+      overageWatchSecMicrocents: cfg.overageWatchSecMicrocents,
+    },
+    monthly,
+    daily,
+    dailyHardCapCents: DAILY_HARD_CAP_CENTS,
+    estimatedOverageMicrocents: {
+      chat: chatOver,
+      watch: watchOver,
+      total: chatOver + watchOver,
+    },
+    periodStart: month.since.toISOString(),
+  };
+}
+
 export async function recordUsage(
   userId: string,
   kind: "chat" | "watch",

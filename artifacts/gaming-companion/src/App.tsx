@@ -12,6 +12,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
 import Settings from "@/pages/settings";
 import Upgrade from "@/pages/upgrade";
+import UsagePage from "@/pages/usage";
 import { AboutPage, PricingPage, TermsPage, PrivacyPage, RefundPage } from "@/pages/legal";
 import { Layout } from "@/components/layout";
 import { ChatProvider } from "@/context/chat-context";
@@ -156,6 +157,7 @@ function AppRoutes() {
       <Route path="/" component={Home} />
       <Route path="/settings" component={Settings} />
       <Route path="/upgrade" component={Upgrade} />
+      <Route path="/usage" component={UsagePage} />
       <Route path="/about" component={AboutPage} />
       <Route path="/pricing" component={PricingPage} />
       <Route path="/legal/terms" component={TermsPage} />

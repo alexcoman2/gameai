@@ -5,6 +5,7 @@ import { requireAuth } from "../middlewares/requireAuth.js";
 import { getPaddle, paddleEnvironment, priceIdForTier } from "../lib/paddle.js";
 import { logger } from "../lib/logger.js";
 import { IS_PROXY } from "../lib/server-mode.js";
+import { getUsageSnapshot } from "../lib/usage.js";
 
 const router: IRouter = Router();
 
@@ -79,6 +80,25 @@ router.get("/billing/status", ...protect, async (req, res) => {
     subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd,
     hasSubscription: !!user.billingSubscriptionId,
   });
+});
+
+// Current user's usage snapshot — plan allowance + this-month + today totals
+// + projected overage. Powers the self-serve usage dashboard so users can see
+// exactly where they are vs. their limits.
+router.get("/billing/usage", ...protect, async (req, res) => {
+  if (IS_PROXY) {
+    await proxyToHosted(req, res, "/api/billing/usage");
+    return;
+  }
+  const userId = req.userId!;
+  const email = req.userEmail ?? null;
+  try {
+    const snapshot = await getUsageSnapshot(userId, email);
+    res.json(snapshot);
+  } catch (e) {
+    logger.error({ err: e, userId }, "Failed to build usage snapshot");
+    res.status(500).json({ error: "Failed to load usage" });
+  }
 });
 
 // Creates a Paddle transaction server-side so customData.userId is bound by
