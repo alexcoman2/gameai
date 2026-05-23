@@ -405,8 +405,26 @@ function createWindow(): void {
       });
     }
   });
+  // Hand off PayPal (and any other external payment / OAuth host whose
+  // WebAuthn flow we can't satisfy inside Electron) to the user's OS
+  // browser. Detect by hostname so we catch every paypal subdomain
+  // (www.paypal.com, sandbox.paypal.com, checkout.paypal.com, etc.).
+  const shouldOpenExternally = (target: string): boolean => {
+    try {
+      const host = new URL(target).hostname.toLowerCase();
+      return host === "paypal.com" || host.endsWith(".paypal.com");
+    } catch {
+      return false;
+    }
+  };
   mainWindow.webContents.on("will-navigate", (evt, url) => {
     appendServerLog(`[main] will-navigate → ${url}\n`);
+    if (shouldOpenExternally(url)) {
+      appendServerLog(`[main] handing off to OS browser: ${url}\n`);
+      evt.preventDefault();
+      void shell.openExternal(url);
+      return;
+    }
     const rewritten = rewriteHostedToLocal(url);
     if (rewritten) {
       appendServerLog(
@@ -426,6 +444,17 @@ function createWindow(): void {
   );
   mainWindow.webContents.setWindowOpenHandler((details) => {
     appendServerLog(`[main] window-open intercepted url=${details.url}\n`);
+    // window.open() / target=_blank with an http(s) destination → bounce
+    // to the OS browser. Same reasoning as the paypal will-navigate
+    // intercept above: in-Electron checkout flows hit "insert security
+    // key" because there's no platform authenticator, and the user often
+    // wants checkout / docs / OAuth in their normal browser anyway.
+    try {
+      const proto = new URL(details.url).protocol;
+      if (proto === "https:" || proto === "http:") {
+        void shell.openExternal(details.url);
+      }
+    } catch { /* malformed URL — drop silently */ }
     return { action: "deny" };
   });
 
@@ -831,6 +860,31 @@ app.on("before-quit", () => {
 // bypasses before-quit.
 process.on("exit", () => {
   killServerProcess();
+});
+
+// Open a URL in the user's default OS browser. The renderer uses this for
+// PayPal checkout — running PayPal inside Electron's Chromium gives users a
+// "Insert your security key into the USB port" prompt because Electron has
+// no Windows-Hello platform authenticator. Opening in the real browser lets
+// PayPal's WebAuthn flow use the user's normal passkey / Windows Hello /
+// saved payment methods. Limited to http(s) so renderer code can't trick
+// the main process into launching arbitrary file:// or shell URIs.
+ipcMain.handle("open-external", async (_event, url: string) => {
+  try {
+    if (typeof url !== "string") return false;
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+      appendServerLog(`[main] open-external rejected non-http url=${url}\n`);
+      return false;
+    }
+    await shell.openExternal(url);
+    appendServerLog(`[main] open-external → ${url}\n`);
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    appendServerLog(`[main] open-external failed url=${url} err=${msg}\n`);
+    return false;
+  }
 });
 
 ipcMain.handle("capture-screenshot", async () => {

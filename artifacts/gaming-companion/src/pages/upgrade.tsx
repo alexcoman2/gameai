@@ -229,6 +229,57 @@ export default function Upgrade() {
         throw new Error(body.error ?? `HTTP ${res.status}`);
       }
       const { approveUrl } = (await res.json()) as { approveUrl: string };
+
+      // Desktop app: PayPal's WebAuthn flow inside Electron's Chromium
+      // surfaces a "Insert your security key into the USB port" prompt
+      // because Electron ships without a Windows Hello platform
+      // authenticator. Bounce checkout to the user's real browser, then
+      // poll our /me endpoint until the webhook flips the plan so the
+      // desktop UI updates without the user having to click anything.
+      const electronApi = (window as Window & {
+        electronAPI?: { isElectron?: boolean; openExternal?: (u: string) => Promise<boolean> };
+      }).electronAPI;
+      if (electronApi?.isElectron && electronApi.openExternal) {
+        await electronApi.openExternal(approveUrl);
+        toast({
+          title: "Complete checkout in your browser",
+          description: "We'll update your plan automatically once PayPal confirms it.",
+        });
+        // Poll /api/me every 4s for up to 10 minutes. Stop early when
+        // plan changes or the user navigates away.
+        const startedAtTier = (user as { plan?: string } | null)?.plan ?? "free";
+        const deadline = Date.now() + 10 * 60 * 1000;
+        let resolved = false;
+        const poll = async () => {
+          if (resolved || Date.now() > deadline) {
+            if (!resolved) setLoadingPaypalTier(null);
+            return;
+          }
+          try {
+            const meRes = await authFetch("/api/me");
+            if (meRes.ok) {
+              const body = (await meRes.json()) as { plan?: string };
+              if (body.plan && body.plan !== startedAtTier && body.plan !== "free") {
+                resolved = true;
+                setLoadingPaypalTier(null);
+                toast({
+                  title: "Subscription active",
+                  description: `Welcome to ${body.plan}. Refreshing…`,
+                });
+                setTimeout(() => window.location.reload(), 800);
+                return;
+              }
+            }
+          } catch { /* transient network errors are fine; keep polling */ }
+          setTimeout(poll, 4000);
+        };
+        setTimeout(poll, 4000);
+        return;
+      }
+
+      // Browser path: redirect this tab to PayPal as before. The
+      // ?paypal=success return handler at the top of this component
+      // catches the callback.
       window.location.href = approveUrl;
     } catch (e) {
       toast({

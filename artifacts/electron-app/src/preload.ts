@@ -35,5 +35,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("overlay-ptt-toggle", listener);
   },
 
+  // Open a URL in the user's default OS browser instead of inside the
+  // Electron BrowserWindow. Used for PayPal checkout so the user gets
+  // their real browser's WebAuthn provider (Windows Hello, saved cards,
+  // etc.) instead of Chromium's "insert USB security key" fallback.
+  openExternal: (url: string): Promise<boolean> =>
+    ipcRenderer.invoke("open-external", url),
+
   isElectron: true as const,
 });
