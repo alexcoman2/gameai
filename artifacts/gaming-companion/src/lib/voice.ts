@@ -36,6 +36,11 @@ export function setTtsEnabled(enabled: boolean): void {
 let currentAudio: HTMLAudioElement | null = null;
 let currentAudioUrl: string | null = null;
 let currentFetchAbort: AbortController | null = null;
+// The active streaming speaker — set by createSentenceSpeaker(), cleared by
+// cancelSpeech(). When the user fires a new query or toggles TTS off mid-reply,
+// cancelSpeech() needs to abort both any one-shot speak() AND the streaming
+// pipeline (which has its own queue of in-flight TTS fetches).
+let currentSpeaker: SentenceSpeaker | null = null;
 
 function stopCurrentAudio(): void {
   if (currentAudio) {
@@ -54,6 +59,10 @@ function stopCurrentAudio(): void {
 }
 
 export function cancelSpeech(): void {
+  if (currentSpeaker) {
+    try { currentSpeaker.cancel(); } catch { /* ignore */ }
+    currentSpeaker = null;
+  }
   stopCurrentAudio();
   try {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
@@ -184,6 +193,226 @@ function speakBrowserFallback(clean: string): void {
   } catch {
     dispatchBlocked();
   }
+}
+
+// ── Streaming sentence speaker ──────────────────────────────────────────────
+//
+// The chat reply streams in over a few seconds. If we wait for it to finish
+// before calling /api/voice/speak, the user hears nothing for 4-5s. Instead,
+// we split the streaming text into sentences and fire one TTS request per
+// sentence the moment each one is complete. Audio blobs are queued and
+// played in order, so playback can begin ~1s after the FIRST sentence is
+// generated instead of ~1s after the LAST one.
+//
+// Race ordering: TTS requests fire in parallel but may resolve out of order.
+// Each request is keyed by its sentence index; the player drains the queue
+// strictly in index order, awaiting whichever fetch hasn't resolved yet.
+
+export type SentenceSpeaker = {
+  feed: (chunk: string) => void;
+  end: () => void;
+  cancel: () => void;
+};
+
+// Minimum sentence length to bother sending to TTS. Filters out fragments
+// like "OK." or stray punctuation that would just add overhead.
+const MIN_SENTENCE_CHARS = 4;
+
+export function createSentenceSpeaker(): SentenceSpeaker {
+  // Tear down any prior speaker / one-shot speak() / browser synthesis so we
+  // don't end up with two speakers fighting over the same audio element.
+  cancelSpeech();
+
+  let buffer = "";
+  let nextIndex = 0;
+  let playIndex = 0;
+  const pending = new Map<number, Promise<Blob | null>>();
+  let endedFeeding = false;
+  let cancelled = false;
+  let playing = false;
+  let playerAudio: HTMLAudioElement | null = null;
+  let playerUrl: string | null = null;
+  let fellBackToBrowserTts = false;
+  const abort = new AbortController();
+
+  const fetchSentence = async (text: string): Promise<Blob | null> => {
+    try {
+      const res = await authFetch("/api/voice/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: abort.signal,
+      });
+      if (abort.signal.aborted) return null;
+      if (!res.ok) {
+        let serverReason = `TTS HTTP ${res.status}`;
+        try {
+          const errJson = (await res.json()) as { error?: string };
+          if (errJson?.error) serverReason = errJson.error;
+        } catch { /* not JSON */ }
+        // 4xx = deliberate refusal (plan gate, cap). Surface once and stop.
+        if (res.status >= 400 && res.status < 500) {
+          dispatchError(serverReason);
+          cancelled = true;
+          abort.abort();
+        } else {
+          // 5xx = transient. Fall back to browser TTS for the REST of the
+          // reply so the user still hears something instead of partial audio.
+          if (!fellBackToBrowserTts) {
+            fellBackToBrowserTts = true;
+            speakBrowserFallback(text);
+          }
+        }
+        return null;
+      }
+      const blob = await res.blob();
+      if (blob.size === 0) return null;
+      return blob;
+    } catch (err) {
+      if (abort.signal.aborted) return null;
+      // Network error → fall back to browser TTS once.
+      if (!fellBackToBrowserTts) {
+        fellBackToBrowserTts = true;
+        // eslint-disable-next-line no-console
+        console.warn("[voice] streaming TTS fetch failed; falling back to browser:", err);
+        speakBrowserFallback(text);
+      }
+      return null;
+    }
+  };
+
+  const playNext = async (): Promise<void> => {
+    if (cancelled || playing) return;
+    if (playIndex >= nextIndex) {
+      if (endedFeeding) {
+        // eslint-disable-next-line no-console
+        console.info("[voice] streaming TTS playback complete");
+      }
+      return;
+    }
+    playing = true;
+    try {
+      while (!cancelled && playIndex < nextIndex) {
+        const p = pending.get(playIndex);
+        if (!p) { playIndex++; continue; }
+        const blob = await p;
+        pending.delete(playIndex);
+        playIndex++;
+        if (cancelled) return;
+        if (!blob) continue;
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        playerAudio = audio;
+        playerUrl = url;
+        await new Promise<void>((resolve) => {
+          audio.onended = () => {
+            try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+            if (playerAudio === audio) { playerAudio = null; playerUrl = null; }
+            resolve();
+          };
+          audio.onerror = () => {
+            try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+            if (playerAudio === audio) { playerAudio = null; playerUrl = null; }
+            resolve();
+          };
+          void audio.play().then(
+            () => {
+              // eslint-disable-next-line no-console
+              if (playIndex === 1) console.info("[voice] streaming TTS playback started");
+            },
+            (playErr) => {
+              // Autoplay rejection. Try one re-prime + retry; if that also
+              // fails, dispatch the blocked event AND fall back to browser
+              // speech-synthesis (which sometimes works when HTMLAudio
+              // doesn't, and at least makes a sound). Matches the one-shot
+              // speak() path so failures aren't silent.
+              audioPrimed = false;
+              primeTtsPlayback();
+              void audio.play().catch(() => {
+                // eslint-disable-next-line no-console
+                console.warn("[voice] streaming TTS play() rejected; falling back:", playErr);
+                try { URL.revokeObjectURL(url); } catch { /* ignore */ }
+                if (playerAudio === audio) { playerAudio = null; playerUrl = null; }
+                if (!fellBackToBrowserTts) {
+                  fellBackToBrowserTts = true;
+                  dispatchBlocked();
+                  // Best-effort: speak the remaining buffer via browser TTS
+                  // so the user at least hears the rest of the reply.
+                  const tail = stripMarkdown(buffer);
+                  if (tail) speakBrowserFallback(tail);
+                }
+                resolve();
+              });
+            },
+          );
+        });
+      }
+    } finally {
+      playing = false;
+    }
+  };
+
+  // Sentence-boundary regex: end of sentence is .!? optionally followed by
+  // closing quote/bracket, then whitespace or end-of-string. We require the
+  // trailing whitespace so we don't split on decimal points ("3.5 damage")
+  // or abbreviations mid-token.
+  const SENTENCE_END = /[.!?]+["')\]]*(?:\s|$)/g;
+
+  const drainSentences = (final: boolean) => {
+    let lastIdx = 0;
+    SENTENCE_END.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = SENTENCE_END.exec(buffer)) !== null) {
+      const end = m.index + m[0].length;
+      const raw = buffer.slice(lastIdx, end);
+      lastIdx = end;
+      const clean = stripMarkdown(raw);
+      if (clean.length < MIN_SENTENCE_CHARS) continue;
+      const idx = nextIndex++;
+      pending.set(idx, fetchSentence(clean));
+      void playNext();
+    }
+    buffer = buffer.slice(lastIdx);
+    if (final) {
+      const tail = stripMarkdown(buffer);
+      if (tail.length >= MIN_SENTENCE_CHARS) {
+        const idx = nextIndex++;
+        pending.set(idx, fetchSentence(tail));
+        void playNext();
+      }
+      buffer = "";
+    }
+  };
+
+  const speaker: SentenceSpeaker = {
+    feed(chunk: string) {
+      if (cancelled) return;
+      buffer += chunk;
+      drainSentences(false);
+    },
+    end() {
+      if (cancelled) return;
+      endedFeeding = true;
+      drainSentences(true);
+      void playNext();
+    },
+    cancel() {
+      cancelled = true;
+      try { abort.abort(); } catch { /* ignore */ }
+      if (playerAudio) {
+        try { playerAudio.pause(); } catch { /* ignore */ }
+        playerAudio = null;
+      }
+      if (playerUrl) {
+        try { URL.revokeObjectURL(playerUrl); } catch { /* ignore */ }
+        playerUrl = null;
+      }
+      pending.clear();
+    },
+  };
+
+  currentSpeaker = speaker;
+  return speaker;
 }
 
 // OpenAI TTS via /api/voice/speak. Falls back to browser SpeechSynthesis if

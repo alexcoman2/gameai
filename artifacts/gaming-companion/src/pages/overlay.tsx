@@ -230,6 +230,10 @@ export default function OverlayPage() {
       ]);
 
       const { streamChatMessage, StreamChatError } = await import("@/lib/chat-stream");
+      const { createSentenceSpeaker } = await import("@/lib/voice");
+      // Sentence-streaming TTS: audio playback begins ~1s after the first
+      // sentence is generated instead of ~1s after the full reply finishes.
+      const speaker = ttsOn ? createSentenceSpeaker() : null;
       try {
         const result = await streamChatMessage(
           {
@@ -246,6 +250,7 @@ export default function OverlayPage() {
                   t.id === assistantId ? { ...t, content: t.content + chunk } : t
                 )
               );
+              speaker?.feed(chunk);
             },
           }
         );
@@ -254,8 +259,11 @@ export default function OverlayPage() {
         setTurns((prev) =>
           prev.map((t) => (t.id === assistantId ? { ...t, content: finalReply } : t))
         );
-        if (ttsOn && finalReply) speak(finalReply);
+        speaker?.end();
       } catch (e) {
+        // Tear down any in-flight sentence-TTS pipeline — the user shouldn't
+        // hear a reply the chat layer just discarded.
+        try { speaker?.cancel(); } catch { /* ignore */ }
         // Replace the streaming bubble with an error
         setTurns((prev) => prev.filter((t) => t.id !== assistantId));
         if (e instanceof StreamChatError && e.status === 401) {

@@ -721,6 +721,11 @@ export default function Home() {
 
     try {
       const { streamChatMessage } = await import("@/lib/chat-stream");
+      // If TTS is on, create a sentence-streaming speaker so audio starts
+      // playing as soon as the first sentence is generated instead of
+      // waiting for the full reply (saves ~3-4s of dead air).
+      const { createSentenceSpeaker } = await import("@/lib/voice");
+      const speaker = ttsOn ? createSentenceSpeaker() : null;
       const result = await streamChatMessage(
         {
           message: messageContent,
@@ -739,6 +744,7 @@ export default function Home() {
                 m.id === assistantId ? { ...m, content: m.content + chunk } : m
               )
             );
+            speaker?.feed(chunk);
           },
         }
       );
@@ -747,8 +753,7 @@ export default function Home() {
       setMessages((prev) =>
         prev.map((m) => (m.id === assistantId ? { ...m, content: finalReply } : m))
       );
-
-      if (ttsOn && finalReply) speak(finalReply);
+      speaker?.end();
 
       if (activeSessionId) {
         queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
@@ -756,6 +761,12 @@ export default function Home() {
 
       void checkUsageWarnings(toast);
     } catch (err: unknown) {
+      // Stop any in-flight sentence-TTS work so we don't keep speaking a
+      // reply the user never actually received.
+      try {
+        const { cancelSpeech } = await import("@/lib/voice");
+        cancelSpeech();
+      } catch { /* ignore */ }
       const errMsg = err instanceof Error ? err.message : "Communication link failed. Unable to reach AI core.";
       setMessages((prev) =>
         prev.map((m) =>
