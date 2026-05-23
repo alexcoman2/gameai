@@ -5,7 +5,7 @@ export const usageRecordsTable = pgTable(
   {
     id: serial("id").primaryKey(),
     userId: text("user_id").notNull(),
-    kind: text("kind").$type<"chat" | "watch">().notNull(),
+    kind: text("kind").$type<"chat" | "watch" | "voice_stt" | "voice_tts">().notNull(),
     costMicrocents: integer("cost_microcents").notNull(),
     watchSeconds: integer("watch_seconds").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),

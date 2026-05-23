@@ -1,6 +1,6 @@
 import { pgTable, text, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 
-export const PLAN_TIERS = ["free", "pro", "elite"] as const;
+export const PLAN_TIERS = ["free", "pro", "pro_plus", "elite"] as const;
 export type PlanTier = (typeof PLAN_TIERS)[number];
 
 export const usersTable = pgTable("users", {

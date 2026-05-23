@@ -5,12 +5,13 @@ import { Loader2, RefreshCw, Crown, Shield } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
 
 type UsageSnapshot = {
-  plan: "free" | "pro" | "elite";
+  plan: "free" | "pro" | "pro_plus" | "elite";
   isAdmin: boolean;
   allowance: {
     monthlyChats: number;
     monthlyWatchSeconds: number;
     allowsWatch: boolean;
+    allowsVoice: boolean;
     allowsOverage: boolean;
     overageChatMicrocents: number;
     overageWatchSecMicrocents: number;
@@ -186,7 +187,7 @@ export default function UsagePage() {
                   href="/upgrade"
                   className="px-4 py-2 border border-primary/40 text-primary font-mono text-xs uppercase tracking-wider hover:bg-primary hover:text-primary-foreground transition-colors"
                 >
-                  {data.plan === "elite" ? "Manage plan" : "Upgrade"}
+                  {data.plan === "free" ? "Upgrade" : "Manage plan"}
                 </Link>
               </div>
 

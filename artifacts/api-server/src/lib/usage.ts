@@ -75,6 +75,8 @@ async function totalsFor(userId: string, since: Date): Promise<UsageTotals> {
   for (const r of rows) {
     if (r.kind === "chat") chats = Number(r.countAll);
     if (r.kind === "watch") watchSeconds = Number(r.sumWatch);
+    // voice_stt / voice_tts contribute to costMicrocents only (counted toward
+    // the daily $5 fuse) but not toward the chat/watch allowance counters.
     costMicrocents += Number(r.sumCost);
   }
   return { chats, watchSeconds, costMicrocents };
@@ -188,6 +190,7 @@ export type UsageSnapshot = {
     monthlyChats: number;
     monthlyWatchSeconds: number;
     allowsWatch: boolean;
+    allowsVoice: boolean;
     allowsOverage: boolean;
     overageChatMicrocents: number;
     overageWatchSecMicrocents: number;
@@ -231,6 +234,7 @@ export async function getUsageSnapshot(
       monthlyChats: cfg.monthlyChats,
       monthlyWatchSeconds: cfg.monthlyWatchSeconds,
       allowsWatch: cfg.allowsWatch,
+      allowsVoice: cfg.allowsVoice,
       allowsOverage: cfg.allowsOverage,
       overageChatMicrocents: cfg.overageChatMicrocents,
       overageWatchSecMicrocents: cfg.overageWatchSecMicrocents,
@@ -249,7 +253,7 @@ export async function getUsageSnapshot(
 
 export async function recordUsage(
   userId: string,
-  kind: "chat" | "watch",
+  kind: "chat" | "watch" | "voice_stt" | "voice_tts",
   costMicrocents: number,
   watchSeconds: number = 0,
 ): Promise<void> {

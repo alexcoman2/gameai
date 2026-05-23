@@ -4,7 +4,7 @@ import { authFetch } from "@/lib/auth-fetch";
 type PaddleConfig = {
   clientToken: string | null;
   environment: "sandbox" | "production";
-  prices: { pro: string | null; elite: string | null };
+  prices: { pro: string | null; pro_plus: string | null; elite: string | null };
 };
 
 let _paddle: Paddle | null = null;
@@ -43,7 +43,7 @@ export async function loadPaddle(): Promise<Paddle | null> {
 }
 
 export async function openCheckout(opts: {
-  tier: "pro" | "elite";
+  tier: "pro" | "pro_plus" | "elite";
 }): Promise<void> {
   const paddle = await loadPaddle();
   if (!paddle) {

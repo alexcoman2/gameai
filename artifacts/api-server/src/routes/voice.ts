@@ -2,10 +2,36 @@ import { Router } from "express";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { IS_HOSTED } from "../lib/server-mode.js";
 import { logger } from "../lib/logger.js";
+import { getOrCreateUser, recordUsage } from "../lib/usage.js";
+import {
+  PLAN_CONFIGS,
+  VOICE_STT_MICROCENTS_PER_SECOND,
+  VOICE_TTS_MICROCENTS_PER_CHAR,
+} from "../lib/plans.js";
 
 const router = Router();
 
 const protect = IS_HOSTED ? [requireAuth] : [];
+
+// Voice is a paid feature — gate on hosted mode where Clerk auth is enforced
+// and we have a real userId. Returns 403 if the user's plan does not include
+// voice; the client surfaces this as an upgrade prompt.
+async function ensureVoiceAllowed(
+  userId: string,
+  email: string | null | undefined,
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const user = await getOrCreateUser(userId, email);
+  if (user.isAdmin) return { ok: true };
+  const cfg = PLAN_CONFIGS[user.plan];
+  if (!cfg.allowsVoice) {
+    return {
+      ok: false,
+      status: 403,
+      error: "Voice mode requires a Pro, Pro+, or Elite subscription. Upgrade to enable voice.",
+    };
+  }
+  return { ok: true };
+}
 
 // Speech-to-text via OpenAI Whisper.
 //
@@ -92,7 +118,9 @@ router.post("/voice/transcribe", ...protect, async (req, res) => {
     const form = new FormData();
     form.append("file", new Blob([bytes], { type: inferredMime }), `audio.${ext}`);
     form.append("model", "whisper-1");
-    form.append("response_format", "json");
+    // verbose_json includes a `duration` field (seconds) we use to bill STT
+    // at OpenAI's per-second rate. Falls back to a zero-cost record if absent.
+    form.append("response_format", "verbose_json");
     if (language) form.append("language", language);
 
     const upstream = await fetch("https://api.openai.com/v1/audio/transcriptions", {
@@ -108,7 +136,22 @@ router.post("/voice/transcribe", ...protect, async (req, res) => {
       return;
     }
 
-    const data = (await upstream.json()) as { text?: string };
+    const data = (await upstream.json()) as { text?: string; duration?: number };
+    const durationSec = typeof data.duration === "number" && isFinite(data.duration)
+      ? Math.max(0, data.duration)
+      : 0;
+
+    // Bill the call. Round up to the nearest second so a 0.3s ping still costs
+    // something (matches OpenAI's own billing granularity).
+    if (req.userId && durationSec > 0) {
+      const cost = Math.ceil(durationSec) * VOICE_STT_MICROCENTS_PER_SECOND;
+      try {
+        await recordUsage(req.userId, "voice_stt", cost, 0);
+      } catch (e) {
+        logger.error({ err: e, userId: req.userId }, "Failed to record voice_stt usage");
+      }
+    }
+
     res.json({ text: (data.text ?? "").trim() });
   } catch (err) {
     logger.error({ err }, "Failed to transcribe audio");
@@ -214,6 +257,19 @@ router.post("/voice/speak", ...protect, async (req, res) => {
       return;
     }
     const buf = Buffer.from(await upstream.arrayBuffer());
+
+    // Bill the call. Charge per character of input text (matches OpenAI's
+    // gpt-4o-mini-tts pricing model). Non-fatal — never let a usage write
+    // failure block the audio response.
+    if (req.userId) {
+      const cost = trimmed.length * VOICE_TTS_MICROCENTS_PER_CHAR;
+      try {
+        await recordUsage(req.userId, "voice_tts", cost, 0);
+      } catch (e) {
+        logger.error({ err: e, userId: req.userId }, "Failed to record voice_tts usage");
+      }
+    }
+
     res.setHeader("Content-Type", contentType);
     res.send(buf);
   } catch (err) {

@@ -7,7 +7,7 @@ type Toast = (opts: {
 }) => void;
 
 type UsageSnapshot = {
-  plan: "free" | "pro" | "elite";
+  plan: "free" | "pro" | "pro_plus" | "elite";
   allowance: {
     monthlyChats: number;
     monthlyWatchSeconds: number;

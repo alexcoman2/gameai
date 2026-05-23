@@ -64,17 +64,23 @@ export function getPaddle(): Paddle {
   return _paddle;
 }
 
-export const PRICE_TO_TIER: Record<string, "pro" | "elite"> = {
+export type PaidTier = "pro" | "pro_plus" | "elite";
+
+export const PRICE_TO_TIER: Record<string, PaidTier> = {
   ...(process.env.PADDLE_PRO_PRICE_ID
     ? { [process.env.PADDLE_PRO_PRICE_ID]: "pro" as const }
+    : {}),
+  ...(process.env.PADDLE_PRO_PLUS_PRICE_ID
+    ? { [process.env.PADDLE_PRO_PLUS_PRICE_ID]: "pro_plus" as const }
     : {}),
   ...(process.env.PADDLE_ELITE_PRICE_ID
     ? { [process.env.PADDLE_ELITE_PRICE_ID]: "elite" as const }
     : {}),
 };
 
-export function priceIdForTier(tier: "pro" | "elite"): string | null {
+export function priceIdForTier(tier: PaidTier): string | null {
   if (tier === "pro") return process.env.PADDLE_PRO_PRICE_ID ?? null;
+  if (tier === "pro_plus") return process.env.PADDLE_PRO_PLUS_PRICE_ID ?? null;
   return process.env.PADDLE_ELITE_PRICE_ID ?? null;
 }
 
@@ -96,6 +102,7 @@ export function priceIdForTier(tier: "pro" | "elite"): string | null {
 export function validatePaddleConfig(): void {
   const isLive = paddleEnvironment === Environment.production;
   const proId = process.env.PADDLE_PRO_PRICE_ID;
+  const proPlusId = process.env.PADDLE_PRO_PLUS_PRICE_ID;
   const eliteId = process.env.PADDLE_ELITE_PRICE_ID;
   const overageProductId = process.env.PADDLE_OVERAGE_PRODUCT_ID;
   const webhookSecret = process.env.PADDLE_WEBHOOK_SECRET;
@@ -112,6 +119,7 @@ export function validatePaddleConfig(): void {
       apiKeyFingerprint: fp,
       hasWebhookSecret: !!webhookSecret,
       hasProPriceId: !!proId,
+      hasProPlusPriceId: !!proPlusId,
       hasElitePriceId: !!eliteId,
       hasOverageProductId: !!overageProductId,
     },
@@ -134,6 +142,12 @@ export function validatePaddleConfig(): void {
         "Pro checkouts will fail."
     );
   }
+  if (!proPlusId) {
+    logger.error(
+      "PADDLE_API_KEY is live but PADDLE_PRO_PLUS_PRICE_ID is unset. " +
+        "Pro+ checkouts will fail."
+    );
+  }
   if (!eliteId) {
     logger.error(
       "PADDLE_API_KEY is live but PADDLE_ELITE_PRICE_ID is unset. " +
@@ -151,7 +165,7 @@ export function validatePaddleConfig(): void {
   // live one by pattern, but the live API will 404 on a sandbox ID.
   if (!apiKey) return;
   const paddle = getPaddle();
-  const probe = async (tier: "pro" | "elite", priceId: string | undefined) => {
+  const probe = async (tier: PaidTier, priceId: string | undefined) => {
     if (!priceId) return;
     try {
       const price = await paddle.prices.get(priceId);
@@ -169,5 +183,6 @@ export function validatePaddleConfig(): void {
     }
   };
   void probe("pro", proId);
+  void probe("pro_plus", proPlusId);
   void probe("elite", eliteId);
 }

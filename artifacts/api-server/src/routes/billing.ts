@@ -52,6 +52,7 @@ router.get("/billing/config", async (req, res) => {
     environment: paddleEnvironment,
     prices: {
       pro: process.env.PADDLE_PRO_PRICE_ID ?? null,
+      pro_plus: process.env.PADDLE_PRO_PLUS_PRICE_ID ?? null,
       elite: process.env.PADDLE_ELITE_PRICE_ID ?? null,
     },
   });
@@ -111,9 +112,9 @@ router.post("/billing/checkout", ...protect, async (req, res) => {
   }
   const userId = req.userId!;
   const email = req.userEmail;
-  const tier = req.body?.tier as "pro" | "elite" | undefined;
-  if (tier !== "pro" && tier !== "elite") {
-    res.status(400).json({ error: "tier must be 'pro' or 'elite'" });
+  const tier = req.body?.tier as "pro" | "pro_plus" | "elite" | undefined;
+  if (tier !== "pro" && tier !== "pro_plus" && tier !== "elite") {
+    res.status(400).json({ error: "tier must be 'pro', 'pro_plus', or 'elite'" });
     return;
   }
   const priceId = priceIdForTier(tier);

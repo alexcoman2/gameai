@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Show, useUser } from "@clerk/react";
-import { Check, Loader2, ExternalLink, Crown, Zap, Gift } from "lucide-react";
+import { Check, Loader2, ExternalLink, Crown, Zap, Gift, Mic, Rocket } from "lucide-react";
 import { openCheckout } from "@/lib/paddle-client";
 import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 
+type PlanTier = "free" | "pro" | "pro_plus" | "elite";
+
 type BillingStatus = {
-  plan: "free" | "pro" | "elite";
+  plan: PlanTier;
   subscriptionStatus: string | null;
   subscriptionCurrentPeriodEnd: string | null;
   hasSubscription: boolean;
 };
+
+type PaidTier = "pro" | "pro_plus" | "elite";
 
 const TIERS = [
   {
@@ -21,29 +25,44 @@ const TIERS = [
     period: "forever",
     icon: Gift,
     features: [
-      "25 chats / month",
-      "30 min Watch Mode trial",
+      "40 chats / month",
+      "60 min Watch Mode trial",
       "Game detection",
       "Conversation history",
     ],
-    notIncluded: ["No overage — hard caps"],
+    notIncluded: ["No voice mode", "No overage — hard caps"],
     overage: null,
   },
   {
     id: "pro" as const,
     name: "Pro",
-    price: "$29",
+    price: "$19",
     period: "month",
     icon: Zap,
-    highlight: true,
     features: [
-      "200 chats included",
-      "2 hours Watch Mode included",
-      "5-second observation sampling",
+      "150 chats included",
+      "3 hours Watch Mode included",
+      "Voice mode (mic + TTS replies)",
       "Pay-as-you-go beyond included",
     ],
     notIncluded: [],
-    overage: "Then $0.05 / chat, $0.20 / min watch",
+    overage: "Then $0.04 / chat, $0.15 / min watch",
+  },
+  {
+    id: "pro_plus" as const,
+    name: "Pro+",
+    price: "$39",
+    period: "month",
+    icon: Rocket,
+    highlight: true,
+    features: [
+      "400 chats included",
+      "8 hours Watch Mode included",
+      "Voice mode included",
+      "Lower watch overage",
+    ],
+    notIncluded: [],
+    overage: "Then $0.04 / chat, $0.12 / min watch",
   },
   {
     id: "elite" as const,
@@ -52,13 +71,13 @@ const TIERS = [
     period: "month",
     icon: Crown,
     features: [
-      "750 chats included",
-      "8 hours Watch Mode included",
-      "Lower overage rates",
-      "Priority during peak load",
+      "1,500 chats included",
+      "25 hours Watch Mode included",
+      "Voice mode included",
+      "Best overage rates · priority load",
     ],
     notIncluded: [],
-    overage: "Then $0.04 / chat, $0.15 / min watch",
+    overage: "Then $0.03 / chat, $0.10 / min watch",
   },
 ];
 
@@ -67,7 +86,7 @@ export default function Upgrade() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [status, setStatus] = useState<BillingStatus | null>(null);
-  const [loadingTier, setLoadingTier] = useState<"pro" | "elite" | null>(null);
+  const [loadingTier, setLoadingTier] = useState<PaidTier | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
@@ -93,7 +112,7 @@ export default function Upgrade() {
     }
   }, [toast]);
 
-  async function handleUpgrade(tier: "pro" | "elite") {
+  async function handleUpgrade(tier: PaidTier) {
     if (!user) {
       setLocation("/sign-in");
       return;
@@ -133,11 +152,16 @@ export default function Upgrade() {
     }
   }
 
-  const currentPlan = status?.plan ?? "free";
+  const currentPlan: PlanTier = status?.plan ?? "free";
+
+  function displayTier(t: PlanTier): string {
+    if (t === "pro_plus") return "Pro+";
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }
 
   return (
     <div className="flex-1 overflow-y-auto px-6 py-8">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         <div className="mb-8 text-center">
           <h2 className="text-3xl font-bold font-mono tracking-wider text-primary uppercase">
             Choose Your Plan
@@ -169,7 +193,7 @@ export default function Upgrade() {
                   Current plan
                 </p>
                 <p className="text-lg font-mono font-bold text-primary uppercase mt-1">
-                  {currentPlan}
+                  {displayTier(currentPlan)}
                   {status.subscriptionStatus && (
                     <span className="ml-3 text-xs text-muted-foreground normal-case">
                       ({status.subscriptionStatus})
@@ -194,16 +218,17 @@ export default function Upgrade() {
           )}
         </Show>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {TIERS.map((tier) => {
             const Icon = tier.icon;
             const isCurrent = currentPlan === tier.id;
             const isUpgradeable = tier.id !== "free";
+            const highlight = "highlight" in tier && tier.highlight;
             return (
               <div
                 key={tier.id}
                 className={`border p-6 flex flex-col ${
-                  tier.highlight
+                  highlight
                     ? "border-primary bg-primary/5"
                     : "border-border bg-card"
                 }`}
@@ -211,12 +236,17 @@ export default function Upgrade() {
                 <div className="flex items-center justify-between mb-4">
                   <Icon
                     className={`w-6 h-6 ${
-                      tier.highlight ? "text-primary" : "text-muted-foreground"
+                      highlight ? "text-primary" : "text-muted-foreground"
                     }`}
                   />
                   {isCurrent && (
                     <span className="text-[10px] font-mono uppercase tracking-widest text-primary border border-primary px-2 py-1">
                       Current
+                    </span>
+                  )}
+                  {highlight && !isCurrent && (
+                    <span className="text-[10px] font-mono uppercase tracking-widest text-primary border border-primary px-2 py-1">
+                      Popular
                     </span>
                   )}
                 </div>
@@ -237,7 +267,11 @@ export default function Upgrade() {
                       key={f}
                       className="flex items-start gap-2 text-sm text-foreground font-mono"
                     >
-                      <Check className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                      {f.toLowerCase().includes("voice") ? (
+                        <Mic className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                      ) : (
+                        <Check className="w-4 h-4 text-primary mt-0.5 shrink-0" />
+                      )}
                       <span>{f}</span>
                     </li>
                   ))}
@@ -265,9 +299,9 @@ export default function Upgrade() {
                   <button
                     type="button"
                     disabled={isCurrent || loadingTier !== null}
-                    onClick={() => handleUpgrade(tier.id)}
+                    onClick={() => handleUpgrade(tier.id as PaidTier)}
                     className={`w-full py-3 font-mono text-xs uppercase tracking-wider border transition-colors ${
-                      tier.highlight
+                      highlight
                         ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
                         : "bg-transparent text-foreground border-border hover:bg-muted"
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
