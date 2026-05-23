@@ -359,11 +359,25 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
     // result as a separate authoritative section in the main prompt. The
     // main model can name the zone IFF the name appears in the extracted
     // text; otherwise it must admit it doesn't know.
+    // Model for the screen-text preflight. Sonnet is the sweet spot:
+    // - haiku-4-5 drops characters on small HUD text (zone labels in
+    //   corners, item tooltips), which is exactly the text the main
+    //   model is allowed to use for naming. Bad OCR → empty extraction
+    //   → main model has to refuse to name something the player can
+    //   clearly see.
+    // - sonnet-4-5 has materially better small-text OCR with ~+$0.02
+    //   cost per chat-with-screenshot and ~1-2s added latency.
+    // - opus-4-7 is overkill: OCR is a perception task, opus's
+    //   advantage is reasoning. Same vision encoder, ~5x sonnet cost,
+    //   ~2x sonnet latency. Not worth it.
+    // Flip this constant to swap models — no other code change needed.
+    const SCREEN_TEXT_MODEL = "claude-sonnet-4-5";
+
     let extractedScreenText = "";
     if (imageBase64) {
       try {
         const extractResp = await client.messages.create({
-          model: "claude-haiku-4-5",
+          model: SCREEN_TEXT_MODEL,
           max_tokens: 400,
           system: `You extract on-screen text from gaming screenshots. Output ONLY text that is literally readable in the image — zone names on signs/bonfires/loading screens, HUD labels (HP/MP/stamina numbers, currency, level, area name in corners), quest log titles and step text, item/spell/skill names with tooltips, menu/inventory entries, NPC names above dialog boxes, subtitle text, mission objectives, map labels, button prompts.\n\nRules:\n- Verbatim only. Do not paraphrase. Do not infer.\n- Do NOT describe visuals (architecture, characters, lighting, what the player is doing).\n- Do NOT name the zone/boss/game based on what it "looks like." Names only if they appear as text on screen.\n- If nothing is readable, output exactly: NO_READABLE_TEXT\n- Format: one item per line, prefixed with its location, e.g.\n  HUD-top-left: "Limgrave"\n  Bonfire: "Site of Grace - Stranded Graveyard"\n  Item tooltip: "Lordsworn's Greatsword +3"\n  Subtitle: "..."\nKeep it tight — only the actual text strings.`,
           messages: [{
