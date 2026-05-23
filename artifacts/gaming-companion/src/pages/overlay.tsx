@@ -8,7 +8,7 @@ import {
 import {
   createVoiceRecorder, speak, cancelSpeech, primeTtsPlayback,
   isTtsEnabled, setTtsEnabled, isLikelyHallucination,
-  VOICE_BLOCKED_EVENT,
+  VOICE_BLOCKED_EVENT, TTS_ENABLED_LS_KEY,
 } from "@/lib/voice";
 import { readWatchState } from "@/lib/watch-state";
 
@@ -155,15 +155,34 @@ export default function OverlayPage() {
   }, []);
 
   // Auto-focus the input each time the overlay is shown via hotkey.
+  // Also re-sync ttsOn from localStorage on each show: the user may have
+  // toggled "voice replies" in the main window after the overlay window
+  // was already created, and React state alone would miss that change.
   useEffect(() => {
     inputRef.current?.focus();
     if (!electronAPI?.onOverlayShown) return;
     const off = electronAPI.onOverlayShown(() => {
       inputRef.current?.focus();
       inputRef.current?.select();
+      setTtsOn(isTtsEnabled());
     });
     return off;
   }, [electronAPI]);
+
+  // Live cross-window sync: if the main window toggles TTS, the browser
+  // fires a `storage` event in every other same-origin window. Pick that
+  // up so the overlay header icon and the speaker pipeline both flip
+  // immediately without needing a re-show.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key !== TTS_ENABLED_LS_KEY) return;
+      const next = e.newValue === "1";
+      setTtsOn(next);
+      if (!next) cancelSpeech();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   // Esc hides the overlay; never quits.
   useEffect(() => {
