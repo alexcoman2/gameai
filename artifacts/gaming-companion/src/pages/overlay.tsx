@@ -134,6 +134,25 @@ export default function OverlayPage() {
     void electronAPI?.overlayGetPttHotkey?.().then((h) => setPttHotkey(h));
   }, [electronAPI]);
 
+  // Force <html> and <body> to be transparent on the overlay route.
+  // The Tailwind base layer applies `bg-background` to <body> globally
+  // (an opaque dark fill), which paints behind our translucent panels
+  // and defeats Electron's transparent BrowserWindow. Override here on
+  // mount, restore on unmount so other routes (home) still get their
+  // opaque background.
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlBg = html.style.background;
+    const prevBodyBg = body.style.background;
+    html.style.background = "transparent";
+    body.style.background = "transparent";
+    return () => {
+      html.style.background = prevHtmlBg;
+      body.style.background = prevBodyBg;
+    };
+  }, []);
+
   // Auto-focus the input each time the overlay is shown via hotkey.
   useEffect(() => {
     inputRef.current?.focus();
