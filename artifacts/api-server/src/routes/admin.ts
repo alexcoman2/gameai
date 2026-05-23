@@ -64,6 +64,7 @@ router.get("/admin/usage", ...protect, async (req, res) => {
     const monthSince = monthStartUTC();
     const todaySince = dayStartUTC(0);
     const series14Since = dayStartUTC(13); // 14 days inclusive
+    const fuseMicrocents = DAILY_HARD_CAP_CENTS * 10_000;
 
     // 14-day cost+activity series, grouped by UTC day.
     const dailyRows = await db
@@ -79,6 +80,29 @@ router.get("/admin/usage", ...protect, async (req, res) => {
       .groupBy(sql`date_trunc('day', ${usageRecordsTable.createdAt} at time zone 'UTC')`)
       .orderBy(sql`date_trunc('day', ${usageRecordsTable.createdAt} at time zone 'UTC')`);
 
+    // Per (day, user) costs over the same 14 days, so we can count for each
+    // day how many users individually crossed the $5 per-user fuse — the
+    // global daily-cost total is a *different* quantity than the per-user
+    // cap and must not be conflated when coloring the chart.
+    const perUserPerDayRows = await db
+      .select({
+        day: sql<string>`to_char(date_trunc('day', ${usageRecordsTable.createdAt} at time zone 'UTC'), 'YYYY-MM-DD')`,
+        userId: usageRecordsTable.userId,
+        cost: sql<string>`coalesce(sum(${usageRecordsTable.costMicrocents}),0)::bigint`,
+      })
+      .from(usageRecordsTable)
+      .where(gte(usageRecordsTable.createdAt, series14Since))
+      .groupBy(
+        sql`date_trunc('day', ${usageRecordsTable.createdAt} at time zone 'UTC')`,
+        usageRecordsTable.userId,
+      );
+    const overFuseByDay = new Map<string, number>();
+    for (const r of perUserPerDayRows) {
+      if (Number(r.cost) >= fuseMicrocents) {
+        overFuseByDay.set(r.day, (overFuseByDay.get(r.day) ?? 0) + 1);
+      }
+    }
+
     // Pad gaps so the client always gets exactly 14 entries.
     const seriesMap = new Map(dailyRows.map((r) => [r.day, r]));
     const daily: Array<{
@@ -87,6 +111,7 @@ router.get("/admin/usage", ...protect, async (req, res) => {
       chats: number;
       watchSeconds: number;
       distinctUsers: number;
+      usersOverFuse: number;
     }> = [];
     for (let i = 13; i >= 0; i--) {
       const d = dayStartUTC(i);
@@ -98,6 +123,7 @@ router.get("/admin/usage", ...protect, async (req, res) => {
         chats: Number(found?.chats ?? 0),
         watchSeconds: Number(found?.watchSeconds ?? 0),
         distinctUsers: Number(found?.distinctUsers ?? 0),
+        usersOverFuse: overFuseByDay.get(key) ?? 0,
       });
     }
 
@@ -111,7 +137,6 @@ router.get("/admin/usage", ...protect, async (req, res) => {
       .where(gte(usageRecordsTable.createdAt, todaySince))
       .groupBy(usageRecordsTable.userId);
 
-    const fuseMicrocents = DAILY_HARD_CAP_CENTS * 10_000;
     let usersOverFuseToday = 0;
     let totalCostTodayMicrocents = 0;
     const todayCostByUser = new Map<string, number>();

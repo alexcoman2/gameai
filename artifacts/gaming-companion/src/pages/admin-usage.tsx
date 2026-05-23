@@ -26,6 +26,7 @@ type AdminUsage = {
     chats: number;
     watchSeconds: number;
     distinctUsers: number;
+    usersOverFuse: number;
   }>;
   perUser: Array<{
     userId: string;
@@ -61,30 +62,29 @@ function fmtShortDay(iso: string): string {
   });
 }
 
-function Sparkbars({
-  data,
-  hardCapMicrocents,
-}: {
-  data: AdminUsage["daily"];
-  hardCapMicrocents: number;
-}) {
-  // Scale to the larger of (max observed day, 2x fuse) so a single huge day
-  // doesn't squash the rest, and the fuse line is always visible.
+function Sparkbars({ data }: { data: AdminUsage["daily"] }) {
+  // Scale only to the largest observed day (no synthetic floor) so the
+  // shape of the trend is preserved. Empty days are 0-height.
   const maxObserved = Math.max(0, ...data.map((d) => d.costMicrocents));
-  const scaleMax = Math.max(maxObserved, hardCapMicrocents * 2);
   return (
     <div className="flex items-end gap-1 h-32 border-b border-border">
       {data.map((d) => {
-        const heightPct = scaleMax > 0 ? (d.costMicrocents / scaleMax) * 100 : 0;
-        const overFuse = d.costMicrocents >= hardCapMicrocents;
+        const heightPct = maxObserved > 0 ? (d.costMicrocents / maxObserved) * 100 : 0;
+        // Red coloring means at least one user individually crossed the
+        // per-user $5 fuse that day — distinct from "total daily cost > $5".
+        const someoneHitFuse = d.usersOverFuse > 0;
+        const fuseSuffix =
+          d.usersOverFuse > 0
+            ? ` · ${d.usersOverFuse} user${d.usersOverFuse === 1 ? "" : "s"} hit fuse`
+            : "";
         return (
           <div
             key={d.day}
             className="flex-1 flex flex-col items-center justify-end gap-1 group relative"
-            title={`${fmtShortDay(d.day)} · ${fmtDollars(d.costMicrocents)} · ${d.distinctUsers} users · ${d.chats} chats · ${fmtMinutes(d.watchSeconds)} watch`}
+            title={`${fmtShortDay(d.day)} · ${fmtDollars(d.costMicrocents)} · ${d.distinctUsers} users · ${d.chats} chats · ${fmtMinutes(d.watchSeconds)} watch${fuseSuffix}`}
           >
             <div
-              className={`w-full transition-all ${overFuse ? "bg-destructive" : "bg-primary/80 group-hover:bg-primary"}`}
+              className={`w-full transition-all ${someoneHitFuse ? "bg-destructive" : "bg-primary/80 group-hover:bg-primary"}`}
               style={{ height: `${heightPct}%`, minHeight: d.costMicrocents > 0 ? "2px" : "0" }}
             />
             <span className="text-[9px] font-mono text-muted-foreground rotate-0">
@@ -214,10 +214,7 @@ export default function AdminUsagePage() {
                     red bar = exceeded per-user fuse for at least one user
                   </span>
                 </div>
-                <Sparkbars
-                  data={data.daily}
-                  hardCapMicrocents={data.dailyHardCapCents * 10_000}
-                />
+                <Sparkbars data={data.daily} />
               </div>
 
               <div className="border border-border bg-card/40 p-5">
