@@ -36,6 +36,11 @@ externalPort = 3000
 [userenv.shared]
 ADMIN_EMAILS = "comanalex972@gmail.com"
 PADDLE_ENVIRONMENT = "production"
+VITE_LEGAL_ENTITY_NAME = "Alexandru Coman"
+VITE_CONTACT_EMAIL = "comanalex972@gmail.com"
+VITE_REFUNDS_EMAIL = "comanalex972@gmail.com"
+VITE_PRIVACY_EMAIL = "comanalex972@gmail.com"
+VITE_LEGAL_JURISDICTION = "Romania"
 
 [nix]
 channel = "stable-25_05"
