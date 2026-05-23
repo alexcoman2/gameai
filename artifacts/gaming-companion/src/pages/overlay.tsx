@@ -514,13 +514,14 @@ export default function OverlayPage() {
               type="button"
               onClick={toggleTts}
               title={ttsOn ? "Voice replies ON — click to mute" : "Voice replies OFF — click to enable"}
-              className={`h-6 w-6 flex items-center justify-center transition ${
+              className={`h-6 px-2 flex items-center gap-1 transition border text-[9px] uppercase tracking-[0.15em] ${
                 ttsOn
-                  ? "text-primary hover:bg-primary/10"
-                  : "text-muted-foreground hover:text-foreground hover:bg-primary/10"
+                  ? "text-primary border-primary bg-primary/15 hover:bg-primary/25"
+                  : "text-foreground/80 border-foreground/40 hover:text-primary hover:border-primary/60 hover:bg-primary/10"
               }`}
             >
               {ttsOn ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
+              <span>{ttsOn ? "Voice On" : "Voice Off"}</span>
             </button>
             <button
               type="button"
