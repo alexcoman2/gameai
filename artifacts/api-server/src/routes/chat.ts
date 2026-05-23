@@ -1,6 +1,7 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { getLatestScreenshot } from "../lib/screenshot-state.js";
+import { buildSpecialistAddendum, getPreferredWikiDomains } from "../lib/game-knowledge.js";
 import {
   loadHistory,
   saveHistory,
@@ -99,7 +100,7 @@ router.post("/chat/message", async (req, res) => {
     imageData?: string | null;
     sessionId?: string | null;
     history?: HistoryEntry[] | null;
-    watchLog?: { time: string; note: string }[] | null;
+    watchLog?: { time: string; note: string; event?: string | null; confidence?: number | null; visibleText?: string | null }[] | null;
   };
 
   if (!message || typeof message !== "string" || message.trim() === "") {
@@ -239,9 +240,19 @@ router.post("/chat/message", async (req, res) => {
     ? `You have been assisting this player for ${Math.round(historyLength)} exchange${historyLength !== 1 ? "s" : ""} this session. Use the full conversation history to maintain continuity — remember what problems they've encountered, what strategies were tried, what areas they've explored, and what help you've already given.`
     : `This is the start of a new session with this player.`;
 
-  const watchLogSection = reqWatchLog && reqWatchLog.length > 0
-    ? `\nWATCH LOG — you have ${reqWatchLog.length} passive screen observation${reqWatchLog.length !== 1 ? "s" : ""} recorded by NEXUS_LINK while the player was playing (newest last):\n${reqWatchLog.map(e => `  [${e.time}] ${e.note}`).join("\n")}\nThis IS your log. Use it to understand what has been happening between messages. When the player asks about your logs, reference these entries directly.\n`
-    : "\nWATCH LOG — no observations recorded yet this session. Watch Mode is currently off or hasn't fired yet. If the player asks about your logs, explain that NEXUS_LINK's Watch Mode passively records screen observations every 20 seconds when enabled, and they can turn it on using the Watch button in the toolbar to start building a log.\n";
+  // Filter out very low confidence observations to keep context clean
+  const usableLog = (reqWatchLog ?? []).filter(
+    (e) => typeof e.confidence !== "number" || e.confidence >= 0.5
+  );
+  const watchLogSection = usableLog.length > 0
+    ? `\nWATCH LOG — ${usableLog.length} passive screen observation${usableLog.length !== 1 ? "s" : ""} recorded by NEXUS_LINK while the player was playing (newest last):\n${usableLog.map(e => {
+        const tag = e.event ? `[${e.event}] ` : "";
+        const txt = e.visibleText ? ` — text: "${e.visibleText}"` : "";
+        return `  [${e.time}] ${tag}${e.note}${txt}`;
+      }).join("\n")}\nThis IS your log. Use it to understand what has been happening between messages. Bracketed tags ([combat], [boss], [menu], etc.) indicate the event type. "text:" fields are verbatim transcriptions of on-screen text — treat them as ground truth.\n`
+    : "\nWATCH LOG — no observations recorded yet this session. Watch Mode is currently off or hasn't fired yet. If the player asks about your logs, explain that NEXUS_LINK's Watch Mode passively records screen observations every 5 seconds when enabled, and they can turn it on using the Watch button in the toolbar to start building a log.\n";
+
+  const specialistKnowledge = buildSpecialistAddendum(gameName);
 
   const systemPrompt = `You are NEXUS_LINK AI CORE — a master-level gaming expert and co-pilot embedded as a desktop overlay. You have encyclopaedic, pro-player knowledge of every game you know: every area, every enemy, every boss pattern, every hidden item, every shortcut, every optimal route, every build, every exploit. You have mentally completed these games dozens of times and know them better than most players ever will.
 
@@ -262,7 +273,7 @@ HOW YOU GIVE ADVICE:
 
 SPOILERS: Warn before revealing story spoilers and check if the player wants them. Gameplay spoilers (enemy locations, shortcuts, item locations) are fair game — that's what the player is here for.
 
-RESOURCE AWARENESS: Factor the player's current state from the watch log into your advice — health, stamina, currency, ammo, cooldowns, or whatever resource matters in this game. If they're in a risky state (low health, about to lose progress, insufficient resources for the next challenge), flag it and advise accordingly before they walk into trouble.`;
+RESOURCE AWARENESS: Factor the player's current state from the watch log into your advice — health, stamina, currency, ammo, cooldowns, or whatever resource matters in this game. If they're in a risky state (low health, about to lose progress, insufficient resources for the next challenge), flag it and advise accordingly before they walk into trouble.${specialistKnowledge}`;
 
 
   try {
@@ -323,10 +334,13 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
 
     // Agentic loop: Claude may call web_search one or more times before replying
     const loopMessages = [...allMessages];
+    const cachedSystem = [
+      { type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } },
+    ];
     let response = await client.messages.create({
       model: "claude-opus-4-7",
       max_tokens: 2048,
-      system: systemPrompt,
+      system: cachedSystem,
       messages: loopMessages,
       ...(tools.length > 0 ? { tools, tool_choice: { type: "auto" } } : {}),
     });
@@ -341,7 +355,8 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
       if (toolUseBlock.name === "web_search" && exaApiKey) {
         try {
           const input = toolUseBlock.input as { query: string };
-          console.log(`[chat] web_search: "${input.query}"`);
+          const preferredDomains = getPreferredWikiDomains(gameName);
+          console.log(`[chat] web_search: "${input.query}"${preferredDomains.length ? ` [biased: ${preferredDomains.join(",")}]` : ""}`);
           const searchRes = await fetch("https://api.exa.ai/search", {
             method: "POST",
             headers: {
@@ -352,6 +367,7 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
               query: input.query,
               numResults: 5,
               contents: { text: { maxCharacters: 800 } },
+              ...(preferredDomains.length > 0 ? { includeDomains: preferredDomains } : {}),
             }),
           });
           if (searchRes.ok) {
@@ -379,7 +395,7 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
       response = await client.messages.create({
         model: "claude-opus-4-7",
         max_tokens: 2048,
-        system: systemPrompt,
+        system: cachedSystem,
         messages: loopMessages,
         tools,
         tool_choice: { type: "auto" },

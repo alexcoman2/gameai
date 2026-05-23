@@ -8,17 +8,23 @@ const OBSERVE_SYSTEM_PROMPT = `You are a game state recorder embedded in a gamin
 Return exactly this format:
 {
   "gameName": "<the specific game being played, or null if you cannot identify it>",
-  "observation": "<2-3 sentence factual description of what you literally see>"
+  "observation": "<1-2 sentence factual description of what you literally see>",
+  "event": "<one of: exploring | combat | boss | menu | inventory | dialogue | cutscene | loading | death | item_pickup | level_up | other | not_gaming>",
+  "confidence": <number 0.0-1.0 reflecting how certain you are about the observation>,
+  "visibleText": "<exact text visible on screen (item names, location labels, dialogue, HUD numbers, quest text), concatenated with semicolons; empty string if no readable text>"
 }
 
-For gameName: identify the game from ANY visible portion — HUD elements, skill bars, health globes, minimap, art style, characters, game world, or any text. Be specific — "Diablo IV" not "an ARPG", "Dark Souls Remastered" not "a Soulslike". If a game hint is provided and you can see ANY game-like content consistent with it, confirm that name. Only return null if you see absolutely no game content.
+For gameName: identify the game from ANY visible portion — HUD, skill bars, health globes, minimap, art style, characters, world, or text. Be specific — "Diablo IV" not "an ARPG", "Dark Souls Remastered" not "a Soulslike". If a game hint is provided and you see consistent content, confirm it. Only return null if you see absolutely no game content.
 
-For observation: describe ONLY what you can literally see in this specific screenshot. Be precise about visual details:
-- Environment: architecture style, materials (stone/wood/metal), lighting (torch-lit/sunlit/dark), colours, structures visible
-- Characters: player position, what they are doing (standing/fighting/exploring), enemy types and positions if visible
-- HUD: health/stamina/mana bars and approximate levels, souls/currency count, equipped weapon, active effects
-- DO NOT guess or assume the location name from memory — only name a location if you can read it on screen as text. Instead describe what the environment looks like (e.g. "a crumbling stone cathedral with tall stained-glass windows and a fog gate ahead" not "Anor Londo"). If you see a bonfire, name it only if its label is visible on screen.
-- If no game is visible, briefly describe what IS on screen. No tips, no advice — only describe what you see.`;
+For observation: describe ONLY what you literally see. Keep to 1-2 sentences max — prefer specific visual details over generic ones.
+- DO NOT guess location names from memory — only name a location if you can READ it on screen. Describe what the environment looks like instead (e.g. "crumbling stone cathedral with stained-glass windows and a fog gate" not "Anor Londo").
+- Include HUD state: health/stamina/mana levels, currency, equipped weapon, active effects — only if visible.
+
+For event: classify what the player is doing right now. "boss" only if a boss healthbar is visible or you see a large named enemy. "combat" for regular enemy fights. "menu"/"inventory"/"dialogue"/"cutscene" when those UIs dominate the screen. "death" when a "You Died"-style screen is shown. "not_gaming" when no game content is visible.
+
+For confidence: 0.9+ = clear and certain; 0.6-0.8 = mostly sure but some ambiguity; below 0.6 = guessing. Use low confidence honestly — downstream filtering depends on this.
+
+For visibleText: transcribe text VERBATIM from the screen. Item names, location labels at top of screen, dialogue, quest objectives, HUD numbers (e.g. "HP 245/300; Souls 2840"). This is ground truth — do not paraphrase.`;
 
 router.post("/chat/watch", async (req, res) => {
   const { imageData, gameName } = req.body as {
@@ -89,8 +95,14 @@ router.post("/chat/watch", async (req, res) => {
 
     const response = await client.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 200,
-      system: OBSERVE_SYSTEM_PROMPT,
+      max_tokens: 400,
+      system: [
+        {
+          type: "text",
+          text: OBSERVE_SYSTEM_PROMPT,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       messages: [
         {
           role: "user",
@@ -118,16 +130,25 @@ router.post("/chat/watch", async (req, res) => {
     const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
 
     try {
-      const parsed = JSON.parse(cleaned) as { observation?: string | null; gameName?: string | null };
-      console.log(`[watch] parsed => gameName="${parsed.gameName}" observation="${parsed.observation?.slice(0, 80)}"`);
+      const parsed = JSON.parse(cleaned) as {
+        observation?: string | null;
+        gameName?: string | null;
+        event?: string | null;
+        confidence?: number | null;
+        visibleText?: string | null;
+      };
+      console.log(`[watch] parsed => game="${parsed.gameName}" event="${parsed.event}" conf=${parsed.confidence} obs="${parsed.observation?.slice(0, 60)}"`);
       res.json({
         observation: parsed.observation ?? null,
         gameName: parsed.gameName ?? null,
+        event: parsed.event ?? null,
+        confidence: typeof parsed.confidence === "number" ? parsed.confidence : null,
+        visibleText: parsed.visibleText ?? null,
       });
     } catch {
       // Still not valid JSON — use as raw observation
       console.log(`[watch] non-JSON response, using as raw observation`);
-      res.json({ observation: cleaned, gameName: null });
+      res.json({ observation: cleaned, gameName: null, event: null, confidence: null, visibleText: null });
     }
   } catch (err) {
     if (err instanceof Anthropic.APIError) {

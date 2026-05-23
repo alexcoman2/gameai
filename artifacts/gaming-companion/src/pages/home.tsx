@@ -74,7 +74,7 @@ export default function Home() {
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [watchMode, setWatchMode] = useState(false);
   const [watchScreenshot, setWatchScreenshot] = useState<string | null>(null);
-  const [watchLog, setWatchLog] = useState<{ time: string; note: string }[]>([]);
+  const [watchLog, setWatchLog] = useState<{ time: string; note: string; event?: string | null; confidence?: number | null; visibleText?: string | null }[]>([]);
   const [visionDetectedGame, setVisionDetectedGame] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
 
@@ -268,13 +268,23 @@ export default function Home() {
               body: JSON.stringify({ imageData: observeWith, gameName }),
             });
             if (res.ok && active) {
-              const data = (await res.json()) as { observation: string | null; gameName: string | null };
+              const data = (await res.json()) as {
+                observation: string | null;
+                gameName: string | null;
+                event?: string | null;
+                confidence?: number | null;
+                visibleText?: string | null;
+              };
               if (data.observation) {
                 const entry = {
                   time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                   note: data.observation,
+                  event: data.event ?? null,
+                  confidence: data.confidence ?? null,
+                  visibleText: data.visibleText ?? null,
                 };
-                setWatchLog((prev) => [...prev.slice(-14), entry]);
+                // Keep last ~5 minutes of context (60 entries at 5s intervals)
+                setWatchLog((prev) => [...prev.slice(-59), entry]);
               }
               if (data.gameName) {
                 setVisionDetectedGame(data.gameName);
@@ -696,7 +706,6 @@ export default function Home() {
                       if (v) { setVisionDetectedGame(null); }
                       return !v;
                     });
-                    setWatchInsight(null);
                   }}
                   title={watchMode ? "Watch mode: ON — capturing and observing every 5s" : "Watch mode: OFF"}
                   className={`font-mono text-[10px] uppercase tracking-widest rounded-none h-7 px-2 gap-1.5 ${
