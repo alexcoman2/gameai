@@ -313,13 +313,28 @@ export default function OverlayPage() {
   return (
     <div className="h-screen w-screen p-0 m-0 overflow-hidden bg-transparent font-mono text-foreground">
       <div
-        className="flex h-full w-full flex-col border border-primary/30 bg-background/85 backdrop-blur-xl shadow-[0_0_40px_rgba(0,255,128,0.15)]"
-        style={{ WebkitUserSelect: "none" }}
+        className="flex h-full w-full flex-col border border-primary/40"
+        style={{
+          // Solid translucent fill — NOT backdrop-blur. Backdrop blur on a
+          // transparent Electron window is the main reason the overlay
+          // used to jitter while dragging or typing (Chromium repaints the
+          // blur each frame). A flat rgba background is GPU-cheap and
+          // looks just as polished. Alpha is intentionally low so the
+          // user can see their game through it.
+          backgroundColor: "rgba(8, 14, 11, 0.55)",
+          WebkitUserSelect: "none",
+          // Promote to its own compositor layer so dragging the window
+          // doesn't force the renderer to repaint the entire surface.
+          transform: "translateZ(0)",
+        }}
       >
         {/* Drag handle / header */}
         <div
-          className="flex items-center justify-between px-3 py-2 border-b border-primary/20 bg-background/60"
-          style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
+          className="flex items-center justify-between px-3 py-2 border-b border-primary/25"
+          style={{
+            backgroundColor: "rgba(8, 14, 11, 0.45)",
+            WebkitAppRegion: "drag",
+          } as React.CSSProperties}
         >
           <div className="flex items-center gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
@@ -432,7 +447,10 @@ export default function OverlayPage() {
         </div>
 
         {/* Composer */}
-        <div className="border-t border-primary/20 bg-background/60 p-2">
+        <div
+          className="border-t border-primary/25 p-2"
+          style={{ backgroundColor: "rgba(8, 14, 11, 0.45)" }}
+        >
           <div className="flex items-end gap-2">
             <button
               type="button"
@@ -489,7 +507,8 @@ export default function OverlayPage() {
               }
               rows={2}
               disabled={(isLoaded && !isSignedIn) || isRecording || isTranscribing}
-              className="flex-1 resize-none bg-background/80 border border-border focus:border-primary/60 focus:outline-none text-xs px-2 py-1.5 placeholder:text-muted-foreground/50"
+              className="flex-1 resize-none border border-border focus:border-primary/60 focus:outline-none text-xs px-2 py-1.5 placeholder:text-muted-foreground/50"
+              style={{ backgroundColor: "rgba(8, 14, 11, 0.6)" }}
               style={{ WebkitUserSelect: "text" } as React.CSSProperties}
             />
             <button
