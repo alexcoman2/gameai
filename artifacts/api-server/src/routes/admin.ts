@@ -31,12 +31,22 @@ async function proxyToHosted(
   path: string,
 ): Promise<void> {
   try {
+    // In IS_PROXY (Electron) mode, the renderer authenticates via Clerk
+    // *cookies* (the local clerk passthrough mirrors the hosted Clerk
+    // session into 127.0.0.1's cookie jar). Forwarding only the
+    // Authorization header sends an anonymous request upstream — hosted
+    // requireAuth then either 401s or, for handlers that dereference
+    // userId, 500s. Forward the Cookie header (and Authorization if
+    // present) so the hosted server sees the same authenticated session
+    // the renderer has.
     const authHeader = req.headers.authorization;
+    const cookieHeader = req.headers.cookie;
     const upstream = await fetch(`${HOSTED_URL}${path}`, {
       method: "GET",
       headers: {
         "Content-Type": "application/json",
         ...(authHeader ? { Authorization: authHeader } : {}),
+        ...(cookieHeader ? { Cookie: cookieHeader } : {}),
       },
     });
     const data = await upstream.json().catch(() => ({}));
