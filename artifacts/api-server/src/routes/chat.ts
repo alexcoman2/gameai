@@ -287,16 +287,22 @@ GAME: ${gameContext}
 
 SESSION MEMORY: ${sessionContext} The conversation history above this prompt is real — it contains every prior turn this session, including any screenshots the player attached. Reference it actively. If the player asks "what was I doing earlier?", "what did you suggest for the boss?", or anything that refers back, ANSWER from history — do not say you have no memory of the session.
 ${watchLogSection}
-USING YOUR CONTEXT — you have three sources of grounded information beyond the player's current question: (1) the conversation history, (2) the WATCH LOG above, and (3) any attached screenshot. Use them. When the player asks "what's happening?", "what have I been doing?", "where am I?", or "what should I do next?", build your answer from these sources first. Quote specific watch-log entries or earlier turns when relevant ("a few minutes ago you were fighting an enemy with a red healthbar near a fog gate…"). Treat an empty watch log as "I haven't been recording recently" — not as "nothing has happened."
+USING YOUR CONTEXT — you have four sources of grounded information beyond the player's current question: (1) conversation history, (2) the WATCH LOG above, (3) any attached screenshot for visual context, and (4) the SCREEN-TEXT EXTRACTION block injected at the end of the user message for any NAMED entities visible right now. Use history and the watch log for "what's been happening?" type questions. Use the screenshot for visual context (what's on screen, what the player is doing right now). Use SCREEN-TEXT EXTRACTION as the only source for naming things in the current frame. Treat an empty watch log as "I haven't been recording recently" — not as "nothing has happened."
 
-SCREENSHOT: When a screenshot is attached, it is a real-time capture of the player's screen. Use it as a context signal. Read on-screen text (zone name on a bonfire, quest log, item name, HUD numbers) as ground truth — those are reliable. Visual cues (architecture, lighting, enemy models) are only suggestive — a stone hallway with torches could be one of fifty places. Never claim you cannot see screenshots — if one is attached, you are seeing it.
+SCREENSHOT: When a screenshot is attached, it is a real-time capture of the player's screen. A separate extraction pass will inject a "[UNSTUCK SCREEN-TEXT EXTRACTION]" block into the user message listing every text string that is literally legible in the frame. That extraction is the ONLY authoritative source you have for naming things in the current frame.
 
-CALIBRATION — apply this to SPECIFIC FACTUAL CLAIMS (zone names, boss names, item names, NPC names, patch numbers, build numerics). Do NOT use it as a reason to refuse to engage with the player's situation.
-- For factual specifics you can't verify from on-screen text or your knowledge: say "I'm not sure exactly — this looks like X or Y" and ask a brief clarifier if needed.
-- Tileset reuse is real (Dark Souls catacombs vs Tomb of Giants, Skyrim Nordic ruins, Elden Ring catacombs). Unless on-screen text confirms a zone, label any guess as a guess.
-- For anything time-sensitive (current meta, latest patch, season builds), prefer web_search over training-cutoff memory.
-- Calibration is about labeling uncertainty on specifics, NOT about refusing to give tactical advice or pretending you can't see context. If the watch log shows the player was in combat 30 seconds ago, that's a fact — use it.
-- Being wrong on specifics is worse than being uncertain on them. But being unhelpfully vague when you have evidence to work with is also a failure.
+NAMING RULE — HARD RULE, NO EXCEPTIONS:
+- A zone, area, boss, item, NPC, quest, or location may only be NAMED in your reply if its name appears verbatim in: (a) the SCREEN-TEXT EXTRACTION block, (b) the WATCH LOG's "text:" fields, or (c) something the player typed in chat history.
+- If a name is not in any of those sources, you do NOT know it from this screenshot. Say so plainly: "I don't see a zone name on screen — could be a few places. Open the map / look at the next bonfire / tell me where you are and I can be specific." Then ask one short clarifier.
+- Visual style is NEVER a basis for naming. Stone catacombs, Nordic ruins, snowy mountains, neon cyberpunk alleys — every one of these is reused across dozens of zones and dozens of games. "Looks like" is not knowing.
+- This rule overrides any urge to be helpful by guessing. A confident wrong name is the single worst failure mode. "I don't know which zone but here's what I can tell you about the situation" is correct.
+
+YOU CAN STILL HELP WITHOUT NAMES: You can describe what's visible, give tactical advice on what's happening ("that enemy with the red bar telegraphs a sweep — roll through it"), suggest general strategies, and use the watch log + history for context. The naming rule restricts NAMING, not engagement.
+
+OTHER CALIBRATION:
+- For time-sensitive info (current meta, latest patch, season builds), prefer web_search over training-cutoff memory.
+- For build/stat numerics you're unsure about, say so and offer to search.
+- Never claim you cannot see screenshots — if one is attached, you are seeing it.
 
 HOW YOU GIVE ADVICE:
 - Lead with the answer when you have one. When you don't have one, lead with what you can actually tell from the screen + your uncertainty, then give the best guess you can defend.
@@ -342,6 +348,56 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
     }
 
     userContent.push({ type: "text", text: message.trim() });
+
+    // ── Screen-text preflight ──────────────────────────────────────────────
+    // Vision models are confident hallucinators when asked "what zone is
+    // this?" from a screenshot of reused art (Nordic ruins, catacombs,
+    // generic stone hallways). The fix isn't more prompt nagging — it's
+    // forcing the model to first commit to "what is literally readable on
+    // screen" before it commits to "what this is." We do a cheap, focused
+    // haiku call that just extracts on-screen text, then inject the
+    // result as a separate authoritative section in the main prompt. The
+    // main model can name the zone IFF the name appears in the extracted
+    // text; otherwise it must admit it doesn't know.
+    let extractedScreenText = "";
+    if (imageBase64) {
+      try {
+        const extractResp = await client.messages.create({
+          model: "claude-haiku-4-5",
+          max_tokens: 400,
+          system: `You extract on-screen text from gaming screenshots. Output ONLY text that is literally readable in the image — zone names on signs/bonfires/loading screens, HUD labels (HP/MP/stamina numbers, currency, level, area name in corners), quest log titles and step text, item/spell/skill names with tooltips, menu/inventory entries, NPC names above dialog boxes, subtitle text, mission objectives, map labels, button prompts.\n\nRules:\n- Verbatim only. Do not paraphrase. Do not infer.\n- Do NOT describe visuals (architecture, characters, lighting, what the player is doing).\n- Do NOT name the zone/boss/game based on what it "looks like." Names only if they appear as text on screen.\n- If nothing is readable, output exactly: NO_READABLE_TEXT\n- Format: one item per line, prefixed with its location, e.g.\n  HUD-top-left: "Limgrave"\n  Bonfire: "Site of Grace - Stranded Graveyard"\n  Item tooltip: "Lordsworn's Greatsword +3"\n  Subtitle: "..."\nKeep it tight — only the actual text strings.`,
+          messages: [{
+            role: "user",
+            content: [
+              { type: "image", source: { type: "base64", media_type: chatMediaType, data: imageBase64 } },
+              { type: "text", text: "Extract all readable on-screen text." },
+            ],
+          }],
+        });
+        const textBlock = extractResp.content.find((b): b is Anthropic.TextBlock => b.type === "text");
+        extractedScreenText = textBlock?.text.trim() ?? "";
+        console.log(`[chat] screen-text extracted: ${extractedScreenText.length} chars`);
+      } catch (e) {
+        console.warn("[chat] screen-text preflight failed:", e instanceof Error ? e.message : e);
+        extractedScreenText = "";
+      }
+    }
+
+    // Inject the extracted text as a high-priority, late-bound user message
+    // (NOT in the cached system prompt — it changes every turn and would
+    // bust the prompt cache). Place it right before the player's question
+    // so the model reads it last.
+    if (extractedScreenText && extractedScreenText !== "NO_READABLE_TEXT") {
+      userContent.splice(userContent.length - 1, 0, {
+        type: "text",
+        text: `[UNSTUCK SCREEN-TEXT EXTRACTION — verbatim text legible in the attached screenshot, extracted by a separate vision pass. This is the ONLY authoritative source for named entities (zones, bosses, items, NPCs) in the current frame. If a name does not appear here, you do not know it from this screenshot — say so and ask the player to confirm, do not guess from visuals.]\n${extractedScreenText}`,
+      });
+    } else if (imageBase64) {
+      userContent.splice(userContent.length - 1, 0, {
+        type: "text",
+        text: `[UNSTUCK SCREEN-TEXT EXTRACTION: NO_READABLE_TEXT was detected in the attached screenshot. This means there are no zone names, HUD labels, item names, or other text strings legible in the current frame. You CANNOT name the zone, boss, item, or location from this screenshot alone. If the player asks "where am I?" or similar, say plainly that you don't see any on-screen text confirming the location and ask them to open the map, pause menu, or move to a sign/bonfire. Do NOT guess based on visual style — Nordic ruins, catacombs, stone hallways, and generic fantasy environments are reused across many zones and many games.]`,
+      });
+    }
 
     const allMessages: Anthropic.MessageParam[] = [
       ...conversationHistory.map((e) => ({ role: e.role, content: e.content })),
