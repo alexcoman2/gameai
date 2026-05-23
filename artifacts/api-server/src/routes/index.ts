@@ -7,16 +7,25 @@ import watchRouter from "./watch.js";
 import settingsRouter from "./settings.js";
 import sessionsRouter from "./sessions.js";
 import billingRouter from "./billing.js";
+import { IS_LOCAL_ROUTES_ENABLED } from "../lib/server-mode.js";
 
 const router: IRouter = Router();
 
+// Always available, on every deployment mode.
 router.use(healthRouter);
-router.use(gameRouter);
-router.use(screenshotRouter);
 router.use(chatRouter);
 router.use(watchRouter);
-router.use(settingsRouter);
-router.use(sessionsRouter);
 router.use(billingRouter);
+
+// Per-machine local routes. Disabled on the hosted server because they expose
+// shared per-process filesystem/memory state (sessions, captured screenshots,
+// config file, currently-running games) that would otherwise be readable
+// across all hosted users.
+if (IS_LOCAL_ROUTES_ENABLED) {
+  router.use(gameRouter);
+  router.use(screenshotRouter);
+  router.use(settingsRouter);
+  router.use(sessionsRouter);
+}
 
 export default router;

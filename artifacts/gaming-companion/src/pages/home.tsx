@@ -29,6 +29,7 @@ import { DialogTitle } from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useChat } from "@/context/chat-context";
+import { authFetch } from "@/lib/auth-fetch";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -262,7 +263,7 @@ export default function Home() {
             const gameScreenshot = await electronAPI.getLastGameScreenshot?.() ?? null;
             const raw = gameScreenshot || dataUrl;
             const observeWith = await compressScreenshot(raw);
-            const res = await fetch("/api/chat/watch", {
+            const res = await authFetch("/api/chat/watch", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ imageData: observeWith, gameName }),

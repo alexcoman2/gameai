@@ -1,15 +1,51 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { eq } from "drizzle-orm";
 import { db, usersTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getPaddle, paddleEnvironment, priceIdForTier } from "../lib/paddle.js";
 import { logger } from "../lib/logger.js";
+import { IS_PROXY } from "../lib/server-mode.js";
 
 const router: IRouter = Router();
 
+// In proxy mode, forward billing calls to the hosted Replit server (which has
+// Paddle creds + Clerk auth). In hosted/dev mode, handle them locally.
+const HOSTED_URL = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
+const protect = IS_PROXY ? [] : [requireAuth];
+
+async function proxyToHosted(
+  req: Request,
+  res: Response,
+  path: string,
+): Promise<void> {
+  try {
+    const authHeader = req.headers.authorization;
+    const init: RequestInit = {
+      method: req.method,
+      headers: {
+        "Content-Type": "application/json",
+        ...(authHeader ? { Authorization: authHeader } : {}),
+      },
+    };
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      init.body = JSON.stringify(req.body ?? {});
+    }
+    const upstream = await fetch(`${HOSTED_URL}${path}`, init);
+    const data = await upstream.json().catch(() => ({}));
+    res.status(upstream.status).json(data);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Unknown error";
+    res.status(502).json({ error: `Failed to reach billing service: ${msg}` });
+  }
+}
+
 // Public config — exposes the client-side token and price IDs to the browser.
 // Not authenticated: client needs it before sign-in to render the pricing page.
-router.get("/billing/config", (_req, res) => {
+router.get("/billing/config", async (req, res) => {
+  if (IS_PROXY) {
+    await proxyToHosted(req, res, "/api/billing/config");
+    return;
+  }
   res.json({
     clientToken: process.env.PADDLE_CLIENT_TOKEN ?? null,
     environment: paddleEnvironment,
@@ -21,7 +57,11 @@ router.get("/billing/config", (_req, res) => {
 });
 
 // Current user's billing status — used by client to render "current plan" badges.
-router.get("/billing/status", requireAuth, async (req, res) => {
+router.get("/billing/status", ...protect, async (req, res) => {
+  if (IS_PROXY) {
+    await proxyToHosted(req, res, "/api/billing/status");
+    return;
+  }
   const userId = req.userId!;
   const rows = await db
     .select()
@@ -44,7 +84,11 @@ router.get("/billing/status", requireAuth, async (req, res) => {
 // Creates a Paddle transaction server-side so customData.userId is bound by
 // trusted code (never the browser). The client opens Inline Checkout with the
 // returned transactionId — it cannot tamper the subscription's userId binding.
-router.post("/billing/checkout", requireAuth, async (req, res) => {
+router.post("/billing/checkout", ...protect, async (req, res) => {
+  if (IS_PROXY) {
+    await proxyToHosted(req, res, "/api/billing/checkout");
+    return;
+  }
   const userId = req.userId!;
   const email = req.userEmail;
   const tier = req.body?.tier as "pro" | "elite" | undefined;
@@ -74,7 +118,11 @@ router.post("/billing/checkout", requireAuth, async (req, res) => {
 
 // Returns the Paddle customer portal URL so the user can manage their
 // subscription (change card, cancel, etc.) outside our app.
-router.post("/billing/portal", requireAuth, async (req, res) => {
+router.post("/billing/portal", ...protect, async (req, res) => {
+  if (IS_PROXY) {
+    await proxyToHosted(req, res, "/api/billing/portal");
+    return;
+  }
   const userId = req.userId!;
   const rows = await db
     .select()

@@ -77,8 +77,13 @@ async function startServer(): Promise<void> {
       PORT: String(SERVER_PORT),
       NODE_ENV: "production",
       STATIC_DIR: staticDir,
+      // Tells the bundled api-server it is the local proxy instance: skip
+      // its own Clerk auth (no keys here), enable per-machine local routes
+      // (sessions/settings/screenshot/game), and forward AI/billing calls
+      // to the hosted backend below.
+      AUTH_MODE: "proxy",
       // Points to the hosted Replit API server. The local server acts as a
-      // proxy for chat and never needs an Anthropic API key.
+      // proxy for chat/watch/billing and never needs an Anthropic API key.
       UNSTUCK_API_URL:
         process.env.UNSTUCK_API_URL ||
         process.env.NEXUS_LINK_API_URL ||

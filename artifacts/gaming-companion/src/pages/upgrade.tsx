@@ -3,6 +3,7 @@ import { Link, useLocation } from "wouter";
 import { Show, useUser } from "@clerk/react";
 import { Check, Loader2, ExternalLink, Crown, Zap, Gift } from "lucide-react";
 import { openCheckout } from "@/lib/paddle-client";
+import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 
 type BillingStatus = {
@@ -70,7 +71,7 @@ export default function Upgrade() {
   const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
-    fetch("/api/billing/status")
+    authFetch("/api/billing/status")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => setStatus(d))
       .catch(() => setStatus(null));
@@ -85,7 +86,7 @@ export default function Upgrade() {
           "Your subscription is being activated. This page will refresh shortly.",
       });
       setTimeout(() => {
-        fetch("/api/billing/status")
+        authFetch("/api/billing/status")
           .then((r) => (r.ok ? r.json() : null))
           .then((d) => setStatus(d));
       }, 3000);
@@ -114,7 +115,7 @@ export default function Upgrade() {
   async function handlePortal() {
     setPortalLoading(true);
     try {
-      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const res = await authFetch("/api/billing/portal", { method: "POST" });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error ?? `HTTP ${res.status}`);

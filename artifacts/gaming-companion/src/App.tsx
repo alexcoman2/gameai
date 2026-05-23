@@ -1,7 +1,9 @@
 import { useEffect, useRef } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ClerkProvider, SignIn, SignUp, useClerk } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, useClerk, useAuth } from "@clerk/react";
+import { setAuthTokenGetter as setApiClientAuthTokenGetter } from "@workspace/api-client-react";
+import { setAuthTokenGetter } from "@/lib/auth-fetch";
 import { publishableKeyFromHost } from "@clerk/react/internal";
 import { shadcn } from "@clerk/themes";
 import { Toaster } from "@/components/ui/toaster";
@@ -105,6 +107,27 @@ function SignUpPage() {
   );
 }
 
+function ClerkAuthTokenBridge() {
+  const { getToken, isLoaded } = useAuth();
+  useEffect(() => {
+    if (!isLoaded) return;
+    const getter = async () => {
+      try {
+        return await getToken();
+      } catch {
+        return null;
+      }
+    };
+    setAuthTokenGetter(getter);
+    setApiClientAuthTokenGetter(getter);
+    return () => {
+      setAuthTokenGetter(null);
+      setApiClientAuthTokenGetter(null);
+    };
+  }, [getToken, isLoaded]);
+  return null;
+}
+
 function ClerkQueryClientCacheInvalidator() {
   const { addListener } = useClerk();
   const qc = useQueryClient();
@@ -174,6 +197,7 @@ function App() {
       }}
     >
       <QueryClientProvider client={queryClient}>
+        <ClerkAuthTokenBridge />
         <ClerkQueryClientCacheInvalidator />
         <TooltipProvider>
           <ChatProvider>

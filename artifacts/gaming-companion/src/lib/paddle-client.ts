@@ -1,4 +1,5 @@
 import { initializePaddle, type Paddle } from "@paddle/paddle-js";
+import { authFetch } from "@/lib/auth-fetch";
 
 type PaddleConfig = {
   clientToken: string | null;
@@ -12,7 +13,7 @@ let _loadPromise: Promise<Paddle | null> | null = null;
 
 async function fetchConfig(): Promise<PaddleConfig> {
   if (_config) return _config;
-  const res = await fetch("/api/billing/config");
+  const res = await authFetch("/api/billing/config");
   if (!res.ok) throw new Error(`Failed to fetch billing config: ${res.status}`);
   _config = (await res.json()) as PaddleConfig;
   return _config;
@@ -51,7 +52,7 @@ export async function openCheckout(opts: {
 
   // Server creates the transaction and binds customData.userId from the
   // authenticated session — the browser never supplies the user identity.
-  const res = await fetch("/api/billing/checkout", {
+  const res = await authFetch("/api/billing/checkout", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ tier: opts.tier }),

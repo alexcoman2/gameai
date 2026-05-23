@@ -2,12 +2,10 @@ import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { checkUsageCap, recordUsage, calcAnthropicCostMicrocents } from "../lib/usage.js";
+import { IS_HOSTED } from "../lib/server-mode.js";
 
 const router = Router();
 
-// Explicit deployment mode flag — fail-safe defaults to "hosted" (protected).
-const AUTH_MODE = (process.env.AUTH_MODE ?? "hosted") as "hosted" | "proxy";
-const IS_HOSTED = AUTH_MODE === "hosted";
 const protect = IS_HOSTED ? [requireAuth] : [];
 const WATCH_INTERVAL_SECONDS = 5;
 
@@ -52,9 +50,13 @@ router.post("/chat/watch", ...protect, async (req, res) => {
   const hostedUrl = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
   if (hostedUrl) {
     try {
+      const authHeader = req.headers.authorization;
       const upstream = await fetch(`${hostedUrl}/api/chat/watch`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeader ? { Authorization: authHeader } : {}),
+        },
         body: JSON.stringify({ imageData, gameName }),
       });
       const data = await upstream.json();
