@@ -179,6 +179,12 @@ export default function Home() {
       query: {
         enabled: !!activeSessionId,
         queryKey: getGetSessionMessagesQueryKey(activeSessionId ?? ""),
+        // Poll for new messages so chats sent from the overlay window
+        // show up here without the user having to click back into main.
+        // 2.5s feels live without hammering the server. Background tab
+        // polling stays off (react-query default) to save battery.
+        refetchInterval: 2500,
+        refetchOnWindowFocus: true,
       }
     }
   );
@@ -247,22 +253,62 @@ export default function Home() {
     }));
 
     const alreadyLoaded = historyLoadedRef.current.has(activeSessionId);
-    if (!alreadyLoaded && mapped.length > 0) {
+    if (!alreadyLoaded) {
       historyLoadedRef.current.add(activeSessionId);
-      setMessages([
-        ...mapped,
-        {
-          id: `divider-${activeSessionId}-${Date.now()}`,
-          role: "divider" as const,
-          content: new Date().toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }),
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          screenshot: null,
-        },
-      ]);
-    } else {
-      setMessages(mapped);
+      if (mapped.length > 0) {
+        setMessages([
+          ...mapped,
+          {
+            id: `divider-${activeSessionId}-${Date.now()}`,
+            role: "divider" as const,
+            content: new Date().toLocaleDateString([], { month: "short", day: "numeric", year: "numeric" }),
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            screenshot: null,
+          },
+        ]);
+      } else {
+        setMessages(mapped);
+      }
+      return;
     }
-  }, [sessionMessagesData, activeSessionId]);
+
+    // Subsequent refetch (from polling, focus, or invalidation). Merge new
+    // server messages into existing state WITHOUT clobbering local-only
+    // items (the session divider, in-flight optimistic sends added by
+    // handleSend before sendMutation resolves). For each new server message:
+    //   - if a local optimistic copy exists (same role+content, non-server
+    //     id), replace it in-place with the server version so the user's
+    //     message doesn't jump position when the server's authoritative
+    //     copy arrives. This also prevents duplication.
+    //   - otherwise append (likely a message sent from the overlay window).
+    setMessages((prev) => {
+      const serverIdSet = new Set(mapped.map((m) => m.id));
+      const prevServerIds = new Set(
+        prev.filter((m) => serverIdSet.has(m.id)).map((m) => m.id)
+      );
+      const newServerMessages = mapped.filter((m) => !prevServerIds.has(m.id));
+      if (newServerMessages.length === 0) return prev;
+
+      const next = [...prev];
+      for (const sm of newServerMessages) {
+        // Find a local optimistic message with matching role+content that
+        // isn't itself a server message. Match the EARLIEST such entry so
+        // user-then-assistant pairs reconcile in order.
+        const dupIdx = next.findIndex(
+          (m) =>
+            m.role === sm.role &&
+            m.content === sm.content &&
+            !serverIdSet.has(m.id)
+        );
+        if (dupIdx >= 0) {
+          next[dupIdx] = sm;
+        } else {
+          next.push(sm);
+        }
+      }
+      return next;
+    });
+  }, [sessionMessagesData, activeSessionId, setMessages]);
 
   const toDataUrl = (base64: string) =>
     base64.startsWith("data:") ? base64 : `data:image/png;base64,${base64}`;

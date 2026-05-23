@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, ReactNode, Dispatch, SetStateAction } from "react";
 
 // Mirrored to localStorage so the overlay window (separate BrowserWindow, same
 // origin, same localStorage) can pick up the active session and append its
@@ -17,7 +17,7 @@ export interface Message {
 
 interface ChatContextValue {
   messages: Message[];
-  setMessages: (msgs: Message[]) => void;
+  setMessages: Dispatch<SetStateAction<Message[]>>;
   addMessage: (msg: Message) => void;
   clearMessages: () => void;
   activeSessionId: string | null;
