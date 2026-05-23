@@ -562,6 +562,7 @@ function installClerkCookieMirror(): void {
 
   const mirrorCookie = async (
     cookie: Electron.Cookie,
+    cause: string,
     removed: boolean,
   ): Promise<void> => {
     if (!isClerkCookie(cookie.name)) return;
@@ -569,9 +570,17 @@ function installClerkCookieMirror(): void {
     if (!domain.endsWith(PROXY_HOST_SUFFIX)) return;
     try {
       if (removed) {
+        // Chromium fires `removed=true` with cause="overwrite" whenever the
+        // same cookie is re-set (e.g. once for ".game-companion-ai.replit.app"
+        // and once for "game-companion-ai.replit.app"). If we mirror that as
+        // an actual delete on the local origin we wipe the session we just
+        // installed. Only mirror genuine removals.
+        if (cause !== "explicit" && cause !== "expired") {
+          return;
+        }
         await cookies.remove(LOCAL_URL, cookie.name);
         appendServerLog(
-          `[main] clerk cookie mirror: removed ${cookie.name} on local\n`,
+          `[main] clerk cookie mirror: removed ${cookie.name} on local (cause=${cause})\n`,
         );
         return;
       }
@@ -603,14 +612,14 @@ function installClerkCookieMirror(): void {
     .get({ domain: PROXY_HOST_SUFFIX })
     .then(async (existing) => {
       for (const c of existing) {
-        await mirrorCookie(c, false);
+        await mirrorCookie(c, "explicit", false);
       }
     })
     .catch(() => {});
 
   // Live: mirror every future change.
-  cookies.on("changed", (_evt, cookie, _cause, removed) => {
-    void mirrorCookie(cookie, removed);
+  cookies.on("changed", (_evt, cookie, cause, removed) => {
+    void mirrorCookie(cookie, cause, removed);
   });
 }
 
