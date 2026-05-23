@@ -273,11 +273,14 @@ export type AnthropicCostInputs = {
   outputTokens?: number;
   cacheReadInputTokens?: number;
   cacheCreationInputTokens?: number;
-  model: "opus" | "haiku";
+  model: "opus" | "sonnet" | "haiku";
 };
 
+// Per 1M tokens, in USD. Sonnet 4.5 real Anthropic list pricing:
+// $3 input / $15 output / $3.75 cache write / $0.30 cache read.
 const PRICING = {
   opus: { in: 5, out: 25, cacheWrite: 6.25, cacheRead: 0.5 },
+  sonnet: { in: 3, out: 15, cacheWrite: 3.75, cacheRead: 0.3 },
   haiku: { in: 1, out: 5, cacheWrite: 1.25, cacheRead: 0.1 },
 };
 

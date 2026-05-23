@@ -442,8 +442,16 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
     const cachedSystem = [
       { type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } },
     ];
+    // Sonnet-4-5 by default — roughly 3x faster than Opus-4-7 end-to-end
+    // (5–6s vs 12–15s for a 2048-token reply) with a small quality drop
+    // that's invisible on the lookup-style questions that dominate gaming
+    // chat ("where do I go after X", "best early weapon", patch notes).
+    // Opus stays the cost-tier label since it's the most expensive model
+    // we'd ever bill against and acts as a safe upper bound. If we later
+    // add an "Opus mode" toggle, flip this constant in one place.
+    const CHAT_MODEL = "claude-sonnet-4-5";
     let response = await client.messages.create({
-      model: "claude-opus-4-7",
+      model: CHAT_MODEL,
       max_tokens: 2048,
       system: cachedSystem,
       messages: loopMessages,
@@ -498,7 +506,7 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
       });
 
       response = await client.messages.create({
-        model: "claude-opus-4-7",
+        model: CHAT_MODEL,
         max_tokens: 2048,
         system: cachedSystem,
         messages: loopMessages,
@@ -529,7 +537,7 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
     // Record usage (hosted mode only)
     if (IS_HOSTED && req.userId) {
       const cost = calcAnthropicCostMicrocents({
-        model: "opus",
+        model: "sonnet",
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,
         cacheReadInputTokens: (response.usage as { cache_read_input_tokens?: number }).cache_read_input_tokens,
