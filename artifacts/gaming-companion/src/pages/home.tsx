@@ -30,6 +30,7 @@ import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useChat } from "@/context/chat-context";
 import { authFetch } from "@/lib/auth-fetch";
+import { useToast } from "@/hooks/use-toast";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
@@ -55,6 +56,7 @@ function compressScreenshot(dataUrl: string, quality = 0.8): Promise<string> {
 
 export default function Home() {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const {
     messages, setMessages, addMessage,
     activeSessionId, setActiveSessionId,
@@ -268,6 +270,25 @@ export default function Home() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ imageData: observeWith, gameName }),
             });
+            // Stop Watch immediately on cap/auth/rate-limit so we don't
+            // hammer the server every 5s forever.
+            if ((res.status === 402 || res.status === 401 || res.status === 429) && active) {
+              let reason = "Watch stopped.";
+              try {
+                const data = (await res.json()) as { error?: string };
+                if (data?.error) reason = data.error;
+              } catch {
+                // body may be empty
+              }
+              active = false;
+              setWatchMode(false);
+              toast({
+                title: res.status === 402 ? "Usage limit reached" : "Watch stopped",
+                description: reason,
+                variant: "destructive",
+              });
+              return;
+            }
             if (res.ok && active) {
               const data = (await res.json()) as {
                 observation: string | null;
