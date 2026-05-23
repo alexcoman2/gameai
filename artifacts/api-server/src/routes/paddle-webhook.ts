@@ -1,24 +1,51 @@
 import type { Request, Response } from "express";
 import { EventName } from "@paddle/paddle-node-sdk";
 import { eq } from "drizzle-orm";
-import { db, usersTable, type PlanTier } from "@workspace/db";
+import { db, usersTable, paddleEventsTable, type PlanTier, type PaddleEventStatus } from "@workspace/db";
 import { getPaddle, PRICE_TO_TIER } from "../lib/paddle.js";
 import { logger } from "../lib/logger.js";
 import { maybeBillOverageOnRollover } from "../lib/overage.js";
 
 const webhookSecret = process.env.PADDLE_WEBHOOK_SECRET;
 
+async function recordEvent(row: {
+  eventType?: string | null;
+  eventId?: string | null;
+  subscriptionId?: string | null;
+  userId?: string | null;
+  status: PaddleEventStatus;
+  httpStatus: number;
+  error?: string | null;
+}): Promise<void> {
+  try {
+    await db.insert(paddleEventsTable).values({
+      eventType: row.eventType ?? null,
+      eventId: row.eventId ?? null,
+      subscriptionId: row.subscriptionId ?? null,
+      userId: row.userId ?? null,
+      status: row.status,
+      httpStatus: row.httpStatus,
+      error: row.error ?? null,
+    });
+  } catch (e) {
+    // Never let the audit-log write block webhook acknowledgement.
+    logger.warn({ err: e }, "Failed to write paddle_events audit row");
+  }
+}
+
 // Mounted in app.ts BEFORE express.json() so req.body is a raw Buffer.
 // Paddle's signature verification requires the unmodified request body.
 export async function paddleWebhookHandler(req: Request, res: Response) {
   if (!webhookSecret) {
     logger.error("PADDLE_WEBHOOK_SECRET is not set");
+    await recordEvent({ status: "rejected", httpStatus: 500, error: "Webhook secret not configured" });
     res.status(500).json({ error: "Webhook secret not configured" });
     return;
   }
 
   const signature = req.header("paddle-signature");
   if (!signature) {
+    await recordEvent({ status: "rejected", httpStatus: 400, error: "Missing paddle-signature header" });
     res.status(400).json({ error: "Missing paddle-signature header" });
     return;
   }
@@ -30,6 +57,7 @@ export async function paddleWebhookHandler(req: Request, res: Response) {
       : "";
 
   if (!rawBody) {
+    await recordEvent({ status: "rejected", httpStatus: 400, error: "Empty body" });
     res.status(400).json({ error: "Empty body" });
     return;
   }
@@ -38,21 +66,36 @@ export async function paddleWebhookHandler(req: Request, res: Response) {
   try {
     event = await getPaddle().webhooks.unmarshal(rawBody, webhookSecret, signature);
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "signature verification failed";
     logger.warn({ err: e }, "Paddle webhook signature verification failed");
+    await recordEvent({ status: "rejected", httpStatus: 400, error: msg });
     res.status(400).json({ error: "Invalid signature" });
     return;
   }
 
   if (!event) {
+    await recordEvent({ status: "rejected", httpStatus: 400, error: "Unrecognised event" });
     res.status(400).json({ error: "Unrecognised event" });
     return;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = (event as any).data ?? {};
+  const meta = {
+    eventType: event.eventType as string,
+    eventId: (event as { eventId?: string }).eventId ?? null,
+    subscriptionId: (data?.id as string | undefined) ?? null,
+    userId: (data?.customData?.userId as string | undefined) ?? null,
+  };
+
   try {
     await handleEvent(event);
+    await recordEvent({ ...meta, status: "processed", httpStatus: 200 });
     res.json({ received: true });
   } catch (e) {
+    const msg = e instanceof Error ? e.message : "handler failed";
     logger.error({ err: e, eventType: event.eventType }, "Paddle webhook handler failed");
+    await recordEvent({ ...meta, status: "failed", httpStatus: 500, error: msg });
     // 500 so Paddle retries. Handlers are idempotent (each event sets absolute
     // subscription state via UPDATE — safe to reprocess).
     res.status(500).json({ error: "handler failed" });

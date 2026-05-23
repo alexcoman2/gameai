@@ -1,8 +1,26 @@
 import { useEffect, useState } from "react";
 import { Link } from "wouter";
 import { Show } from "@clerk/react";
-import { Loader2, RefreshCw, Shield, AlertTriangle } from "lucide-react";
+import { Loader2, RefreshCw, Shield, AlertTriangle, Webhook } from "lucide-react";
 import { authFetch } from "@/lib/auth-fetch";
+
+type WebhookHealth = {
+  generatedAt: string;
+  counts24h: { received: number; processed: number; rejected: number; failed: number };
+  lastSuccessAt: string | null;
+  lastFailure: { at: string; error: string | null } | null;
+  recent: Array<{
+    id: number;
+    eventType: string | null;
+    eventId: string | null;
+    subscriptionId: string | null;
+    userId: string | null;
+    status: "received" | "processed" | "rejected" | "failed";
+    httpStatus: number;
+    error: string | null;
+    createdAt: string;
+  }>;
+};
 
 type AdminUsage = {
   generatedAt: string;
@@ -99,6 +117,7 @@ function Sparkbars({ data }: { data: AdminUsage["daily"] }) {
 
 export default function AdminUsagePage() {
   const [data, setData] = useState<AdminUsage | null>(null);
+  const [webhook, setWebhook] = useState<WebhookHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -108,16 +127,22 @@ export default function AdminUsagePage() {
     setErr(null);
     setForbidden(false);
     try {
-      const res = await authFetch("/api/admin/usage");
-      if (res.status === 403) {
+      const [usageRes, webhookRes] = await Promise.all([
+        authFetch("/api/admin/usage"),
+        authFetch("/api/admin/webhook-health"),
+      ]);
+      if (usageRes.status === 403 || webhookRes.status === 403) {
         setForbidden(true);
         return;
       }
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `HTTP ${res.status}`);
+      if (!usageRes.ok) {
+        const body = await usageRes.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${usageRes.status}`);
       }
-      setData(await res.json());
+      setData(await usageRes.json());
+      if (webhookRes.ok) {
+        setWebhook(await webhookRes.json());
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -284,6 +309,8 @@ export default function AdminUsagePage() {
                 )}
               </div>
 
+              {webhook && <WebhookHealthCard webhook={webhook} />}
+
               <p className="mt-6 text-[11px] font-mono text-muted-foreground text-center">
                 Generated{" "}
                 {new Date(data.generatedAt).toLocaleString(undefined, {
@@ -302,6 +329,114 @@ export default function AdminUsagePage() {
           )}
         </Show>
       </div>
+    </div>
+  );
+}
+
+function relativeTime(iso: string | null): string {
+  if (!iso) return "never";
+  const diff = Date.now() - new Date(iso).getTime();
+  const s = Math.round(diff / 1000);
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.round(m / 60);
+  if (h < 48) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
+
+function WebhookHealthCard({ webhook }: { webhook: WebhookHealth }) {
+  const { counts24h, lastSuccessAt, lastFailure, recent } = webhook;
+  const stale =
+    !lastSuccessAt || Date.now() - new Date(lastSuccessAt).getTime() > 7 * 24 * 60 * 60 * 1000;
+  const hasFailures = counts24h.failed > 0 || counts24h.rejected > 0;
+  return (
+    <div className="border border-border bg-card/40 p-5 mt-6">
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-sm font-mono uppercase tracking-wider text-primary flex items-center gap-2">
+          <Webhook className="w-4 h-4" /> Paddle webhooks
+        </h2>
+        <span className="text-[10px] font-mono text-muted-foreground">last 24h</span>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+        <MiniStat label="Processed" value={counts24h.processed} />
+        <MiniStat label="Failed (5xx)" value={counts24h.failed} warn={counts24h.failed > 0} />
+        <MiniStat label="Rejected (4xx)" value={counts24h.rejected} warn={counts24h.rejected > 0} />
+        <MiniStat label="Last success" value={relativeTime(lastSuccessAt)} warn={stale} />
+      </div>
+      {lastFailure && (
+        <div className="border border-destructive/40 bg-destructive/5 px-3 py-2 mb-4 text-[11px] font-mono text-destructive">
+          Last failure {relativeTime(lastFailure.at)}: {lastFailure.error ?? "no detail"}
+        </div>
+      )}
+      {recent.length === 0 ? (
+        <p className="text-xs font-mono text-muted-foreground">
+          No webhook events recorded yet. Paddle deliveries will appear here.
+        </p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs font-mono">
+            <thead className="text-muted-foreground uppercase tracking-wider">
+              <tr className="border-b border-border">
+                <th className="text-left py-2 pr-3">When</th>
+                <th className="text-left py-2 pr-3">Event</th>
+                <th className="text-left py-2 pr-3">Status</th>
+                <th className="text-left py-2 pr-3">Subscription</th>
+                <th className="text-left py-2">Error</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recent.map((e) => (
+                <tr key={e.id} className="border-b border-border/40 hover:bg-muted/20">
+                  <td className="py-2 pr-3 text-muted-foreground">
+                    {relativeTime(e.createdAt)}
+                  </td>
+                  <td className="py-2 pr-3 text-foreground">{e.eventType ?? "—"}</td>
+                  <td className="py-2 pr-3">
+                    <span
+                      className={`px-1.5 py-0.5 border text-[9px] uppercase ${
+                        e.status === "processed"
+                          ? "border-primary/60 text-primary"
+                          : "border-destructive/60 text-destructive"
+                      }`}
+                    >
+                      {e.status} · {e.httpStatus}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3 text-muted-foreground">
+                    {e.subscriptionId ? `${e.subscriptionId.slice(0, 12)}…` : "—"}
+                  </td>
+                  <td className="py-2 text-destructive/80 truncate max-w-[24ch]" title={e.error ?? ""}>
+                    {e.error ?? ""}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {hasFailures && (
+        <p className="mt-3 text-[10px] font-mono text-muted-foreground">
+          Failed = handler threw (Paddle will retry). Rejected = bad signature / malformed (Paddle will NOT retry).
+        </p>
+      )}
+    </div>
+  );
+}
+
+function MiniStat({ label, value, warn }: { label: string; value: number | string; warn?: boolean }) {
+  return (
+    <div
+      className={`border px-3 py-2 ${warn ? "border-destructive/60 bg-destructive/5" : "border-border bg-card"}`}
+    >
+      <p className="text-[9px] font-mono text-muted-foreground uppercase tracking-wider">
+        {label}
+      </p>
+      <p
+        className={`text-lg font-mono font-bold mt-0.5 ${warn ? "text-destructive" : "text-foreground"}`}
+      >
+        {value}
+      </p>
     </div>
   );
 }

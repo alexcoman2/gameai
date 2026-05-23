@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, sql, desc } from "drizzle-orm";
-import { db, usersTable, usageRecordsTable } from "@workspace/db";
+import { db, usersTable, usageRecordsTable, paddleEventsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getOrCreateUser } from "../lib/usage.js";
 import { DAILY_HARD_CAP_CENTS } from "../lib/plans.js";
@@ -240,6 +240,86 @@ router.get("/admin/usage", ...protect, async (req, res) => {
   } catch (e) {
     logger.error({ err: e, userId }, "Failed to build admin usage snapshot");
     res.status(500).json({ error: "Failed to load admin usage" });
+  }
+});
+
+router.get("/admin/webhook-health", ...protect, async (req, res) => {
+  if (IS_PROXY) {
+    await proxyToHosted(req, res, "/api/admin/webhook-health");
+    return;
+  }
+  const userId = req.userId!;
+  const email = req.userEmail ?? null;
+  try {
+    const me = await getOrCreateUser(userId, email);
+    if (!me.isAdmin) {
+      res.status(403).json({ error: "Admin access required" });
+      return;
+    }
+
+    const recent = await db
+      .select({
+        id: paddleEventsTable.id,
+        eventType: paddleEventsTable.eventType,
+        eventId: paddleEventsTable.eventId,
+        subscriptionId: paddleEventsTable.subscriptionId,
+        userId: paddleEventsTable.userId,
+        status: paddleEventsTable.status,
+        httpStatus: paddleEventsTable.httpStatus,
+        error: paddleEventsTable.error,
+        createdAt: paddleEventsTable.createdAt,
+      })
+      .from(paddleEventsTable)
+      .orderBy(desc(paddleEventsTable.createdAt))
+      .limit(25);
+
+    const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const counts24h = await db
+      .select({
+        status: paddleEventsTable.status,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(paddleEventsTable)
+      .where(gte(paddleEventsTable.createdAt, since24h))
+      .groupBy(paddleEventsTable.status);
+
+    const totals = { received: 0, processed: 0, rejected: 0, failed: 0 };
+    for (const r of counts24h) {
+      if (r.status in totals) totals[r.status as keyof typeof totals] = Number(r.count);
+    }
+
+    const [lastSuccess] = await db
+      .select({ createdAt: paddleEventsTable.createdAt })
+      .from(paddleEventsTable)
+      .where(eq(paddleEventsTable.status, "processed"))
+      .orderBy(desc(paddleEventsTable.createdAt))
+      .limit(1);
+
+    const [lastFailure] = await db
+      .select({ createdAt: paddleEventsTable.createdAt, error: paddleEventsTable.error })
+      .from(paddleEventsTable)
+      .where(sql`${paddleEventsTable.status} in ('failed','rejected')`)
+      .orderBy(desc(paddleEventsTable.createdAt))
+      .limit(1);
+
+    res.json({
+      generatedAt: new Date().toISOString(),
+      counts24h: totals,
+      lastSuccessAt: lastSuccess?.createdAt?.toISOString() ?? null,
+      lastFailure: lastFailure
+        ? {
+            at: lastFailure.createdAt.toISOString(),
+            error: lastFailure.error,
+          }
+        : null,
+      recent: recent.map((r) => ({
+        ...r,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    });
+  } catch (e) {
+    logger.error({ err: e, userId }, "Failed to build webhook health snapshot");
+    res.status(500).json({ error: "Failed to load webhook health" });
   }
 });
 
