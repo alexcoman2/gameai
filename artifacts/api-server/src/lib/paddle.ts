@@ -1,7 +1,11 @@
 import { Paddle, Environment, LogLevel } from "@paddle/paddle-node-sdk";
 import { logger } from "./logger.js";
 
-const apiKey = process.env.PADDLE_API_KEY;
+// Trim — pasted secrets very commonly carry a trailing newline or stray
+// whitespace, and the Paddle SDK puts the raw value straight into the
+// Authorization header, which then 401s with "Authentication header
+// included, but incorrectly formatted."
+const apiKey = process.env.PADDLE_API_KEY?.trim() || undefined;
 
 // Older Paddle keys are prefixed pdl_sdbx_* / pdl_live_*, but newer keys
 // (post-2024) drop the environment marker and start with just pdl_apikey_*.
