@@ -25,6 +25,42 @@ type Turn = {
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// Shared with chat-context. Lets the overlay write into the same session the
+// main window is currently viewing, so overlay chats show up in the chat list.
+const ACTIVE_SESSION_LS_KEY = "unstuck:activeSessionId";
+
+async function resolveOverlaySessionId(): Promise<string | null> {
+  // 1. Use whatever session the main window is currently focused on.
+  try {
+    const stored = localStorage.getItem(ACTIVE_SESSION_LS_KEY);
+    if (stored) return stored;
+  } catch {
+    // ignore
+  }
+  // 2. Fall back to creating a new session so overlay-only usage still
+  //    persists to the chat list (instead of an orphan globalHistory).
+  try {
+    const res = await authFetch("/api/sessions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Overlay" }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { id?: string };
+    if (data.id) {
+      try {
+        localStorage.setItem(ACTIVE_SESSION_LS_KEY, data.id);
+      } catch {
+        // ignore
+      }
+      return data.id;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 export default function OverlayPage() {
   const electronAPI = getElectronAPI();
   const { isLoaded, isSignedIn } = useAuth();
@@ -95,12 +131,14 @@ export default function OverlayPage() {
     setSending(true);
 
     try {
+      const sessionId = await resolveOverlaySessionId();
       const res = await authFetch("/api/chat/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
           ...(screenshot ? { imageData: screenshot } : {}),
+          ...(sessionId ? { sessionId } : {}),
         }),
       });
 
