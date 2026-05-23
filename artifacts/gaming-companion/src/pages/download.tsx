@@ -86,7 +86,7 @@ export function DownloadPage() {
   }, []);
 
   return (
-    <div className="flex-1 w-full">
+    <div className="flex-1 w-full overflow-y-auto">
       {/* ── Hero ──────────────────────────────────────────────────────── */}
       <section className="px-6 py-20 max-w-5xl mx-auto w-full text-center">
         <p className="text-xs font-mono uppercase tracking-widest text-primary">
