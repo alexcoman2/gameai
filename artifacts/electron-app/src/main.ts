@@ -202,43 +202,54 @@ function createOverlayWindow(): void {
 
   void overlayWindow.loadURL(`http://localhost:${SERVER_PORT}/overlay`);
 
-  // Hide on blur so it never steals focus from the game once dismissed.
-  overlayWindow.on("blur", () => {
-    // Keep the window alive but hidden — toggling it back is instant.
-    overlayWindow?.hide();
-  });
+  // NOTE: Intentionally NO `blur` → hide. The whole point of the overlay is
+  // that the user can click back into their game while a response streams in
+  // and still glance at it. The window is alwaysOnTop "screen-saver" so it
+  // stays visible above fullscreen apps anyway. Dismissal is explicit: the
+  // hotkey, the close button, or Esc while focused.
 
   overlayWindow.on("closed", () => {
     overlayWindow = null;
   });
 }
 
+// Show the overlay, deferring until `ready-to-show` if the window's first
+// page load hasn't completed yet. Prevents a white flash on the first hotkey
+// press after launch.
+function showOverlay(): void {
+  if (!overlayWindow || overlayWindow.isDestroyed()) return;
+  const reveal = () => {
+    overlayWindow?.show();
+    overlayWindow?.focus();
+    overlayWindow?.webContents.send("overlay-shown");
+  };
+  if (overlayWindow.webContents.isLoading()) {
+    overlayWindow.once("ready-to-show", reveal);
+  } else {
+    reveal();
+  }
+}
+
 function toggleOverlay(): void {
   if (!overlayWindow || overlayWindow.isDestroyed()) {
     createOverlayWindow();
-    overlayWindow?.once("ready-to-show", () => {
-      overlayWindow?.show();
-      overlayWindow?.focus();
-      overlayWindow?.webContents.send("overlay-shown");
-    });
+    showOverlay();
     return;
   }
   if (overlayWindow.isVisible()) {
     overlayWindow.hide();
   } else {
-    overlayWindow.show();
-    overlayWindow.focus();
-    overlayWindow.webContents.send("overlay-shown");
+    showOverlay();
   }
 }
 
 function registerOverlayHotkeys(): void {
-  // Try the primary binding first; if it's already claimed by another app
-  // (some games grab Ctrl+Shift+Space) fall back to Alt+Space.
-  const ok = globalShortcut.register(OVERLAY_HOTKEY_PRIMARY, toggleOverlay);
-  if (!ok) {
-    globalShortcut.register(OVERLAY_HOTKEY_FALLBACK, toggleOverlay);
-  }
+  // Register BOTH bindings when available. Some fullscreen games intercept
+  // one of them at a low level (e.g. Ctrl+Shift+Space), so giving the user
+  // two ways in means they're never stranded without a way to summon the
+  // overlay.
+  globalShortcut.register(OVERLAY_HOTKEY_PRIMARY, toggleOverlay);
+  globalShortcut.register(OVERLAY_HOTKEY_FALLBACK, toggleOverlay);
 }
 
 app.whenReady().then(() => {

@@ -15,6 +15,7 @@ import Upgrade from "@/pages/upgrade";
 import UsagePage from "@/pages/usage";
 import AdminUsagePage from "@/pages/admin-usage";
 import { AboutPage, PricingPage, TermsPage, PrivacyPage, RefundPage } from "@/pages/legal";
+import OverlayPage from "@/pages/overlay";
 import { Layout } from "@/components/layout";
 import { ChatProvider } from "@/context/chat-context";
 import { GameProvider } from "@/context/game-context";
@@ -165,6 +166,7 @@ function AppRoutes() {
       <Route path="/legal/terms" component={TermsPage} />
       <Route path="/legal/privacy" component={PrivacyPage} />
       <Route path="/legal/refund" component={RefundPage} />
+      <Route path="/overlay" component={OverlayPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -173,8 +175,11 @@ function AppRoutes() {
 function WrappedAppRoutes() {
   const [location] = useLocation();
   const isAuthPage = location.startsWith("/sign-in") || location.startsWith("/sign-up");
+  // Overlay renders standalone (frameless transparent window in Electron) — no
+  // app chrome, no header, no padding.
+  const isOverlayPage = location.startsWith("/overlay");
 
-  if (isAuthPage) {
+  if (isAuthPage || isOverlayPage) {
     return <AppRoutes />;
   }
 
