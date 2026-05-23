@@ -507,9 +507,9 @@ export default function Upgrade() {
                         ) : isCurrent ? (
                           "Active"
                         ) : currentPlan !== "free" ? (
-                          `Switch to ${tier.name} with PayPal`
+                          `Switch to ${tier.name}`
                         ) : (
-                          `Upgrade to ${tier.name} with PayPal`
+                          `Upgrade to ${tier.name}`
                         )}
                       </button>
                     ) : (
