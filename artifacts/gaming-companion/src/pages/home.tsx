@@ -22,8 +22,12 @@ import { Label } from "@/components/ui/label";
 import {
   Camera, Send, Loader2, Maximize2, X, MessageSquare,
   Plus, Trash2, Pencil, Check, MessagesSquare, ChevronRight, Pin, PinOff,
-  Eye, EyeOff, Radio, Minimize2,
+  Eye, EyeOff, Radio, Minimize2, Mic, MicOff, Volume2, VolumeX,
 } from "lucide-react";
+import {
+  createVoiceRecorder, speak, cancelSpeech,
+  isTtsEnabled, setTtsEnabled,
+} from "@/lib/voice";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
@@ -78,6 +82,48 @@ export default function Home() {
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [watchMode, setWatchMode] = useState(false);
   const [watchScreenshot, setWatchScreenshot] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [ttsOn, setTtsOn] = useState(isTtsEnabled());
+  const recorderRef = useRef<ReturnType<typeof createVoiceRecorder> | null>(null);
+
+  const toggleMic = async () => {
+    if (isTranscribing) return;
+    if (isRecording) {
+      try {
+        setIsRecording(false);
+        setIsTranscribing(true);
+        const text = await recorderRef.current!.stopAndTranscribe();
+        if (text) {
+          setInput((prev) => (prev ? `${prev} ${text}` : text));
+        }
+      } catch (err) {
+        toast({
+          title: "Voice input failed",
+          description: err instanceof Error ? err.message : "Microphone or transcription error.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsTranscribing(false);
+      }
+      return;
+    }
+    try {
+      recorderRef.current = createVoiceRecorder();
+      await recorderRef.current.start();
+      setIsRecording(true);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not access microphone.";
+      toast({ title: "Microphone error", description: msg, variant: "destructive" });
+    }
+  };
+
+  const toggleTts = () => {
+    const next = !ttsOn;
+    setTtsOn(next);
+    setTtsEnabled(next);
+    if (!next) cancelSpeech();
+  };
   const [watchLog, setWatchLog] = useState<{ time: string; note: string; event?: string | null; confidence?: number | null; visibleText?: string | null }[]>([]);
   const [visionDetectedGame, setVisionDetectedGame] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
@@ -538,6 +584,8 @@ export default function Home() {
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       });
 
+      if (ttsOn && response.reply) speak(response.reply);
+
       if (activeSessionId) {
         queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
       }
@@ -926,12 +974,47 @@ export default function Home() {
         )}
 
         <form onSubmit={handleSend} className="flex gap-2">
+          <Button
+            type="button"
+            onClick={() => void toggleMic()}
+            disabled={isTranscribing || sendMutation.isPending}
+            title={isRecording ? "Stop & transcribe" : "Speak"}
+            className={`rounded-none font-mono uppercase tracking-wider transition-all ${
+              isRecording
+                ? "bg-destructive text-destructive-foreground hover:bg-destructive/90 animate-pulse"
+                : "bg-secondary text-foreground hover:bg-secondary/80 border border-border"
+            } ${compact ? "h-8 px-2" : "h-12 px-3"}`}
+          >
+            {isTranscribing ? (
+              <Loader2 className={compact ? "w-3 h-3 animate-spin" : "w-4 h-4 animate-spin"} />
+            ) : isRecording ? (
+              <MicOff className={compact ? "w-3 h-3" : "w-4 h-4"} />
+            ) : (
+              <Mic className={compact ? "w-3 h-3" : "w-4 h-4"} />
+            )}
+          </Button>
+          <Button
+            type="button"
+            onClick={toggleTts}
+            title={ttsOn ? "Voice replies ON — click to mute" : "Voice replies OFF — click to enable"}
+            className={`rounded-none font-mono uppercase tracking-wider transition-all border ${
+              ttsOn
+                ? "bg-primary/15 text-primary border-primary/40 hover:bg-primary/25"
+                : "bg-secondary text-muted-foreground border-border hover:text-foreground"
+            } ${compact ? "h-8 px-2" : "h-12 px-3"}`}
+          >
+            {ttsOn ? (
+              <Volume2 className={compact ? "w-3 h-3" : "w-4 h-4"} />
+            ) : (
+              <VolumeX className={compact ? "w-3 h-3" : "w-4 h-4"} />
+            )}
+          </Button>
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="ENTER COMMAND OR QUERY..."
+            placeholder={isRecording ? "LISTENING..." : isTranscribing ? "TRANSCRIBING..." : "ENTER COMMAND OR QUERY..."}
             className={`flex-1 font-mono rounded-none border-border focus-visible:border-primary focus-visible:ring-1 focus-visible:ring-primary/50 bg-card/50 placeholder:tracking-widest ${compact ? "h-8 text-xs" : "h-12"}`}
-            disabled={sendMutation.isPending}
+            disabled={sendMutation.isPending || isRecording || isTranscribing}
           />
           <Button
             type="submit"

@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@clerk/react";
 import { authFetch } from "@/lib/auth-fetch";
-import { Loader2, Send, X, Maximize2, Camera, CameraOff } from "lucide-react";
+import {
+  Loader2, Send, X, Maximize2, Camera, CameraOff,
+  Mic, MicOff, Volume2, VolumeX,
+} from "lucide-react";
+import {
+  createVoiceRecorder, speak, cancelSpeech,
+  isTtsEnabled, setTtsEnabled,
+} from "@/lib/voice";
 
 type ElectronAPI = {
   captureScreenshot?: () => Promise<string>;
@@ -69,8 +76,12 @@ export default function OverlayPage() {
   const [sending, setSending] = useState(false);
   const [attachScreenshot, setAttachScreenshot] = useState(true);
   const [hotkey, setHotkey] = useState<string | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [ttsOn, setTtsOn] = useState(isTtsEnabled());
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
+  const recorderRef = useRef<ReturnType<typeof createVoiceRecorder> | null>(null);
 
   // Resolve the actual registered hotkey label to show in the empty state.
   useEffect(() => {
@@ -171,14 +182,16 @@ export default function OverlayPage() {
         return;
       }
 
+      const reply = data.reply || "(empty response)";
       setTurns((prev) => [
         ...prev,
         {
           id: `a-${Date.now()}`,
           role: "assistant",
-          content: data.reply || "(empty response)",
+          content: reply,
         },
       ]);
+      if (ttsOn && data.reply) speak(data.reply);
     } catch (err) {
       setTurns((prev) => [
         ...prev,
@@ -201,6 +214,55 @@ export default function OverlayPage() {
       e.preventDefault();
       void handleSend();
     }
+  };
+
+  const toggleMic = async () => {
+    if (isTranscribing) return;
+    if (isRecording) {
+      try {
+        setIsRecording(false);
+        setIsTranscribing(true);
+        const text = await recorderRef.current!.stopAndTranscribe();
+        if (text) {
+          setInput((prev) => (prev ? `${prev} ${text}` : text));
+          requestAnimationFrame(() => inputRef.current?.focus());
+        }
+      } catch (err) {
+        setTurns((prev) => [
+          ...prev,
+          {
+            id: `e-${Date.now()}`,
+            role: "error",
+            content:
+              err instanceof Error ? err.message : "Microphone or transcription error.",
+          },
+        ]);
+      } finally {
+        setIsTranscribing(false);
+      }
+      return;
+    }
+    try {
+      recorderRef.current = createVoiceRecorder();
+      await recorderRef.current.start();
+      setIsRecording(true);
+    } catch (err) {
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: `e-${Date.now()}`,
+          role: "error",
+          content: err instanceof Error ? err.message : "Could not access microphone.",
+        },
+      ]);
+    }
+  };
+
+  const toggleTts = () => {
+    const next = !ttsOn;
+    setTtsOn(next);
+    setTtsEnabled(next);
+    if (!next) cancelSpeech();
   };
 
   const hotkeyLabel = hotkey
@@ -228,6 +290,18 @@ export default function OverlayPage() {
             className="flex items-center gap-1"
             style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
           >
+            <button
+              type="button"
+              onClick={toggleTts}
+              title={ttsOn ? "Voice replies ON — click to mute" : "Voice replies OFF — click to enable"}
+              className={`h-6 w-6 flex items-center justify-center transition ${
+                ttsOn
+                  ? "text-primary hover:bg-primary/10"
+                  : "text-muted-foreground hover:text-foreground hover:bg-primary/10"
+              }`}
+            >
+              {ttsOn ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
+            </button>
             <button
               type="button"
               onClick={() => void electronAPI?.overlayOpenMain?.()}
@@ -339,6 +413,25 @@ export default function OverlayPage() {
                 <CameraOff className="w-3.5 h-3.5" />
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => void toggleMic()}
+              disabled={isTranscribing || (isLoaded && !isSignedIn)}
+              title={isRecording ? "Stop & transcribe" : "Speak"}
+              className={`h-8 w-8 flex-shrink-0 flex items-center justify-center border transition ${
+                isRecording
+                  ? "border-destructive/60 text-destructive bg-destructive/10 animate-pulse"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              } disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              {isTranscribing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : isRecording ? (
+                <MicOff className="w-3.5 h-3.5" />
+              ) : (
+                <Mic className="w-3.5 h-3.5" />
+              )}
+            </button>
             <textarea
               ref={inputRef}
               value={input}
@@ -347,10 +440,14 @@ export default function OverlayPage() {
               placeholder={
                 isLoaded && !isSignedIn
                   ? "Sign in via main window…"
+                  : isRecording
+                  ? "Listening…"
+                  : isTranscribing
+                  ? "Transcribing…"
                   : "What do I do? (Enter to send)"
               }
               rows={2}
-              disabled={isLoaded && !isSignedIn}
+              disabled={(isLoaded && !isSignedIn) || isRecording || isTranscribing}
               className="flex-1 resize-none bg-background/80 border border-border focus:border-primary/60 focus:outline-none text-xs px-2 py-1.5 placeholder:text-muted-foreground/50"
               style={{ WebkitUserSelect: "text" } as React.CSSProperties}
             />

@@ -3,6 +3,7 @@ import healthRouter from "./health.js";
 import gameRouter from "./game.js";
 import screenshotRouter from "./screenshot.js";
 import chatRouter from "./chat.js";
+import voiceRouter from "./voice.js";
 import watchRouter from "./watch.js";
 import settingsRouter from "./settings.js";
 import sessionsRouter from "./sessions.js";
@@ -16,6 +17,7 @@ const router: IRouter = Router();
 // Always available, on every deployment mode.
 router.use(healthRouter);
 router.use(chatRouter);
+router.use(voiceRouter);
 router.use(watchRouter);
 router.use(billingRouter);
 router.use(adminRouter);
