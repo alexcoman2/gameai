@@ -98,6 +98,7 @@ router.post("/chat/message", ...protect, async (req, res) => {
     sessionId,
     history: reqHistory,
     watchLog: reqWatchLog,
+    watchMode: reqWatchMode,
   } = req.body as {
     message: string;
     gameName?: string | null;
@@ -106,6 +107,7 @@ router.post("/chat/message", ...protect, async (req, res) => {
     sessionId?: string | null;
     history?: HistoryEntry[] | null;
     watchLog?: { time: string; note: string; event?: string | null; confidence?: number | null; visibleText?: string | null }[] | null;
+    watchMode?: boolean | null;
   };
 
   if (!message || typeof message !== "string" || message.trim() === "") {
@@ -151,7 +153,7 @@ router.post("/chat/message", ...protect, async (req, res) => {
           "Content-Type": "application/json",
           ...(authHeader ? { Authorization: authHeader } : {}),
         },
-        body: JSON.stringify({ message, gameName, imageData, history: historyEntries, watchLog: reqWatchLog }),
+        body: JSON.stringify({ message, gameName, imageData, history: historyEntries, watchLog: reqWatchLog, watchMode: reqWatchMode }),
       });
 
       const data = (await upstream.json()) as Record<string, unknown>;
@@ -262,13 +264,16 @@ router.post("/chat/message", ...protect, async (req, res) => {
   const usableLog = (reqWatchLog ?? []).filter(
     (e) => typeof e.confidence !== "number" || e.confidence >= 0.5
   );
+  const watchModeOn = reqWatchMode === true;
   const watchLogSection = usableLog.length > 0
-    ? `\nWATCH LOG — ${usableLog.length} passive screen observation${usableLog.length !== 1 ? "s" : ""} recorded by Unstuck while the player was playing (newest last):\n${usableLog.map(e => {
+    ? `\nWATCH LOG — Watch Mode is ON. ${usableLog.length} passive screen observation${usableLog.length !== 1 ? "s" : ""} recorded by Unstuck while the player was playing (newest last):\n${usableLog.map(e => {
         const tag = e.event ? `[${e.event}] ` : "";
         const txt = e.visibleText ? ` — text: "${e.visibleText}"` : "";
         return `  [${e.time}] ${tag}${e.note}${txt}`;
       }).join("\n")}\nThis IS your log. Use it to understand what has been happening between messages. Bracketed tags ([combat], [boss], [menu], etc.) indicate the event type. "text:" fields are verbatim transcriptions of on-screen text — treat them as ground truth.\n`
-    : "\nWATCH LOG — no observations recorded yet this session. Watch Mode is currently off or hasn't fired yet. If the player asks about your logs, explain that Unstuck's Watch Mode passively records screen observations every 5 seconds when enabled, and they can turn it on using the Watch button in the toolbar to start building a log.\n";
+    : watchModeOn
+    ? `\nWATCH LOG — Watch Mode is ON and actively running, but no observations have been captured yet (it samples every ~5 seconds, or low-confidence frames are filtered out). If the player asks whether Watch Mode is on, confirm that it is — observations will start appearing shortly.\n`
+    : `\nWATCH LOG — Watch Mode is currently OFF. If the player asks about your logs, explain that Unstuck's Watch Mode passively records screen observations every 5 seconds when enabled, and they can turn it on using the Watch button in the toolbar to start building a log.\n`;
 
   const specialistKnowledge = buildSpecialistAddendum(gameName);
 

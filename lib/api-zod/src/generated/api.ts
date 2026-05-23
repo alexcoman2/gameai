@@ -72,7 +72,8 @@ export const SendChatMessageBody = zod.object({
   "watchLog": zod.array(zod.object({
   "time": zod.string().describe('Formatted time string (e.g. \"10:32 PM\")'),
   "note": zod.string().describe('One-sentence description of game state at this moment')
-}).describe('A single passive observation recorded by watch mode')).optional().describe('Passive screen observations collected by watch mode — injected into the system prompt so Claude knows what happened between messages')
+}).describe('A single passive observation recorded by watch mode')).optional().describe('Passive screen observations collected by watch mode — injected into the system prompt so Claude knows what happened between messages'),
+  "watchMode": zod.boolean().nullish().describe('Whether watch mode is currently enabled on the client. Lets the server tell the model \"Watch Mode is ON but no observations yet\" vs \"Watch Mode is OFF\".')
 })
 
 export const SendChatMessageResponse = zod.object({
@@ -102,7 +103,7 @@ export const GetSettingsResponse = zod.object({
  * @summary Save settings
  */
 export const SaveSettingsBody = zod.object({
-  "screenshotInterval": zod.number().nullish().describe('Auto-screenshot interval in seconds (10-300)'),
+  "screenshotInterval": zod.number().nullish().describe('Auto-screenshot interval in seconds (5-300)'),
   "autoCapture": zod.boolean().nullish(),
   "steamApiKey": zod.string().nullish().describe('Steam Web API key for extended game detection (pass null to keep existing)')
 })

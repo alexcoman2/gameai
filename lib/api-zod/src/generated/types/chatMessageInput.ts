@@ -32,4 +32,9 @@ export interface ChatMessageInput {
   history?: HistoryEntry[];
   /** Passive screen observations collected by watch mode — injected into the system prompt so Claude knows what happened between messages */
   watchLog?: WatchLogEntry[];
+  /**
+     * Whether watch mode is currently enabled on the client. Lets the server tell the model "Watch Mode is ON but no observations yet" vs "Watch Mode is OFF".
+     * @nullable
+     */
+  watchMode?: boolean | null;
 }

@@ -574,6 +574,7 @@ export default function Home() {
             : { includeScreenshot: shouldSendScreenshot }),
           sessionId: activeSessionId,
           ...(watchLog.length > 0 ? { watchLog } : {}),
+          ...(isElectron ? { watchMode } : {}),
         }
       });
 

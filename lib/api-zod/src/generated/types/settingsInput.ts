@@ -8,7 +8,7 @@
 
 export interface SettingsInput {
   /**
-     * Auto-screenshot interval in seconds (10-300)
+     * Auto-screenshot interval in seconds (5-300)
      * @nullable
      */
   screenshotInterval?: number | null;

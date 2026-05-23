@@ -37,15 +37,52 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 const ACTIVE_SESSION_LS_KEY = "unstuck:activeSessionId";
 
 async function resolveOverlaySessionId(): Promise<string | null> {
-  // 1. Use whatever session the main window is currently focused on.
+  // Always re-resolve against the server's session list. Reading localStorage
+  // alone is racy: at app startup the overlay window can render before the
+  // main window has selected its active session and written it to LS, so the
+  // overlay used to create its own "Overlay" session and the two windows
+  // ended up pointing at different sessions for the rest of the run.
+  //
+  // Strategy: ask the server which sessions exist, validate the LS pick
+  // against that list, and otherwise pick the most-recently-updated one.
+  // Only create a brand-new session when the user truly has none yet.
+  let preferred: string | null = null;
   try {
-    const stored = localStorage.getItem(ACTIVE_SESSION_LS_KEY);
-    if (stored) return stored;
+    preferred = localStorage.getItem(ACTIVE_SESSION_LS_KEY);
   } catch {
     // ignore
   }
-  // 2. Fall back to creating a new session so overlay-only usage still
-  //    persists to the chat list (instead of an orphan globalHistory).
+
+  try {
+    const res = await authFetch("/api/sessions");
+    if (res.ok) {
+      const sessions = (await res.json()) as { id: string; updatedAt?: string }[];
+      if (Array.isArray(sessions) && sessions.length > 0) {
+        // If LS points at a real session, keep it (matches the main window).
+        if (preferred && sessions.some((s) => s.id === preferred)) {
+          return preferred;
+        }
+        // Otherwise sync to whichever session was most recently touched —
+        // that's almost certainly the one the main window is showing.
+        const newest = [...sessions].sort((a, b) =>
+          (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "")
+        )[0];
+        if (newest?.id) {
+          try {
+            localStorage.setItem(ACTIVE_SESSION_LS_KEY, newest.id);
+          } catch {
+            // ignore
+          }
+          return newest.id;
+        }
+      }
+    }
+  } catch {
+    // ignore — fall through to create
+  }
+
+  // No sessions exist yet. Create one so overlay-only usage still persists
+  // to the chat list (instead of an orphan globalHistory).
   try {
     const res = await authFetch("/api/sessions", {
       method: "POST",
