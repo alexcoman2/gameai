@@ -18,6 +18,7 @@ import UsagePage from "@/pages/usage";
 import AdminUsagePage from "@/pages/admin-usage";
 import { AboutPage, PricingPage, TermsPage, PrivacyPage, RefundPage } from "@/pages/legal";
 import { LibraryPage } from "@/pages/library";
+import { DownloadPage } from "@/pages/download";
 import OverlayPage from "@/pages/overlay";
 import { Layout } from "@/components/layout";
 import { ChatProvider } from "@/context/chat-context";
@@ -209,6 +210,7 @@ function AppRoutes() {
       <Route path="/usage" component={UsagePage} />
       <Route path="/admin/usage" component={AdminUsagePage} />
       <Route path="/about" component={AboutPage} />
+      <Route path="/download" component={DownloadPage} />
       <Route path="/library" component={LibraryPage} />
       <Route path="/pricing" component={PricingPage} />
       <Route path="/legal/terms" component={TermsPage} />
