@@ -1,6 +1,6 @@
-appId: com.replit.ai-gaming-companion
-productName: AI Gaming Companion
-copyright: Copyright © 2025
+appId: gg.unstuck.app
+productName: Unstuck
+copyright: Copyright © 2026 Unstuck
 
 asar: false
 
@@ -41,7 +41,7 @@ nsis:
   perMachine: false
   createDesktopShortcut: true
   createStartMenuShortcut: true
-  shortcutName: AI Gaming Companion
+  shortcutName: Unstuck
 
 linux:
   target:

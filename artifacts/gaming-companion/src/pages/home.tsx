@@ -258,7 +258,7 @@ export default function Home() {
           try {
             // Prefer the last screenshot captured while the window was NOT focused
             // (i.e. when the game was visible fullscreen) over the current screen
-            // which would show the NEXUS_LINK overlay after an alt-tab.
+            // which would show the Unstuck overlay after an alt-tab.
             const gameScreenshot = await electronAPI.getLastGameScreenshot?.() ?? null;
             const raw = gameScreenshot || dataUrl;
             const observeWith = await compressScreenshot(raw);

@@ -23,7 +23,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <Crosshair className="w-5 h-5" />
           </div>
           <div>
-            <h1 className="text-xl font-bold font-mono tracking-wider text-primary">NEXUS_LINK</h1>
+            <h1 className="text-xl font-bold font-mono tracking-wider text-primary">UNSTUCK</h1>
             <div className="flex items-center gap-2 text-xs font-mono text-muted-foreground uppercase tracking-widest mt-1">
               <span>STATUS:</span>
               {isDetecting ? (

@@ -1,6 +1,6 @@
-# [Project name]
+# Unstuck
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Desktop AI gaming assistant that gets you past any wall — bosses, lost zones, build choices, what-to-do-next — by watching your screen and giving expert answers in seconds. Windows-only Electron app, Anthropic-powered backend, Clerk auth, Paddle billing.
 
 ## Run & Operate
 

@@ -1,5 +1,5 @@
 /**
- * Packaging script for AI Gaming Companion Electron app.
+ * Packaging script for Unstuck Electron app.
  *
  * On Windows: Produces a full NSIS installer (.exe) via electron-builder.
  * On Linux/macOS: Produces a portable ZIP archive of the unpacked Windows app.
@@ -131,7 +131,7 @@ async function main() {
 
   const zipOutput = path.join(
     distReleaseDir,
-    "AI-Gaming-Companion-win32-x64.zip"
+    "Unstuck-win32-x64.zip"
   );
   console.log(`\nCreating portable ZIP archive: ${zipOutput}`);
 
@@ -140,7 +140,7 @@ async function main() {
     console.log("\n✓ Portable Windows app created:");
     console.log("  " + zipOutput);
     console.log(
-      "\nTo install on Windows: extract the ZIP and run 'AI Gaming Companion.exe'"
+      "\nTo install on Windows: extract the ZIP and run 'Unstuck.exe'"
     );
     console.log(
       "To build a proper NSIS installer: run this script on Windows.\n"

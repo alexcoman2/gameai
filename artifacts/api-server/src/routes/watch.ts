@@ -49,7 +49,7 @@ router.post("/chat/watch", ...protect, async (req, res) => {
     }
   }
 
-  const hostedUrl = process.env.NEXUS_LINK_API_URL;
+  const hostedUrl = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
   if (hostedUrl) {
     try {
       const upstream = await fetch(`${hostedUrl}/api/chat/watch`, {

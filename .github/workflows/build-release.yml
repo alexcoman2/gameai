@@ -15,7 +15,7 @@ jobs:
     runs-on: windows-latest
 
     env:
-      NEXUS_LINK_API_URL: ${{ secrets.NEXUS_LINK_API_URL }}
+      UNSTUCK_API_URL: ${{ secrets.UNSTUCK_API_URL || secrets.NEXUS_LINK_API_URL }}
       CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
     steps:
@@ -76,7 +76,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.release_tag }}
-          name: "NEXUS_LINK ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.release_tag }}"
+          name: "Unstuck ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || github.event.inputs.release_tag }}"
           draft: false
           prerelease: false
           files: artifacts/electron-app/dist-release/*.exe

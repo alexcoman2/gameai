@@ -79,7 +79,8 @@ async function startServer(): Promise<void> {
       STATIC_DIR: staticDir,
       // Points to the hosted Replit API server. The local server acts as a
       // proxy for chat and never needs an Anthropic API key.
-      NEXUS_LINK_API_URL:
+      UNSTUCK_API_URL:
+        process.env.UNSTUCK_API_URL ||
         process.env.NEXUS_LINK_API_URL ||
         "https://game-companion-ai.replit.app",
     },
@@ -106,7 +107,7 @@ function createWindow(): void {
       nodeIntegration: false,
       contextIsolation: true,
     },
-    title: "AI Gaming Companion",
+    title: "Unstuck",
     show: false,
     backgroundColor: "#0f0f0f",
     autoHideMenuBar: true,
@@ -123,7 +124,7 @@ function createWindow(): void {
     mainWindow = null;
   });
 
-  // Background capture: when the user alt-tabs to NEXUS_LINK, capture the
+  // Background capture: when the user alt-tabs to Unstuck, capture the
   // game screen in the background so watch observations still see the game.
   mainWindow.on("blur", () => {
     if (backgroundCaptureTimer) return;

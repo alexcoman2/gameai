@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "AI Gaming Companion"
+title = "Unstuck"
 version = "1.0.0"
 id = "artifacts/gaming-companion"
 router = "path"

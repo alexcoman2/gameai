@@ -1,7 +1,7 @@
 {
   "name": "@workspace/electron-app",
   "version": "1.0.0",
-  "description": "AI Gaming Companion — Electron desktop app",
+  "description": "Unstuck — AI gaming assistant desktop app",
   "author": "Replit",
   "private": true,
   "main": "dist/main.js",

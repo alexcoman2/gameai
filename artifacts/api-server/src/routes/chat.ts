@@ -71,7 +71,7 @@ function fromHistoryEntries(entries: HistoryEntry[]): ConversationMessage[] {
 
 router.post("/chat/clear", async (req, res) => {
   const { sessionId } = req.body as { sessionId?: string };
-  const hostedUrl = process.env.NEXUS_LINK_API_URL;
+  const hostedUrl = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
 
   if (hostedUrl) {
     // Proxy mode: clear local state only — hosted server is stateless, nothing to clear there
@@ -130,7 +130,7 @@ router.post("/chat/message", ...protect, async (req, res) => {
   // ── PROXY MODE ──────────────────────────────────────────────────────────────
   // Local Electron server. Loads history from disk, attaches screenshot, then
   // forwards everything to the stateless hosted server. Persists the result.
-  const hostedUrl = process.env.NEXUS_LINK_API_URL;
+  const hostedUrl = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
   if (hostedUrl) {
     // Resolve screenshot
     let imageData: string | null = reqImageData ?? null;
@@ -228,7 +228,7 @@ router.post("/chat/message", ...protect, async (req, res) => {
   }
 
   // ── DIRECT MODE ─────────────────────────────────────────────────────────────
-  // Running on the hosted Replit server (or local dev without NEXUS_LINK_API_URL).
+  // Running on the hosted Replit server (or local dev without UNSTUCK_API_URL).
   // When `history` is provided in the request, operate statelessly — call Claude
   // and return updatedHistory without touching the disk.
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -264,16 +264,16 @@ router.post("/chat/message", ...protect, async (req, res) => {
     (e) => typeof e.confidence !== "number" || e.confidence >= 0.5
   );
   const watchLogSection = usableLog.length > 0
-    ? `\nWATCH LOG — ${usableLog.length} passive screen observation${usableLog.length !== 1 ? "s" : ""} recorded by NEXUS_LINK while the player was playing (newest last):\n${usableLog.map(e => {
+    ? `\nWATCH LOG — ${usableLog.length} passive screen observation${usableLog.length !== 1 ? "s" : ""} recorded by Unstuck while the player was playing (newest last):\n${usableLog.map(e => {
         const tag = e.event ? `[${e.event}] ` : "";
         const txt = e.visibleText ? ` — text: "${e.visibleText}"` : "";
         return `  [${e.time}] ${tag}${e.note}${txt}`;
       }).join("\n")}\nThis IS your log. Use it to understand what has been happening between messages. Bracketed tags ([combat], [boss], [menu], etc.) indicate the event type. "text:" fields are verbatim transcriptions of on-screen text — treat them as ground truth.\n`
-    : "\nWATCH LOG — no observations recorded yet this session. Watch Mode is currently off or hasn't fired yet. If the player asks about your logs, explain that NEXUS_LINK's Watch Mode passively records screen observations every 5 seconds when enabled, and they can turn it on using the Watch button in the toolbar to start building a log.\n";
+    : "\nWATCH LOG — no observations recorded yet this session. Watch Mode is currently off or hasn't fired yet. If the player asks about your logs, explain that Unstuck's Watch Mode passively records screen observations every 5 seconds when enabled, and they can turn it on using the Watch button in the toolbar to start building a log.\n";
 
   const specialistKnowledge = buildSpecialistAddendum(gameName);
 
-  const systemPrompt = `You are NEXUS_LINK AI CORE — a master-level gaming expert and co-pilot embedded as a desktop overlay. You have encyclopaedic, pro-player knowledge of every game you know: every area, every enemy, every boss pattern, every hidden item, every shortcut, every optimal route, every build, every exploit. You have mentally completed these games dozens of times and know them better than most players ever will.
+  const systemPrompt = `You are UNSTUCK — a master-level gaming expert and co-pilot embedded as a desktop overlay. Your job is to get the player unstuck: when they're lost, blocked on a boss, unsure what build or gear to use, don't know where to go next, or can't figure out a mechanic, you give them the clearest, most actionable answer in seconds. You have encyclopaedic, pro-player knowledge of every game you know: every area, every enemy, every boss pattern, every hidden item, every shortcut, every optimal route, every build, every exploit. You have mentally completed these games dozens of times and know them better than most players ever will.
 
 GAME: ${gameContext}
 
