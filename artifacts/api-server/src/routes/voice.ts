@@ -36,11 +36,13 @@ router.post("/voice/transcribe", ...protect, async (req, res) => {
   if (hostedUrl) {
     try {
       const authHeader = req.headers.authorization;
+      const cookieHeader = req.headers.cookie;
       const upstream = await fetch(`${hostedUrl}/api/voice/transcribe`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(authHeader ? { Authorization: authHeader } : {}),
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
         },
         body: JSON.stringify({ audio, mimeType, language }),
       });
@@ -112,6 +114,112 @@ router.post("/voice/transcribe", ...protect, async (req, res) => {
     logger.error({ err }, "Failed to transcribe audio");
     const msg = err instanceof Error ? err.message : "Unknown error";
     res.status(500).json({ error: `Transcription error: ${msg}` });
+  }
+});
+
+// Text-to-speech via OpenAI gpt-4o-mini-tts.
+//
+//   POST /api/voice/speak
+//   { text: "...", voice?: "alloy"|"echo"|"fable"|"onyx"|"nova"|"shimmer",
+//     format?: "mp3"|"opus"|"aac"|"flac" }
+//   → audio/mpeg bytes (or whichever format requested)
+//
+// Proxy mode forwards binary straight from hosted. Hosted mode calls OpenAI
+// and streams the audio back. Same auth + usage gating as /transcribe.
+
+const ALLOWED_VOICES = new Set([
+  "alloy", "echo", "fable", "onyx", "nova", "shimmer",
+]);
+const ALLOWED_FORMATS = new Set(["mp3", "opus", "aac", "flac"]);
+// Cap incoming text. OpenAI's hard cap is 4096 chars; we mirror that.
+const MAX_TTS_CHARS = 4096;
+
+router.post("/voice/speak", ...protect, async (req, res) => {
+  const { text, voice, format } = req.body as {
+    text?: string;
+    voice?: string;
+    format?: string;
+  };
+
+  if (!text || typeof text !== "string") {
+    res.status(400).json({ error: "text is required" });
+    return;
+  }
+  const trimmed = text.slice(0, MAX_TTS_CHARS);
+  const chosenVoice = voice && ALLOWED_VOICES.has(voice) ? voice : "nova";
+  const chosenFormat = format && ALLOWED_FORMATS.has(format) ? format : "mp3";
+  const contentType =
+    chosenFormat === "mp3" ? "audio/mpeg"
+    : chosenFormat === "opus" ? "audio/ogg"
+    : chosenFormat === "aac" ? "audio/aac"
+    : "audio/flac";
+
+  // ── PROXY MODE ────────────────────────────────────────────────────────────
+  const hostedUrl = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
+  if (hostedUrl) {
+    try {
+      const authHeader = req.headers.authorization;
+      const cookieHeader = req.headers.cookie;
+      const upstream = await fetch(`${hostedUrl}/api/voice/speak`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(authHeader ? { Authorization: authHeader } : {}),
+          ...(cookieHeader ? { Cookie: cookieHeader } : {}),
+        },
+        body: JSON.stringify({ text: trimmed, voice: chosenVoice, format: chosenFormat }),
+      });
+      if (!upstream.ok) {
+        const errText = await upstream.text().catch(() => "");
+        res.status(upstream.status).type("application/json").send(
+          errText || JSON.stringify({ error: "Upstream TTS failed" })
+        );
+        return;
+      }
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.setHeader("Content-Type", upstream.headers.get("Content-Type") || contentType);
+      res.send(buf);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      res.status(502).json({ error: `Failed to reach TTS service: ${msg}` });
+    }
+    return;
+  }
+
+  // ── HOSTED MODE ───────────────────────────────────────────────────────────
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    res.status(500).json({ error: "TTS is not configured on the server." });
+    return;
+  }
+
+  try {
+    const upstream = await fetch("https://api.openai.com/v1/audio/speech", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4o-mini-tts",
+        input: trimmed,
+        voice: chosenVoice,
+        response_format: chosenFormat,
+      }),
+    });
+    if (!upstream.ok) {
+      const errText = await upstream.text().catch(() => "");
+      logger.error({ status: upstream.status, body: errText.slice(0, 500) }, "TTS request failed");
+      res.status(502).json({ error: "TTS failed", detail: errText.slice(0, 300) });
+      return;
+    }
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    res.setHeader("Content-Type", contentType);
+    res.send(buf);
+  } catch (err) {
+    logger.error({ err }, "Failed to synthesize speech");
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    res.status(500).json({ error: `TTS error: ${msg}` });
   }
 });
 

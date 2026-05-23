@@ -30,7 +30,31 @@ export function setTtsEnabled(enabled: boolean): void {
   }
 }
 
+// Currently-playing OpenAI TTS audio + the AbortController for its in-flight
+// fetch. Kept module-scoped so cancelSpeech() and successive speak() calls
+// can interrupt whichever path is active without React having to thread refs.
+let currentAudio: HTMLAudioElement | null = null;
+let currentAudioUrl: string | null = null;
+let currentFetchAbort: AbortController | null = null;
+
+function stopCurrentAudio(): void {
+  if (currentAudio) {
+    try { currentAudio.pause(); } catch { /* ignore */ }
+    currentAudio.src = "";
+    currentAudio = null;
+  }
+  if (currentAudioUrl) {
+    try { URL.revokeObjectURL(currentAudioUrl); } catch { /* ignore */ }
+    currentAudioUrl = null;
+  }
+  if (currentFetchAbort) {
+    try { currentFetchAbort.abort(); } catch { /* ignore */ }
+    currentFetchAbort = null;
+  }
+}
+
 export function cancelSpeech(): void {
+  stopCurrentAudio();
   try {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -56,10 +80,8 @@ function stripMarkdown(text: string): string {
     .trim();
 }
 
-export function speak(text: string): void {
+function speakBrowserFallback(clean: string): void {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
-  const clean = stripMarkdown(text);
-  if (!clean) return;
   try {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(clean);
@@ -70,6 +92,79 @@ export function speak(text: string): void {
   } catch {
     // ignore
   }
+}
+
+// OpenAI TTS via /api/voice/speak. Falls back to browser SpeechSynthesis if
+// the fetch fails (offline, key not configured, network blip) so the user
+// always gets some audio rather than silence.
+//
+// Race semantics: every call gets its own AbortController. We keep
+// `currentFetchAbort` pointed at it for the WHOLE lifecycle (not just the
+// fetch). That way cancelSpeech() — fired either by the user or by a newer
+// speak() call — both aborts the in-flight fetch AND signals via the
+// abort.signal that any subsequent `audio.play()` rejection should be
+// treated as a deliberate interruption, not a fetch failure. Without this,
+// pausing the audio mid-play would reject play(), the catch would run with
+// signal.aborted=false, and speakBrowserFallback would fire stale text on
+// top of the new speech.
+export function speak(text: string): void {
+  if (typeof window === "undefined") return;
+  const clean = stripMarkdown(text);
+  if (!clean) return;
+
+  // Cancel anything currently speaking — both the OpenAI audio path and
+  // any leftover browser synthesis queue.
+  cancelSpeech();
+
+  const abort = new AbortController();
+  currentFetchAbort = abort;
+  let myAudio: HTMLAudioElement | null = null;
+  let myUrl: string | null = null;
+
+  void (async () => {
+    try {
+      const res = await authFetch("/api/voice/speak", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: clean }),
+        signal: abort.signal,
+      });
+      if (abort.signal.aborted) return;
+      if (!res.ok) throw new Error(`TTS HTTP ${res.status}`);
+      const blob = await res.blob();
+      if (abort.signal.aborted) return;
+
+      myUrl = URL.createObjectURL(blob);
+      myAudio = new Audio(myUrl);
+      myAudio.onended = () => {
+        if (currentAudio === myAudio) stopCurrentAudio();
+      };
+      myAudio.onerror = () => {
+        if (currentAudio === myAudio) stopCurrentAudio();
+      };
+      currentAudio = myAudio;
+      currentAudioUrl = myUrl;
+      // Note: do NOT null currentFetchAbort here — keep it pointing at
+      // our abort so a later cancelSpeech() can flip signal.aborted=true
+      // and the play() rejection below knows it was deliberately cancelled.
+      await myAudio.play();
+    } catch {
+      // Two failure modes:
+      //   a) signal aborted → user/another speak() cancelled us; do nothing.
+      //   b) genuine fetch/play error → fall back to browser TTS, but only
+      //      if we're still the active speaker (no newer speak() has run).
+      if (abort.signal.aborted) return;
+      if (currentAudio !== null && currentAudio !== myAudio) return;
+      // Clean up our refs/url before falling back so we don't leak.
+      if (myUrl) {
+        try { URL.revokeObjectURL(myUrl); } catch { /* ignore */ }
+      }
+      if (currentAudio === myAudio) currentAudio = null;
+      if (currentAudioUrl === myUrl) currentAudioUrl = null;
+      if (currentFetchAbort === abort) currentFetchAbort = null;
+      speakBrowserFallback(clean);
+    }
+  })();
 }
 
 // ── Whisper hallucination filter ────────────────────────────────────────────
