@@ -169,6 +169,17 @@ export function clerkProxyPassthroughMiddleware(): RequestHandler {
   return createProxyMiddleware({
     target: hostedUrl,
     changeOrigin: true,
+    // Follow upstream redirects server-side. The hosted /api/__clerk
+    // endpoint returns a 307 for unversioned clerk-js URLs (e.g. the
+    // initial `.../clerk-js@6/...` request redirects to the pinned
+    // `.../clerk-js@6.12.0/...` URL). If we forward the 307 to the
+    // browser, the renderer makes a second request and the response
+    // chain becomes ambiguous (and historically got cached as HTML).
+    // With followRedirects: true the proxy walks the chain itself and
+    // returns a single 200 + the real JS body to the browser. No
+    // Location header to rewrite, no second round-trip, no cache
+    // poisoning surface.
+    followRedirects: true,
     // No pathRewrite — hosted server expects the same /api/__clerk/*
     // prefix, so just forward the path as-is.
     on: {
@@ -187,20 +198,25 @@ export function clerkProxyPassthroughMiddleware(): RequestHandler {
         proxyReq.removeHeader("if-none-range");
       },
       proxyRes: (proxyRes) => {
-        // Rewrite redirect Locations that point at the hosted origin
-        // back to local-relative paths. The hosted /api/__clerk often
-        // returns 307s with absolute URLs (e.g. clerk-js requests get
-        // redirected to a version-pinned URL on game-companion-ai.replit
-        // .app). If we forward those Location headers verbatim, the
-        // browser leaves the local origin, the request becomes cross-
-        // site, and for <script src> the response ends up being HTML
-        // (the script tag then chokes with "Unexpected token <" and
-        // clerk-js never loads). Keeping the redirect on 127.0.0.1
-        // makes the entire chain first-party and same-origin.
+        // Belt-and-suspenders: even with followRedirects: true above,
+        // if any 3xx ever slips through, rewrite hosted-origin Location
+        // headers to local-relative so the browser stays on 127.0.0.1
+        // and the chain remains first-party / same-origin.
         const loc = proxyRes.headers["location"];
         if (typeof loc === "string" && loc.startsWith(hostedRoot)) {
           proxyRes.headers["location"] = loc.slice(hostedRoot.length);
         }
+        // Force no-store on every /api/__clerk response. The browser
+        // disk cache was the root cause of the v2.0.20→v2.0.22 stuck-
+        // state: a bad response got cached, conditional revalidation
+        // kept the bad body alive across versions, and the server-side
+        // fix never had a chance to land. Disallowing caching of this
+        // path eliminates the entire class of failure. clerk-js bundles
+        // are tiny and the local proxy is on loopback, so the perf
+        // cost is negligible.
+        proxyRes.headers["cache-control"] = "no-store";
+        delete proxyRes.headers["etag"];
+        delete proxyRes.headers["last-modified"];
         // Defensive: hosted proxy already strips Domain from Set-Cookie,
         // but if anything slips through, scope it to the local host so
         // the browser actually stores it on 127.0.0.1.
