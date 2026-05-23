@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db, usersTable, type PlanTier } from "@workspace/db";
 import { getPaddle, PRICE_TO_TIER } from "../lib/paddle.js";
 import { logger } from "../lib/logger.js";
+import { maybeBillOverageOnRollover } from "../lib/overage.js";
 
 const webhookSecret = process.env.PADDLE_WEBHOOK_SECRET;
 
@@ -93,17 +94,56 @@ async function upsertSubscription(data: any) {
     logger.warn({ priceId, userId }, "Unknown Paddle price ID — defaulting to free");
   }
 
+  const newPeriodStart = data?.currentBillingPeriod?.startsAt
+    ? new Date(data.currentBillingPeriod.startsAt)
+    : null;
+  const newPeriodEnd = data?.currentBillingPeriod?.endsAt
+    ? new Date(data.currentBillingPeriod.endsAt)
+    : null;
+  const customerId: string | null = data?.customerId ?? null;
+
+  // Read current stored period BEFORE we update — this is the window we may
+  // need to bill overage for if the period rolled over.
+  const existingRows = await db
+    .select({
+      plan: usersTable.plan,
+      storedPeriodStart: usersTable.subscriptionCurrentPeriodStart,
+      storedBilledThrough: usersTable.overageBilledThrough,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  const existing = existingRows[0];
+
+  // If the period rolled, bill the previous period's overage at the plan the
+  // user was on for that period (existing.plan), not the new plan.
+  if (existing) {
+    try {
+      await maybeBillOverageOnRollover({
+        userId,
+        plan: existing.plan,
+        customerId,
+        storedPeriodStart: existing.storedPeriodStart,
+        storedOverageBilledThrough: existing.storedBilledThrough,
+        newPeriodStart,
+      });
+    } catch (e) {
+      // Don't let an overage charge failure block the subscription state
+      // update — the audit row already captured the attempt.
+      logger.error({ err: e, userId }, "Overage billing failed; continuing with subscription update");
+    }
+  }
+
   await db
     .update(usersTable)
     .set({
       plan: tier,
       billingProvider: "paddle",
-      billingCustomerId: data?.customerId ?? null,
+      billingCustomerId: customerId,
       billingSubscriptionId: data?.id ?? null,
       subscriptionStatus: data?.status ?? null,
-      subscriptionCurrentPeriodEnd: data?.currentBillingPeriod?.endsAt
-        ? new Date(data.currentBillingPeriod.endsAt)
-        : null,
+      subscriptionCurrentPeriodStart: newPeriodStart,
+      subscriptionCurrentPeriodEnd: newPeriodEnd,
       updatedAt: new Date(),
     })
     .where(eq(usersTable.id, userId));

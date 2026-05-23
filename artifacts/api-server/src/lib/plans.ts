@@ -41,7 +41,8 @@ export const PLAN_CONFIGS: Record<PlanTier, PlanConfig> = {
     monthlyWatchSeconds: 2 * 60 * 60,
     allowsWatch: true,
     overageChatMicrocents: 50_000,
-    overageWatchSecMicrocents: Math.round((12 * 100 * 10_000) / 3600),
+    // ceil so we never undercharge — Math.round → 3_333 μc/sec was ≈$0.19998/min
+    overageWatchSecMicrocents: Math.ceil((12 * 100 * 10_000) / 3600),
     allowsOverage: true,
   },
   elite: {

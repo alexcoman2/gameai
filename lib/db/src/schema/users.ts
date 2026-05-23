@@ -14,7 +14,13 @@ export const usersTable = pgTable("users", {
   billingCustomerId: text("billing_customer_id"),
   billingSubscriptionId: text("billing_subscription_id"),
   subscriptionStatus: text("subscription_status"),
+  subscriptionCurrentPeriodStart: timestamp("subscription_current_period_start"),
   subscriptionCurrentPeriodEnd: timestamp("subscription_current_period_end"),
+  // Tracks the end-of-period date we've already processed for overage
+  // billing. Guards against double-charging on Paddle webhook retries —
+  // if a SubscriptionUpdated event arrives whose previous period start
+  // matches this value, we skip the overage calculation.
+  overageBilledThrough: timestamp("overage_billed_through"),
   totalLifetimeCostCents: integer("total_lifetime_cost_cents").notNull().default(0),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
