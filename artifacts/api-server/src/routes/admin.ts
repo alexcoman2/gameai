@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, gte, sql, desc } from "drizzle-orm";
+import { eq, and, gte, sql, desc, inArray } from "drizzle-orm";
 import { db, usersTable, usageRecordsTable, paddleEventsTable } from "@workspace/db";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { getOrCreateUser } from "../lib/usage.js";
@@ -174,6 +174,12 @@ router.get("/admin/usage", ...protect, async (req, res) => {
 
     // Resolve user metadata (email/plan/isAdmin) for the leaderboard.
     const ids = monthPerUser.map((r) => r.userId);
+    // NOTE: previously used `sql\`${usersTable.id} = ANY(${ids})\``, which
+    // made Drizzle bind the JS array as a single text param. node-postgres
+    // then tried to parse that string as a Postgres array literal and
+    // failed with `malformed array literal: "user_..."`, 500ing every
+    // call to /admin/usage. `inArray` expands the array into one bound
+    // parameter per element, which is what we want here.
     const userRows = ids.length
       ? await db
           .select({
@@ -183,7 +189,7 @@ router.get("/admin/usage", ...protect, async (req, res) => {
             isAdmin: usersTable.isAdmin,
           })
           .from(usersTable)
-          .where(sql`${usersTable.id} = ANY(${ids})`)
+          .where(inArray(usersTable.id, ids))
       : [];
     const userById = new Map(userRows.map((u) => [u.id, u]));
 
