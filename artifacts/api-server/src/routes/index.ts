@@ -7,6 +7,7 @@ import watchRouter from "./watch.js";
 import settingsRouter from "./settings.js";
 import sessionsRouter from "./sessions.js";
 import billingRouter from "./billing.js";
+import adminRouter from "./admin.js";
 import { IS_LOCAL_ROUTES_ENABLED } from "../lib/server-mode.js";
 
 const router: IRouter = Router();
@@ -16,6 +17,7 @@ router.use(healthRouter);
 router.use(chatRouter);
 router.use(watchRouter);
 router.use(billingRouter);
+router.use(adminRouter);
 
 // Per-machine local routes. Disabled on the hosted server because they expose
 // shared per-process filesystem/memory state (sessions, captured screenshots,
