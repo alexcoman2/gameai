@@ -64,6 +64,54 @@ export function cancelSpeech(): void {
   }
 }
 
+// Browser autoplay policy: HTMLAudioElement.play() rejects with NotAllowedError
+// unless the document has a recent "user activation" (click/keypress within the
+// last few seconds). Voice replies arrive AFTER a multi-second streaming chat
+// response, by which point the user's mic click has long since expired — so
+// even though the TTS blob downloads fine, .play() silently rejects and no
+// sound comes out. Same restriction applies to window.speechSynthesis fallback.
+//
+// The fix: on every user gesture (mic toggle, send, TTS toggle), play a tiny
+// silent clip. Once ANY play() resolves under user activation, Chrome marks
+// the document as "audio-unlocked" for the rest of the session and subsequent
+// play() calls from timers/promises succeed.
+//
+// We use a tiny inline WAV (44-byte silent header, no samples) instead of a
+// network fetch so it can't fail offline. Also separately unlock SpeechSynthesis
+// by speaking an empty utterance, which counts as user-gestured for that API.
+let audioPrimed = false;
+export function primeTtsPlayback(): void {
+  if (audioPrimed) return;
+  if (typeof window === "undefined") return;
+  try {
+    const a = new Audio(
+      "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=",
+    );
+    a.volume = 0;
+    const p = a.play();
+    if (p && typeof p.then === "function") {
+      p.then(() => {
+        audioPrimed = true;
+        try { a.pause(); } catch { /* ignore */ }
+      }).catch(() => { /* autoplay still blocked; try again next gesture */ });
+    } else {
+      audioPrimed = true;
+    }
+  } catch {
+    // ignore
+  }
+  try {
+    if ("speechSynthesis" in window) {
+      // Empty utterance: unlocks the API without making noise.
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0;
+      window.speechSynthesis.speak(u);
+    }
+  } catch {
+    // ignore
+  }
+}
+
 // Strip markdown so the TTS engine doesn't read aloud asterisks, backticks,
 // and bracketed URLs. Keep the actual words.
 function stripMarkdown(text: string): string {
@@ -80,17 +128,48 @@ function stripMarkdown(text: string): string {
     .trim();
 }
 
+// Custom event dispatched when BOTH playback paths (OpenAI Audio + browser
+// SpeechSynthesis) are silenced by the autoplay policy. Pages listen for
+// this and surface a toast telling the user to click anywhere to unlock
+// voice replies. This is the only user-visible signal we can give —
+// otherwise the failure is invisible (just console.warn).
+export const VOICE_BLOCKED_EVENT = "unstuck:voice:blocked";
+
+function dispatchBlocked(): void {
+  if (typeof window === "undefined") return;
+  try {
+    window.dispatchEvent(new CustomEvent(VOICE_BLOCKED_EVENT));
+  } catch { /* ignore */ }
+}
+
 function speakBrowserFallback(clean: string): void {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  if (typeof window === "undefined") return;
+  if (!("speechSynthesis" in window)) {
+    // No fallback available at all — signal blocked so the page can toast.
+    dispatchBlocked();
+    return;
+  }
   try {
     window.speechSynthesis.cancel();
     const utter = new SpeechSynthesisUtterance(clean);
     utter.rate = 1.05;
     utter.pitch = 1.0;
     utter.volume = 1.0;
+
+    // Detect silent SpeechSynthesis failure: if onstart never fires within
+    // 800ms of speak(), the browser has silently dropped the utterance
+    // (typical autoplay block). Surface that as a blocked event so we don't
+    // leave the user wondering why nothing happened.
+    let started = false;
+    utter.onstart = () => {
+      started = true;
+    };
     window.speechSynthesis.speak(utter);
+    setTimeout(() => {
+      if (!started) dispatchBlocked();
+    }, 800);
   } catch {
-    // ignore
+    dispatchBlocked();
   }
 }
 
@@ -140,7 +219,15 @@ export function speak(text: string): void {
         if (currentAudio === myAudio) stopCurrentAudio();
       };
       myAudio.onerror = () => {
-        if (currentAudio === myAudio) stopCurrentAudio();
+        // Decode / network error on the blob URL after play() resolved.
+        // Surface it to the console (silent failure was the bug we just
+        // fixed) and fall back to browser TTS so the user still hears the
+        // reply.
+        if (currentAudio !== myAudio) return;
+        // eslint-disable-next-line no-console
+        console.warn("[voice] OpenAI TTS audio element errored; falling back to browser speechSynthesis");
+        stopCurrentAudio();
+        speakBrowserFallback(clean);
       };
       currentAudio = myAudio;
       currentAudioUrl = myUrl;
@@ -148,13 +235,15 @@ export function speak(text: string): void {
       // our abort so a later cancelSpeech() can flip signal.aborted=true
       // and the play() rejection below knows it was deliberately cancelled.
       await myAudio.play();
-    } catch {
+    } catch (err) {
       // Two failure modes:
       //   a) signal aborted → user/another speak() cancelled us; do nothing.
       //   b) genuine fetch/play error → fall back to browser TTS, but only
       //      if we're still the active speaker (no newer speak() has run).
       if (abort.signal.aborted) return;
       if (currentAudio !== null && currentAudio !== myAudio) return;
+      // eslint-disable-next-line no-console
+      console.warn("[voice] OpenAI TTS failed, falling back to browser speechSynthesis:", err);
       // Clean up our refs/url before falling back so we don't leak.
       if (myUrl) {
         try { URL.revokeObjectURL(myUrl); } catch { /* ignore */ }

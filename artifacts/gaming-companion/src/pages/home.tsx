@@ -24,8 +24,9 @@ import {
   Eye, EyeOff, Radio, Minimize2, Mic, MicOff, Volume2, VolumeX,
 } from "lucide-react";
 import {
-  createVoiceRecorder, speak, cancelSpeech,
+  createVoiceRecorder, speak, cancelSpeech, primeTtsPlayback,
   isTtsEnabled, setTtsEnabled, isLikelyHallucination,
+  VOICE_BLOCKED_EVENT,
 } from "@/lib/voice";
 import { publishWatchState } from "@/lib/watch-state";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -88,6 +89,9 @@ export default function Home() {
   const recorderRef = useRef<ReturnType<typeof createVoiceRecorder> | null>(null);
 
   const toggleMic = async () => {
+    // Unlock browser audio playback under user activation so the TTS reply
+    // (which arrives seconds later, outside the user-gesture window) can play.
+    primeTtsPlayback();
     if (isTranscribing) return;
     if (isRecording) {
       try {
@@ -149,6 +153,10 @@ export default function Home() {
     setTtsOn(next);
     setTtsEnabled(next);
     if (!next) cancelSpeech();
+    // Prime audio under the toggle click — guarantees the very first
+    // reply after enabling TTS can play even if the user never clicked
+    // the mic (typed message + TTS-on path).
+    else primeTtsPlayback();
   };
 
   // Release the mic + cancel TTS on unmount so an in-progress recording
@@ -159,6 +167,22 @@ export default function Home() {
       cancelSpeech();
     };
   }, []);
+
+  // Listen for the voice-blocked event dispatched from voice.ts when both
+  // OpenAI Audio playback and browser speechSynthesis fall through silently
+  // (autoplay policy). Show a single dismissable toast — otherwise users see
+  // no feedback at all and assume voice mode is broken.
+  useEffect(() => {
+    const onBlocked = () => {
+      toast({
+        title: "Voice reply blocked by browser",
+        description: "Click anywhere in the window to allow audio playback, then send your next message.",
+        variant: "destructive",
+      });
+    };
+    window.addEventListener(VOICE_BLOCKED_EVENT, onBlocked);
+    return () => window.removeEventListener(VOICE_BLOCKED_EVENT, onBlocked);
+  }, [toast]);
   const [watchLog, setWatchLog] = useState<{ time: string; note: string; event?: string | null; confidence?: number | null; visibleText?: string | null }[]>([]);
   const [visionDetectedGame, setVisionDetectedGame] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);
@@ -635,6 +659,9 @@ export default function Home() {
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim() || sending) return;
+    // Prime audio under the submit gesture so the TTS reply that arrives
+    // seconds later can play (browser autoplay policy).
+    if (ttsOn) primeTtsPlayback();
     setSending(true);
 
     // Electron: use IPC-captured screenshot; Web: fall back to server-side capture

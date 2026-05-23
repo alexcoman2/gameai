@@ -6,8 +6,9 @@ import {
   Mic, MicOff, Volume2, VolumeX,
 } from "lucide-react";
 import {
-  createVoiceRecorder, speak, cancelSpeech,
+  createVoiceRecorder, speak, cancelSpeech, primeTtsPlayback,
   isTtsEnabled, setTtsEnabled, isLikelyHallucination,
+  VOICE_BLOCKED_EVENT,
 } from "@/lib/voice";
 import { readWatchState } from "@/lib/watch-state";
 
@@ -189,6 +190,12 @@ export default function OverlayPage() {
     // The regular submit path leaves it undefined and we read from `input`.
     const message = (override ?? input).trim();
     if (!message || sending) return;
+    // Unlock audio on every send (including PTT auto-send) so we don't
+    // depend on a prior mic-click priming. PTT fires from an Electron
+    // global hotkey IPC callback, which isn't a trusted DOM user-activation
+    // event in some renderers — priming there is defensive and a no-op
+    // once already unlocked.
+    if (ttsOn) primeTtsPlayback();
 
     let screenshot: string | null = null;
     if (attachScreenshot && electronAPI?.captureScreenshot) {
@@ -294,6 +301,9 @@ export default function OverlayPage() {
   };
 
   const toggleMic = async (source: "mic" | "ptt" = "mic") => {
+    // Unlock audio under the user gesture so the TTS reply can play later
+    // when it arrives outside the user-activation window.
+    primeTtsPlayback();
     if (isTranscribing) return;
     if (isRecording) {
       // Honor the source the recording was started from, not the source
@@ -398,6 +408,9 @@ export default function OverlayPage() {
     setTtsOn(next);
     setTtsEnabled(next);
     if (!next) cancelSpeech();
+    // Prime audio under the toggle click so the first reply after enabling
+    // TTS can play even if the user never touches the mic.
+    else primeTtsPlayback();
   };
 
   // Release the mic + cancel TTS on unmount so closing the overlay window
@@ -407,6 +420,24 @@ export default function OverlayPage() {
       try { recorderRef.current?.cancel(); } catch { /* ignore */ }
       cancelSpeech();
     };
+  }, []);
+
+  // Surface autoplay-blocked failures as an error turn in the transcript so
+  // the user knows why voice replies are silent. (Overlay has no toast.)
+  useEffect(() => {
+    const onBlocked = () => {
+      setTurns((prev) => [
+        ...prev,
+        {
+          id: `e-${Date.now()}`,
+          role: "error",
+          content:
+            "Voice reply blocked by browser. Click anywhere in the overlay to enable audio, then send your next message.",
+        },
+      ]);
+    };
+    window.addEventListener(VOICE_BLOCKED_EVENT, onBlocked);
+    return () => window.removeEventListener(VOICE_BLOCKED_EVENT, onBlocked);
   }, []);
 
   const hotkeyLabel = hotkey
