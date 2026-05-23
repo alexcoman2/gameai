@@ -13,6 +13,29 @@ import { authFetch } from "@/lib/auth-fetch";
 // overlay + main window since they share origin.
 export const TTS_ENABLED_LS_KEY = "unstuck:voice:tts";
 
+// localStorage key for hands-free voice-chat mode: once the user enables
+// it, the mic re-arms automatically after each assistant reply finishes
+// speaking, so a session is one continuous voice conversation instead of
+// tap-to-talk. Persists across reloads/window restarts.
+export const HANDS_FREE_LS_KEY = "unstuck:voice:handsfree";
+
+export function isHandsFreeEnabled(): boolean {
+  try {
+    return localStorage.getItem(HANDS_FREE_LS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+export function setHandsFreeEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(HANDS_FREE_LS_KEY, "1");
+    else localStorage.removeItem(HANDS_FREE_LS_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 export function isTtsEnabled(): boolean {
   try {
     return localStorage.getItem(TTS_ENABLED_LS_KEY) === "1";
@@ -214,11 +237,20 @@ export type SentenceSpeaker = {
   cancel: () => void;
 };
 
+export type SentenceSpeakerOptions = {
+  // Fired exactly once after end() has been called AND the last queued
+  // audio clip has finished playing (or the speaker fell back to browser
+  // SpeechSynthesis, in which case it fires immediately after end()).
+  // Used by hands-free mode to re-arm the mic only after the assistant
+  // has actually finished talking.
+  onAllDone?: () => void;
+};
+
 // Minimum sentence length to bother sending to TTS. Filters out fragments
 // like "OK." or stray punctuation that would just add overhead.
 const MIN_SENTENCE_CHARS = 4;
 
-export function createSentenceSpeaker(): SentenceSpeaker {
+export function createSentenceSpeaker(opts: SentenceSpeakerOptions = {}): SentenceSpeaker {
   // Tear down any prior speaker / one-shot speak() / browser synthesis so we
   // don't end up with two speakers fighting over the same audio element.
   cancelSpeech();
@@ -281,12 +313,26 @@ export function createSentenceSpeaker(): SentenceSpeaker {
     }
   };
 
+  let allDoneFired = false;
+  const fireAllDoneIfReady = () => {
+    if (allDoneFired) return;
+    if (!endedFeeding) return;
+    if (playIndex < nextIndex) return;
+    if (cancelled) return;
+    allDoneFired = true;
+    try { opts.onAllDone?.(); } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[voice] onAllDone handler threw:", e);
+    }
+  };
+
   const playNext = async (): Promise<void> => {
     if (cancelled || playing) return;
     if (playIndex >= nextIndex) {
       if (endedFeeding) {
         // eslint-disable-next-line no-console
         console.info("[voice] streaming TTS playback complete");
+        fireAllDoneIfReady();
       }
       return;
     }
@@ -349,6 +395,9 @@ export function createSentenceSpeaker(): SentenceSpeaker {
       }
     } finally {
       playing = false;
+      // Drain finished — check whether the speaker is fully done so
+      // hands-free callers can re-arm the mic immediately.
+      fireAllDoneIfReady();
     }
   };
 
@@ -395,6 +444,12 @@ export function createSentenceSpeaker(): SentenceSpeaker {
       endedFeeding = true;
       drainSentences(true);
       void playNext();
+      // If end() was called with zero sentences ever queued (very short
+      // reply, all under MIN_SENTENCE_CHARS), playNext bails immediately
+      // and fireAllDoneIfReady inside it short-circuits because the
+      // finally-block hasn't reached yet. Fire here so hands-free still
+      // re-arms in that edge case.
+      fireAllDoneIfReady();
     },
     cancel() {
       cancelled = true;

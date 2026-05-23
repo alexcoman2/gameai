@@ -3,12 +3,13 @@ import { useAuth } from "@clerk/react";
 import { authFetch } from "@/lib/auth-fetch";
 import {
   Loader2, Send, X, Maximize2, Camera, CameraOff,
-  Mic, MicOff, Volume2, VolumeX,
+  Mic, MicOff, Volume2, VolumeX, Radio,
 } from "lucide-react";
 import {
   createVoiceRecorder, speak, cancelSpeech, primeTtsPlayback,
   isTtsEnabled, setTtsEnabled, isLikelyHallucination,
-  VOICE_BLOCKED_EVENT, TTS_ENABLED_LS_KEY,
+  isHandsFreeEnabled, setHandsFreeEnabled,
+  VOICE_BLOCKED_EVENT, TTS_ENABLED_LS_KEY, HANDS_FREE_LS_KEY,
 } from "@/lib/voice";
 import { readWatchState } from "@/lib/watch-state";
 
@@ -125,6 +126,12 @@ export default function OverlayPage() {
   // the transcript or just pastes it into the composer.
   const isPttRef = useRef(false);
   const [ttsOn, setTtsOn] = useState(isTtsEnabled());
+  const [handsFree, setHandsFree] = useState(isHandsFreeEnabled());
+  // Track the latest hands-free value inside a ref so async callbacks
+  // (TTS onAllDone, mic onAutoStop) see the current setting instead of
+  // the stale closure value from when the request was kicked off.
+  const handsFreeRef = useRef(handsFree);
+  handsFreeRef.current = handsFree;
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const transcriptRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<ReturnType<typeof createVoiceRecorder> | null>(null);
@@ -175,10 +182,16 @@ export default function OverlayPage() {
   // immediately without needing a re-show.
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key !== TTS_ENABLED_LS_KEY) return;
-      const next = e.newValue === "1";
-      setTtsOn(next);
-      if (!next) cancelSpeech();
+      if (e.key === TTS_ENABLED_LS_KEY) {
+        const next = e.newValue === "1";
+        setTtsOn(next);
+        if (!next) cancelSpeech();
+        return;
+      }
+      if (e.key === HANDS_FREE_LS_KEY) {
+        setHandsFree(e.newValue === "1");
+        return;
+      }
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
@@ -237,6 +250,27 @@ export default function OverlayPage() {
     if (override === undefined) setInput("");
     setSending(true);
 
+    // Hands-free re-arm: fire the mic exactly once per turn, whether the
+    // signal to do so came from TTS finishing playback (preferred when
+    // ttsOn) or from the request finishing without TTS. The closure
+    // variable guarantees we don't double-trigger if both paths race
+    // (e.g. very short reply with TTS). Declared at the top of handleSend
+    // so the `finally` block can call it.
+    let rearmed = false;
+    const rearmIfHandsFree = () => {
+      if (rearmed) return;
+      if (!handsFreeRef.current) return;
+      rearmed = true;
+      // Small delay so the audio device fully releases before the mic
+      // grabs it back, and to give React state (sending=false) a tick
+      // to settle so toggleMic doesn't bail.
+      setTimeout(() => {
+        if (!handsFreeRef.current) return;
+        if (isRecordingRef.current || isTranscribingRef.current) return;
+        void toggleMicRef.current("ptt");
+      }, 250);
+    };
+
     try {
       const sessionId = await resolveOverlaySessionId();
       const watchState = readWatchState();
@@ -252,7 +286,9 @@ export default function OverlayPage() {
       const { createSentenceSpeaker } = await import("@/lib/voice");
       // Sentence-streaming TTS: audio playback begins ~1s after the first
       // sentence is generated instead of ~1s after the full reply finishes.
-      const speaker = ttsOn ? createSentenceSpeaker() : null;
+      const speaker = ttsOn
+        ? createSentenceSpeaker({ onAllDone: rearmIfHandsFree })
+        : null;
       try {
         const result = await streamChatMessage(
           {
@@ -317,6 +353,11 @@ export default function OverlayPage() {
       setSending(false);
       // Re-focus for the next quick question.
       requestAnimationFrame(() => inputRef.current?.focus());
+      // Non-TTS hands-free path: no speaker callback will ever fire, so
+      // kick the rearm right after the reply lands. If TTS is on this is
+      // a no-op because the speaker.onAllDone path already ran first
+      // (rearmed=true) or will run shortly with the same guard.
+      if (!ttsOn) rearmIfHandsFree();
     }
   };
 
@@ -438,6 +479,42 @@ export default function OverlayPage() {
     // TTS can play even if the user never touches the mic.
     else primeTtsPlayback();
   };
+
+  const toggleHandsFree = () => {
+    const next = !handsFree;
+    setHandsFree(next);
+    setHandsFreeEnabled(next);
+    if (next) {
+      // Turning hands-free ON implies the user wants the assistant to talk
+      // back too — silent hands-free is a useless feature. Enable TTS if it
+      // wasn't already, and prime the audio under this click.
+      if (!ttsOn) {
+        setTtsOn(true);
+        setTtsEnabled(true);
+      }
+      primeTtsPlayback();
+      // If we're idle right now (not recording, not transcribing, not
+      // mid-reply), start listening immediately so the user can just talk.
+      if (!sending && !isRecording && !isTranscribing) {
+        void toggleMic("ptt");
+      }
+    } else {
+      // Turning hands-free OFF should also stop an active listen so the
+      // mic isn't left hot after the user explicitly went tap-to-talk.
+      if (isRecording) {
+        try { recorderRef.current?.cancel(); } catch { /* ignore */ }
+        setIsRecording(false);
+        isPttRef.current = false;
+      }
+    }
+  };
+
+  // Live refs for handleSend's setTimeout rearm: avoids referencing stale
+  // React state from the closure when the timeout fires.
+  const isRecordingRef = useRef(isRecording);
+  isRecordingRef.current = isRecording;
+  const isTranscribingRef = useRef(isTranscribing);
+  isTranscribingRef.current = isTranscribing;
 
   // Release the mic + cancel TTS on unmount so closing the overlay window
   // doesn't leave the mic active or a half-spoken reply hanging.
@@ -662,6 +739,23 @@ export default function OverlayPage() {
               }`}
             >
               {ttsOn ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+            </button>
+            <button
+              type="button"
+              onClick={toggleHandsFree}
+              disabled={isLoaded && !isSignedIn}
+              title={
+                handsFree
+                  ? "Hands-free voice chat ON — mic re-arms after each reply. Click to stop."
+                  : "Hands-free voice chat OFF — click to start a continuous voice conversation"
+              }
+              className={`h-8 w-8 flex-shrink-0 flex items-center justify-center border transition ${
+                handsFree
+                  ? "border-primary text-primary bg-primary/15 hover:bg-primary/25 animate-pulse"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              } disabled:opacity-40 disabled:cursor-not-allowed`}
+            >
+              <Radio className="w-3.5 h-3.5" />
             </button>
             <textarea
               ref={inputRef}
