@@ -1,5 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { Router as WouterRouter } from "wouter";
+import { Sentry } from "@/lib/sentry";
 import App from "./App";
 import "./index.css";
 
@@ -19,7 +20,19 @@ console.log(
 );
 
 createRoot(document.getElementById("root")!).render(
-  <WouterRouter base={basePath}>
-    <App />
-  </WouterRouter>
+  <Sentry.ErrorBoundary
+    fallback={({ error }) => (
+      <div style={{ padding: 24, fontFamily: "monospace", color: "#fff", background: "#111", minHeight: "100vh" }}>
+        <h1 style={{ color: "#ef4444" }}>Something went wrong.</h1>
+        <p>The error has been reported. Please reload the app.</p>
+        <pre style={{ marginTop: 16, color: "#888", fontSize: 12 }}>
+          {error instanceof Error ? error.message : String(error)}
+        </pre>
+      </div>
+    )}
+  >
+    <WouterRouter base={basePath}>
+      <App />
+    </WouterRouter>
+  </Sentry.ErrorBoundary>
 );

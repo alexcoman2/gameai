@@ -13,6 +13,12 @@
     "supportedArchitectures": {
       "os": ["linux", "win32"],
       "cpu": ["x64"]
+    },
+    "peerDependencyRules": {
+      "allowAny": ["@opentelemetry/api"]
+    },
+    "overrides": {
+      "drizzle-orm": "0.45.2"
     }
   },
   "devDependencies": {

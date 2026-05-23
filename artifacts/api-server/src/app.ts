@@ -1,4 +1,5 @@
-import express, { type Express } from "express";
+import * as Sentry from "@sentry/node";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import { clerkMiddleware } from "@clerk/express";
@@ -168,5 +169,18 @@ if (hasDisplay && config.autoCapture) {
 // that would 404 on every checkout in production.
 validatePaddleConfig();
 validatePaypalConfig();
+
+// Sentry error handler — must come AFTER all routes/middleware. Captures any
+// unhandled error thrown from an Express handler and reports it.
+Sentry.setupExpressErrorHandler(app);
+
+// Fallback JSON error response so the client gets a structured 500 instead
+// of Express's default HTML error page. Runs after Sentry has captured.
+app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+  logger.error({ err }, "Unhandled request error");
+  if (!res.headersSent) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 export default app;

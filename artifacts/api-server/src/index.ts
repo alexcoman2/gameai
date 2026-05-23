@@ -1,3 +1,6 @@
+// Sentry must be imported (and Sentry.init called) before any other module
+// so its async-context hooks can wrap http/express instrumentation.
+import "./lib/sentry";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { IS_PROXY, SERVER_MODE } from "./lib/server-mode";

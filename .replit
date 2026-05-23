@@ -41,6 +41,8 @@ VITE_CONTACT_EMAIL = "comanalex972@gmail.com"
 VITE_REFUNDS_EMAIL = "comanalex972@gmail.com"
 VITE_PRIVACY_EMAIL = "comanalex972@gmail.com"
 VITE_LEGAL_JURISDICTION = "Romania"
+SENTRY_DSN = "https://1e69d6bc6c40a9fd5833257f15a4ee44@o4511440775872512.ingest.de.sentry.io/4511440781246544"
+VITE_SENTRY_DSN = "https://1e69d6bc6c40a9fd5833257f15a4ee44@o4511440775872512.ingest.de.sentry.io/4511440781246544"
 
 [nix]
 channel = "stable-25_05"
