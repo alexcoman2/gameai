@@ -1,8 +1,9 @@
 import { Link, useLocation } from "wouter";
-import { Settings, MessageSquare, Crosshair, LogIn, LogOut, Crown, Activity } from "lucide-react";
+import { Settings, MessageSquare, Crosshair, LogIn, LogOut, Crown, Activity, Shield } from "lucide-react";
 import { Show, useUser, useClerk } from "@clerk/react";
 import { useDetectGame, getDetectGameQueryKey } from "@workspace/api-client-react";
 import { useGameContext } from "@/context/game-context";
+import { useMe } from "@/hooks/use-me";
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -42,6 +43,7 @@ function AuthPill() {
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { effectiveGameName } = useGameContext();
+  const { me } = useMe();
 
   const { data: gameDetection, isLoading: isDetecting } = useDetectGame({
     query: {
@@ -127,6 +129,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <Link href="/settings" className={`p-2 border transition-colors hover:bg-primary hover:text-primary-foreground ${location === "/settings" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}>
             <Settings className="w-5 h-5" />
           </Link>
+          {me?.isAdmin && (
+            <Link
+              href="/admin/usage"
+              title="Admin · cross-user usage"
+              className={`p-2 border transition-colors hover:bg-primary hover:text-primary-foreground ${location === "/admin/usage" ? "border-primary text-primary" : "border-transparent text-muted-foreground"}`}
+            >
+              <Shield className="w-5 h-5" />
+            </Link>
+          )}
           <div className="w-px h-6 bg-border" />
           <AuthPill />
         </nav>
