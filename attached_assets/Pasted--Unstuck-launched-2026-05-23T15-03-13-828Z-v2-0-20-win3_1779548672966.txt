@@ -1,0 +1,65 @@
+========== Unstuck launched 2026-05-23T15:03:13.828Z (v2.0.20, win32 x64) ==========
+[main] starting api-server
+  entry: C:\Users\Stepan\AppData\Local\Temp\3E87vPQbItyRZAPE2osvygaQebk\resources\server\index.mjs
+  static: C:\Users\Stepan\AppData\Local\Temp\3E87vPQbItyRZAPE2osvygaQebk\resources\public
+  exists: true
+[main] clerk cookie mirror: full sync copied 8 cookies to local
+[server stdout] {"level":30,"time":1779548594519,"pid":12144,"hostname":"DESKTOP-P42N4EK","interval":10,"msg":"Auto screenshot capture started"}
+[server stdout] {"level":30,"time":1779548594520,"pid":12144,"hostname":"DESKTOP-P42N4EK","environment":"sandbox","hasApiKey":false,"apiKeyFingerprint":"none","hasWebhookSecret":false,"hasProPriceId":false,"hasElitePriceId":false,"hasOverageProductId":false,"msg":"Paddle configuration"}
+{"level":30,"time":1779548594525,"pid":12144,"hostname":"DESKTOP-P42N4EK","port":8765,"host":"127.0.0.1","mode":"proxy","msg":"Server listening"}
+[main] mainWindow.loadURL → http://127.0.0.1:8765
+[main] webContents did-start-loading
+[server stdout] {"level":30,"time":1779548594855,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":1,"method":"GET","url":"/api/healthz"},"res":{"statusCode":200},"responseTime":4,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548594928,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":2,"method":"GET","url":"/"},"res":{"statusCode":200},"responseTime":4,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548594929,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":3,"method":"GET","url":"/overlay"},"res":{"statusCode":200},"responseTime":4,"msg":"request completed"}
+[main] did-navigate url=http://127.0.0.1:8765/ code=200 status=OK
+[server stdout] {"level":30,"time":1779548595026,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":5,"method":"GET","url":"/assets/index-C97rRGTm.css"},"res":{"statusCode":200},"responseTime":8,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548595027,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":6,"method":"GET","url":"/assets/index-C97rRGTm.css"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548595123,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":7,"method":"GET","url":"/assets/index-C5DlOxM7.js"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548595123,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":4,"method":"GET","url":"/assets/index-C5DlOxM7.js"},"res":{"statusCode":200},"responseTime":105,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548595207,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":9,"method":"GET","url":"/api/settings"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548595220,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":11,"method":"GET","url":"/api/sessions"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548595239,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":12,"method":"GET","url":"/api/screenshot/latest"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+{"level":30,"time":1779548595440,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":8,"method":"GET","url":"/api/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js"},"res":{"statusCode":200},"responseTime":253,"msg":"request completed"}
+{"level":30,"time":1779548595515,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":13,"method":"GET","url":"/api/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js"},"res":{"statusCode":304},"responseTime":74,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548595543,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":14,"method":"GET","url":"/api/sessions/be32f00c-a181-449f-9426-2b222fcede6f/messages"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548597229,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":10,"method":"GET","url":"/api/game/detect"},"res":{"statusCode":304},"responseTime":2022,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548601647,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":15,"method":"GET","url":"/assets/index-C97rRGTm.css"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548605514,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":16,"method":"GET","url":"/api/screenshot/latest"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548607407,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":17,"method":"GET","url":"/api/game/detect"},"res":{"statusCode":304},"responseTime":172,"msg":"request completed"}
+[main] webContents did-start-loading
+[main] did-navigate-in-page url=http://127.0.0.1:8765/settings
+[server stdout] {"level":30,"time":1779548609455,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":18,"method":"GET","url":"/api/settings"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+[main] webContents did-start-loading
+[main] did-navigate-in-page url=http://127.0.0.1:8765/usage
+[server stdout] {"level":30,"time":1779548611208,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":19,"method":"GET","url":"/api/billing/usage"},"res":{"statusCode":401},"responseTime":194,"msg":"request completed"}
+[main] webContents did-start-loading
+[main] did-navigate-in-page url=http://127.0.0.1:8765/
+[server stdout] {"level":30,"time":1779548612500,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":20,"method":"GET","url":"/api/settings"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548612504,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":22,"method":"GET","url":"/api/sessions/be32f00c-a181-449f-9426-2b222fcede6f/messages"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+{"level":30,"time":1779548612505,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":23,"method":"GET","url":"/api/screenshot/latest"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+{"level":30,"time":1779548612505,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":24,"method":"GET","url":"/api/sessions"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+{"level":30,"time":1779548612692,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":21,"method":"GET","url":"/api/game/detect"},"res":{"statusCode":304},"responseTime":191,"msg":"request completed"}
+[main] webContents did-start-loading
+[main] did-navigate-in-page url=http://127.0.0.1:8765/upgrade
+[server stdout] {"level":30,"time":1779548613770,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":25,"method":"GET","url":"/api/billing/status"},"res":{"statusCode":401},"responseTime":72,"msg":"request completed"}
+[main] webContents did-start-loading
+[main] did-navigate-in-page url=http://127.0.0.1:8765/usage
+[server stdout] {"level":30,"time":1779548614438,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":26,"method":"GET","url":"/api/billing/usage"},"res":{"statusCode":401},"responseTime":79,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548615054,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":27,"method":"GET","url":"/api/billing/usage"},"res":{"statusCode":401},"responseTime":105,"msg":"request completed"}
+[main] webContents did-start-loading
+[main] did-navigate-in-page url=http://127.0.0.1:8765/upgrade
+[server stdout] {"level":30,"time":1779548616840,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":28,"method":"GET","url":"/api/billing/status"},"res":{"statusCode":401},"responseTime":72,"msg":"request completed"}
+[main] webContents did-start-loading
+[main] did-navigate-in-page url=http://127.0.0.1:8765/usage
+[server stdout] {"level":30,"time":1779548617633,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":29,"method":"GET","url":"/api/billing/usage"},"res":{"statusCode":401},"responseTime":67,"msg":"request completed"}
+[main] webContents did-start-loading
+[main] did-navigate-in-page url=http://127.0.0.1:8765/
+[server stdout] {"level":30,"time":1779548618250,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":30,"method":"GET","url":"/api/settings"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548618250,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":31,"method":"GET","url":"/api/screenshot/latest"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+{"level":30,"time":1779548618254,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":33,"method":"GET","url":"/api/sessions"},"res":{"statusCode":304},"responseTime":1,"msg":"request completed"}
+{"level":30,"time":1779548618254,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":34,"method":"GET","url":"/api/sessions/be32f00c-a181-449f-9426-2b222fcede6f/messages"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+{"level":30,"time":1779548618428,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":32,"method":"GET","url":"/api/game/detect"},"res":{"statusCode":304},"responseTime":177,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548620826,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":35,"method":"POST","url":"/api/chat/message"},"res":{"statusCode":401},"responseTime":229,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548628536,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":36,"method":"GET","url":"/api/screenshot/latest"},"res":{"statusCode":304},"responseTime":0,"msg":"request completed"}
+[server stdout] {"level":30,"time":1779548628716,"pid":12144,"hostname":"DESKTOP-P42N4EK","req":{"id":37,"method":"GET","url":"/api/game/detect"},"res":{"statusCode":304},"responseTime":180,"msg":"request completed"}

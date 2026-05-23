@@ -165,6 +165,7 @@ export function clerkProxyPassthroughMiddleware(): RequestHandler {
     // through so the request 404s instead of hanging.
     return (_req, _res, next) => next();
   }
+  const hostedRoot = hostedUrl.replace(/\/$/, "");
   return createProxyMiddleware({
     target: hostedUrl,
     changeOrigin: true,
@@ -172,6 +173,20 @@ export function clerkProxyPassthroughMiddleware(): RequestHandler {
     // prefix, so just forward the path as-is.
     on: {
       proxyRes: (proxyRes) => {
+        // Rewrite redirect Locations that point at the hosted origin
+        // back to local-relative paths. The hosted /api/__clerk often
+        // returns 307s with absolute URLs (e.g. clerk-js requests get
+        // redirected to a version-pinned URL on game-companion-ai.replit
+        // .app). If we forward those Location headers verbatim, the
+        // browser leaves the local origin, the request becomes cross-
+        // site, and for <script src> the response ends up being HTML
+        // (the script tag then chokes with "Unexpected token <" and
+        // clerk-js never loads). Keeping the redirect on 127.0.0.1
+        // makes the entire chain first-party and same-origin.
+        const loc = proxyRes.headers["location"];
+        if (typeof loc === "string" && loc.startsWith(hostedRoot)) {
+          proxyRes.headers["location"] = loc.slice(hostedRoot.length);
+        }
         // Defensive: hosted proxy already strips Domain from Set-Cookie,
         // but if anything slips through, scope it to the local host so
         // the browser actually stores it on 127.0.0.1.
