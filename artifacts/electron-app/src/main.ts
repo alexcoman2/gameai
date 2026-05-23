@@ -17,13 +17,6 @@ import * as http from "http";
 import * as net from "net";
 import * as path from "path";
 
-// Window icon — resolved relative to dist/main.js so it works both in dev
-// (electron-app/dist/main.js → ../assets/icon.png) and in the packaged
-// app (resources/app/dist/main.js → ../assets/icon.png). For this to work
-// in production, assets/icon.png must be listed in electron-builder.yml
-// `files`, otherwise it won't be copied into the asar/app dir.
-const WINDOW_ICON_PATH = path.join(__dirname, "..", "assets", "icon.png");
-
 // ── Third-party cookie restrictions ────────────────────────────────────────
 // clerk-js runs at http://127.0.0.1:8765 and makes credentialed XHRs to the
 // proxy host (https://game-companion-ai.replit.app/api/__clerk/*). Those are
@@ -329,7 +322,6 @@ function createWindow(): void {
     height: 800,
     minWidth: 800,
     minHeight: 600,
-    icon: WINDOW_ICON_PATH,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       nodeIntegration: false,
@@ -532,7 +524,6 @@ function createOverlayWindow(): void {
     height: OVERLAY_HEIGHT,
     x,
     y,
-    icon: WINDOW_ICON_PATH,
     frame: false,
     transparent: true,
     resizable: true,
