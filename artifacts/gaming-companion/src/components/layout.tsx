@@ -53,9 +53,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   });
 
   return (
-    <div className="flex flex-col min-h-screen bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
-      {/* HUD Header */}
-      <header className="border-b border-border bg-card/80 backdrop-blur-sm px-6 py-4 flex items-center justify-between sticky top-0 z-50">
+    <div className="flex flex-col h-screen overflow-hidden bg-background text-foreground selection:bg-primary selection:text-primary-foreground">
+      {/* HUD Header — fixed at top because the page itself doesn't scroll
+          (only the chat list inside <main> does), so we don't need sticky. */}
+      <header className="border-b border-border bg-card/80 backdrop-blur-sm px-6 py-4 flex items-center justify-between shrink-0 z-50">
         <div className="flex items-center gap-4">
           <div className="flex items-center justify-center w-10 h-10 border border-primary/30 bg-primary/10 text-primary">
             <Crosshair className="w-5 h-5" />
@@ -144,14 +145,14 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col relative">
+      <main className="flex-1 flex flex-col relative min-h-0 overflow-hidden">
         <div className="absolute inset-0 pointer-events-none opacity-[0.03] mix-blend-overlay bg-[url('https://grainy-gradients.vercel.app/noise.svg')]"></div>
         {children}
       </main>
 
       {/* Footer — required for Paddle live-mode verification (must surface
           Terms / Privacy / Refund links from every page on the public site). */}
-      <footer className="border-t border-border bg-card/50 px-6 py-4 text-[11px] font-mono uppercase tracking-widest text-muted-foreground flex flex-wrap items-center justify-between gap-3">
+      <footer className="border-t border-border bg-card/50 px-6 py-4 text-[11px] font-mono uppercase tracking-widest text-muted-foreground flex flex-wrap items-center justify-between gap-3 shrink-0">
         <span>© {new Date().getFullYear()} Unstuck</span>
         <nav className="flex flex-wrap gap-x-5 gap-y-1">
           <Link href="/about" className="hover:text-primary">About</Link>

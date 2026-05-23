@@ -770,7 +770,7 @@ export default function Home() {
   const activeSession = sessions.find((s) => s.id === activeSessionId);
 
   return (
-    <div className={`flex-1 flex flex-col h-[calc(100vh-73px)] ${compact ? "p-1 gap-1" : "p-4 md:p-6 gap-4"}`}>
+    <div className={`flex-1 flex flex-col min-h-0 ${compact ? "p-1 gap-1" : "p-4 md:p-6 gap-4"}`}>
       <Card className="flex-1 flex flex-col min-h-0 border-border rounded-none bg-card/50 overflow-hidden relative">
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-primary/50 to-transparent"></div>
 
