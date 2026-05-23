@@ -343,14 +343,13 @@ export default function OverlayPage() {
         setIsTranscribing(true);
         const text = await recorderRef.current!.stopAndTranscribe();
         if (text && !isLikelyHallucination(text)) {
-          if (wasPtt) {
-            // Auto-send: PTT is meant to be hands-free, so we skip the
-            // composer entirely. handleSend(text) bypasses input state.
-            void handleSend(text);
-          } else {
-            setInput((prev) => (prev ? `${prev} ${text}` : text));
-            requestAnimationFrame(() => inputRef.current?.focus());
-          }
+          // Always auto-send transcribed speech — both PTT and the mic
+          // button are voice-first affordances; pasting the transcript
+          // into the composer and forcing a second click to send was
+          // confusing (and inconsistent with PTT). Suppress the
+          // unused `wasPtt` distinction.
+          void wasPtt;
+          void handleSend(text);
         } else {
           setTurns((prev) => [
             ...prev,
@@ -512,19 +511,6 @@ export default function OverlayPage() {
           >
             <button
               type="button"
-              onClick={toggleTts}
-              title={ttsOn ? "Voice replies ON — click to mute" : "Voice replies OFF — click to enable"}
-              className={`h-6 px-2 flex items-center gap-1 transition border text-[9px] uppercase tracking-[0.15em] ${
-                ttsOn
-                  ? "text-primary border-primary bg-primary/15 hover:bg-primary/25"
-                  : "text-foreground/80 border-foreground/40 hover:text-primary hover:border-primary/60 hover:bg-primary/10"
-              }`}
-            >
-              {ttsOn ? <Volume2 className="w-3 h-3" /> : <VolumeX className="w-3 h-3" />}
-              <span>{ttsOn ? "Voice On" : "Voice Off"}</span>
-            </button>
-            <button
-              type="button"
               onClick={() => void electronAPI?.overlayOpenMain?.()}
               title="Open main window"
               className="h-6 w-6 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition"
@@ -650,7 +636,7 @@ export default function OverlayPage() {
               type="button"
               onClick={() => void toggleMic()}
               disabled={isTranscribing || (isLoaded && !isSignedIn)}
-              title={isRecording ? "Stop & transcribe" : "Speak"}
+              title={isRecording ? "Stop, transcribe & send" : "Speak (auto-sends on stop)"}
               className={`h-8 w-8 flex-shrink-0 flex items-center justify-center border transition ${
                 isRecording
                   ? "border-destructive/60 text-destructive bg-destructive/10 animate-pulse"
@@ -664,6 +650,18 @@ export default function OverlayPage() {
               ) : (
                 <Mic className="w-3.5 h-3.5" />
               )}
+            </button>
+            <button
+              type="button"
+              onClick={toggleTts}
+              title={ttsOn ? "Voice replies ON — click to mute" : "Voice replies OFF — click to enable"}
+              className={`h-8 w-8 flex-shrink-0 flex items-center justify-center border transition ${
+                ttsOn
+                  ? "border-primary text-primary bg-primary/15 hover:bg-primary/25"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {ttsOn ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
             </button>
             <textarea
               ref={inputRef}
