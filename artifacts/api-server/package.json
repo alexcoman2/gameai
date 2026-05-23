@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
+    "@clerk/express": "^2.1.20",
+    "@clerk/shared": "^4.13.0",
     "@types/sharp": "^0.32.0",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
@@ -18,6 +20,7 @@
     "cors": "^2.8.6",
     "drizzle-orm": "catalog:",
     "express": "^5.2.1",
+    "http-proxy-middleware": "^4.0.0",
     "pino": "^9.14.0",
     "pino-http": "^10.5.0",
     "screenshot-desktop": "^1.15.4",

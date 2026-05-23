@@ -15,8 +15,18 @@ import {
   updateSession,
   saveScreenshotFile,
 } from "../lib/sessions-store.js";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkUsageCap, recordUsage, calcAnthropicCostMicrocents } from "../lib/usage.js";
 
 const router = Router();
+
+// Explicit deployment mode flag — fail-safe defaults to "hosted" (protected).
+// Set AUTH_MODE=proxy on the local Electron-bundled server only, where requests
+// are trusted (single-user local machine) and forwarded to the hosted backend
+// which performs the real auth check.
+const AUTH_MODE = (process.env.AUTH_MODE ?? "hosted") as "hosted" | "proxy";
+const IS_HOSTED = AUTH_MODE === "hosted";
+const protect = IS_HOSTED ? [requireAuth] : [];
 
 const MAX_HISTORY_TURNS = 40;
 
@@ -84,7 +94,7 @@ router.post("/chat/clear", async (req, res) => {
   res.json({ ok: true });
 });
 
-router.post("/chat/message", async (req, res) => {
+router.post("/chat/message", ...protect, async (req, res) => {
   const {
     message,
     gameName,
@@ -106,6 +116,15 @@ router.post("/chat/message", async (req, res) => {
   if (!message || typeof message !== "string" || message.trim() === "") {
     res.status(400).json({ error: "message is required" });
     return;
+  }
+
+  // Usage cap check (hosted mode only)
+  if (IS_HOSTED && req.userId) {
+    const cap = await checkUsageCap(req.userId, "chat", req.userEmail);
+    if (!cap.allowed) {
+      res.status(402).json({ error: cap.reason, plan: cap.plan, usage: cap.monthly });
+      return;
+    }
   }
 
   // ── PROXY MODE ──────────────────────────────────────────────────────────────
@@ -419,6 +438,18 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
       conversationHistory = conversationHistory.slice(
         conversationHistory.length - MAX_HISTORY_TURNS * 2
       );
+    }
+
+    // Record usage (hosted mode only)
+    if (IS_HOSTED && req.userId) {
+      const cost = calcAnthropicCostMicrocents({
+        model: "opus",
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cacheReadInputTokens: (response.usage as { cache_read_input_tokens?: number }).cache_read_input_tokens,
+        cacheCreationInputTokens: (response.usage as { cache_creation_input_tokens?: number }).cache_creation_input_tokens,
+      });
+      await recordUsage(req.userId, "chat", cost, 0);
     }
 
     if (stateless) {

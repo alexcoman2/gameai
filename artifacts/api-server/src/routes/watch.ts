@@ -1,7 +1,15 @@
 import { Router } from "express";
 import Anthropic from "@anthropic-ai/sdk";
+import { requireAuth } from "../middlewares/requireAuth.js";
+import { checkUsageCap, recordUsage, calcAnthropicCostMicrocents } from "../lib/usage.js";
 
 const router = Router();
+
+// Explicit deployment mode flag — fail-safe defaults to "hosted" (protected).
+const AUTH_MODE = (process.env.AUTH_MODE ?? "hosted") as "hosted" | "proxy";
+const IS_HOSTED = AUTH_MODE === "hosted";
+const protect = IS_HOSTED ? [requireAuth] : [];
+const WATCH_INTERVAL_SECONDS = 5;
 
 const OBSERVE_SYSTEM_PROMPT = `You are a game state recorder embedded in a gaming assistant overlay app. The screenshot may show a game in the background with a dark semi-transparent overlay panel (the gaming assistant UI) covering part of the screen — this is normal and expected. Analyze what is visible and respond with ONLY valid JSON — no markdown, no code fences, no explanation.
 
@@ -26,11 +34,20 @@ For confidence: 0.9+ = clear and certain; 0.6-0.8 = mostly sure but some ambigui
 
 For visibleText: transcribe text VERBATIM from the screen. Item names, location labels at top of screen, dialogue, quest objectives, HUD numbers (e.g. "HP 245/300; Souls 2840"). This is ground truth — do not paraphrase.`;
 
-router.post("/chat/watch", async (req, res) => {
+router.post("/chat/watch", ...protect, async (req, res) => {
   const { imageData, gameName } = req.body as {
     imageData?: string | null;
     gameName?: string | null;
   };
+
+  // Usage cap check (hosted mode only)
+  if (IS_HOSTED && req.userId) {
+    const cap = await checkUsageCap(req.userId, "watch", req.userEmail);
+    if (!cap.allowed) {
+      res.status(402).json({ error: cap.reason, plan: cap.plan, usage: cap.monthly });
+      return;
+    }
+  }
 
   const hostedUrl = process.env.NEXUS_LINK_API_URL;
   if (hostedUrl) {
@@ -118,6 +135,18 @@ router.post("/chat/watch", async (req, res) => {
     });
 
     const raw = response.content[0]?.type === "text" ? response.content[0].text.trim() : null;
+
+    // Record usage (hosted mode only)
+    if (IS_HOSTED && req.userId) {
+      const cost = calcAnthropicCostMicrocents({
+        model: "haiku",
+        inputTokens: response.usage.input_tokens,
+        outputTokens: response.usage.output_tokens,
+        cacheReadInputTokens: (response.usage as { cache_read_input_tokens?: number }).cache_read_input_tokens,
+        cacheCreationInputTokens: (response.usage as { cache_creation_input_tokens?: number }).cache_creation_input_tokens,
+      });
+      await recordUsage(req.userId, "watch", cost, WATCH_INTERVAL_SECONDS);
+    }
 
     console.log(`[watch] raw model output: ${raw}`);
 
