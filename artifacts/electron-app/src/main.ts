@@ -10,6 +10,7 @@ import {
   utilityProcess,
   type UtilityProcess,
 } from "electron";
+import { execFileSync } from "child_process";
 import * as fs from "fs";
 import * as http from "http";
 import * as net from "net";
@@ -464,12 +465,25 @@ function killServerProcess(): void {
   }
   // Belt-and-suspenders: on Windows, utilityProcess.kill() can return before
   // the child actually dies, leaving the server bound to its port and
-  // blocking the next launch. Force-kill the PID directly as a fallback.
+  // blocking the next launch. Tree-kill the PID synchronously as a fallback
+  // so all spawned children die too.
   if (typeof pid === "number" && pid > 0) {
-    try {
-      process.kill(pid, "SIGKILL");
-    } catch {
-      // ignore — process already gone
+    if (process.platform === "win32") {
+      try {
+        // /F = force, /T = whole process tree
+        execFileSync("taskkill", ["/F", "/T", "/PID", String(pid)], {
+          stdio: "ignore",
+          windowsHide: true,
+        });
+      } catch {
+        // ignore — process already gone
+      }
+    } else {
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch {
+        // ignore
+      }
     }
   }
   serverProcess = null;
