@@ -282,6 +282,14 @@ function createWindow(): void {
 
   mainWindow.on("closed", () => {
     mainWindow = null;
+    // The overlay window is `skipTaskbar: true` and often hidden, so the
+    // user has no way to close it manually. If we leave it open after the
+    // main window closes, `window-all-closed` never fires, the app never
+    // quits, and all the Electron child processes (including the server)
+    // stay running. Explicitly destroy it here.
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.destroy();
+    }
   });
 
   // Background capture: when the user alt-tabs to Unstuck, capture the
