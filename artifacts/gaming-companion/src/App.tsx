@@ -199,12 +199,25 @@ function ClerkQueryClientCacheInvalidator() {
   return null;
 }
 
+// Root route: the chat home only works correctly from the installed Windows
+// desktop app (it needs the Electron screen-capture / overlay / hotkey APIs,
+// and Clerk cookies are wired for that origin). For visitors hitting the
+// hosted site in a normal browser, show the download landing page instead
+// so they don't land on a half-broken chat. Inside Electron the chat home
+// is still served, identifiable via the preload-injected electronAPI flag.
+function RootRoute() {
+  const isElectron = !!(window as Window & {
+    electronAPI?: { isElectron?: boolean };
+  }).electronAPI?.isElectron;
+  return isElectron ? <Home /> : <DownloadPage />;
+}
+
 function AppRoutes() {
   return (
     <Switch>
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
-      <Route path="/" component={Home} />
+      <Route path="/" component={RootRoute} />
       <Route path="/settings" component={Settings} />
       <Route path="/upgrade" component={Upgrade} />
       <Route path="/usage" component={UsagePage} />
