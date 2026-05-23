@@ -909,27 +909,64 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
     userContent.push({ type: "text", text: message.trim() });
 
     // Screen-text preflight (same as /chat/message)
+    //
+    // Latency: this used to await the full extraction (~1-2s on sonnet-4-5)
+    // before the main chat stream could begin, which dominated perceived TTFT
+    // on every screenshot turn. We now (1) cache the static system prompt
+    // (saves ~300 tokens of input processing after turn 1), and (2) race the
+    // extraction against a hard deadline. If the OCR call doesn't return in
+    // time, we fall through to the NO_READABLE_TEXT branch — the NAMING RULE
+    // in the main system prompt already forbids guessing names from visuals,
+    // so quality is preserved (the model just won't be able to name a zone
+    // that only appears in the screenshot for this turn). Bounds worst-case
+    // TTFT at roughly DEADLINE + sonnet TTFT.
     const SCREEN_TEXT_MODEL = "claude-sonnet-4-5";
+    const SCREEN_TEXT_DEADLINE_MS = 1500;
+    const SCREEN_TEXT_SYSTEM = `You extract on-screen text from gaming screenshots. Output ONLY text that is literally readable in the image — zone names on signs/bonfires/loading screens, HUD labels (HP/MP/stamina numbers, currency, level, area name in corners), quest log titles and step text, item/spell/skill names with tooltips, menu/inventory entries, NPC names above dialog boxes, subtitle text, mission objectives, map labels, button prompts.\n\nRules:\n- Verbatim only. Do not paraphrase. Do not infer.\n- Do NOT describe visuals (architecture, characters, lighting, what the player is doing).\n- Do NOT name the zone/boss/game based on what it "looks like." Names only if they appear as text on screen.\n- If nothing is readable, output exactly: NO_READABLE_TEXT\n- Format: one item per line, prefixed with its location, e.g.\n  HUD-top-left: "Limgrave"\n  Bonfire: "Site of Grace - Stranded Graveyard"\n  Item tooltip: "Lordsworn's Greatsword +3"\n  Subtitle: "..."\nKeep it tight — only the actual text strings.`;
     let extractedScreenText = "";
     if (imageBase64) {
       send("status", { phase: "reading_screen" });
-      try {
-        const extractResp = await client.messages.create({
-          model: SCREEN_TEXT_MODEL,
-          max_tokens: 400,
-          system: `You extract on-screen text from gaming screenshots. Output ONLY text that is literally readable in the image — zone names on signs/bonfires/loading screens, HUD labels (HP/MP/stamina numbers, currency, level, area name in corners), quest log titles and step text, item/spell/skill names with tooltips, menu/inventory entries, NPC names above dialog boxes, subtitle text, mission objectives, map labels, button prompts.\n\nRules:\n- Verbatim only. Do not paraphrase. Do not infer.\n- Do NOT describe visuals (architecture, characters, lighting, what the player is doing).\n- Do NOT name the zone/boss/game based on what it "looks like." Names only if they appear as text on screen.\n- If nothing is readable, output exactly: NO_READABLE_TEXT\n- Format: one item per line, prefixed with its location, e.g.\n  HUD-top-left: "Limgrave"\n  Bonfire: "Site of Grace - Stranded Graveyard"\n  Item tooltip: "Lordsworn's Greatsword +3"\n  Subtitle: "..."\nKeep it tight — only the actual text strings.`,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "image", source: { type: "base64", media_type: chatMediaType, data: imageBase64 } },
-              { type: "text", text: "Extract all readable on-screen text." },
-            ],
-          }],
-        });
+      // Abort the in-flight OCR call when the deadline fires so we don't pay
+      // for tokens we'll throw away. Likewise clear the deadline when OCR
+      // wins so the timer doesn't keep the event loop alive after we've
+      // moved on to the main stream.
+      const extractAbort = new AbortController();
+      let deadlineTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const extractPromise = client.messages.create({
+        model: SCREEN_TEXT_MODEL,
+        max_tokens: 400,
+        system: [
+          { type: "text", text: SCREEN_TEXT_SYSTEM, cache_control: { type: "ephemeral" } },
+        ],
+        messages: [{
+          role: "user",
+          content: [
+            { type: "image", source: { type: "base64", media_type: chatMediaType, data: imageBase64 } },
+            { type: "text", text: "Extract all readable on-screen text." },
+          ],
+        }],
+      }, { signal: extractAbort.signal }).then((extractResp) => {
         const textBlock = extractResp.content.find((b): b is Anthropic.TextBlock => b.type === "text");
-        extractedScreenText = textBlock?.text.trim() ?? "";
-      } catch (e) {
-        console.warn("[chat/stream] screen-text preflight failed:", e instanceof Error ? e.message : e);
+        return textBlock?.text.trim() ?? "";
+      }).catch((e: unknown) => {
+        // Aborted extractions are expected on timeout; don't spam warnings.
+        if (!extractAbort.signal.aborted) {
+          console.warn("[chat/stream] screen-text preflight failed:", e instanceof Error ? e.message : e);
+        }
+        return "";
+      });
+
+      const deadline = new Promise<null>((resolve) => {
+        deadlineTimer = setTimeout(() => resolve(null), SCREEN_TEXT_DEADLINE_MS);
+      });
+      const raced = await Promise.race([extractPromise, deadline]);
+      if (raced === null) {
+        console.warn(`[chat/stream] screen-text preflight exceeded ${SCREEN_TEXT_DEADLINE_MS}ms — proceeding without extraction`);
+        extractAbort.abort();
+      } else {
+        extractedScreenText = raced;
+        if (deadlineTimer) clearTimeout(deadlineTimer);
       }
     }
 
@@ -958,8 +995,30 @@ RESOURCE AWARENESS: Factor the player's current state from the watch log into yo
       },
     }] : [];
 
+    // Build messages with a second cache breakpoint on the last history
+    // message so the entire system + prior-history prefix caches across
+    // turns. Only the new user message is uncached on a cache hit, which
+    // cuts TTFT substantially on multi-turn sessions (Anthropic cache
+    // reads are ~85% faster than fresh input processing).
+    const historyParams: Anthropic.MessageParam[] = conversationHistory.map((e) => ({
+      role: e.role,
+      content: e.content,
+    }));
+    if (historyParams.length > 0) {
+      const last = historyParams[historyParams.length - 1]!;
+      const blocks: Anthropic.ContentBlockParam[] = typeof last.content === "string"
+        ? [{ type: "text", text: last.content }]
+        : [...last.content];
+      if (blocks.length > 0) {
+        const tail = blocks[blocks.length - 1]!;
+        // cache_control attaches to any block type; mutate the tail so the
+        // breakpoint sits at the end of the prior turn.
+        blocks[blocks.length - 1] = { ...tail, cache_control: { type: "ephemeral" } } as Anthropic.ContentBlockParam;
+      }
+      historyParams[historyParams.length - 1] = { role: last.role, content: blocks };
+    }
     const loopMessages: Anthropic.MessageParam[] = [
-      ...conversationHistory.map((e) => ({ role: e.role, content: e.content })),
+      ...historyParams,
       { role: "user", content: userContent },
     ];
     const cachedSystem = [
