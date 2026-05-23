@@ -7,7 +7,7 @@ import {
 } from "lucide-react";
 import {
   createVoiceRecorder, speak, cancelSpeech,
-  isTtsEnabled, setTtsEnabled,
+  isTtsEnabled, setTtsEnabled, isLikelyHallucination,
 } from "@/lib/voice";
 import { readWatchState } from "@/lib/watch-state";
 
@@ -264,9 +264,18 @@ export default function OverlayPage() {
         setIsRecording(false);
         setIsTranscribing(true);
         const text = await recorderRef.current!.stopAndTranscribe();
-        if (text) {
+        if (text && !isLikelyHallucination(text)) {
           setInput((prev) => (prev ? `${prev} ${text}` : text));
           requestAnimationFrame(() => inputRef.current?.focus());
+        } else {
+          setTurns((prev) => [
+            ...prev,
+            {
+              id: `e-${Date.now()}`,
+              role: "error",
+              content: "No speech detected. Try again a bit louder.",
+            },
+          ]);
         }
       } catch (err) {
         setTurns((prev) => [
@@ -305,6 +314,15 @@ export default function OverlayPage() {
     setTtsEnabled(next);
     if (!next) cancelSpeech();
   };
+
+  // Release the mic + cancel TTS on unmount so closing the overlay window
+  // doesn't leave the mic active or a half-spoken reply hanging.
+  useEffect(() => {
+    return () => {
+      try { recorderRef.current?.cancel(); } catch { /* ignore */ }
+      cancelSpeech();
+    };
+  }, []);
 
   const hotkeyLabel = hotkey
     ? hotkey.replace("Control", "Ctrl").replace(/\+/g, " + ")

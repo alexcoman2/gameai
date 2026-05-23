@@ -26,7 +26,7 @@ import {
 } from "lucide-react";
 import {
   createVoiceRecorder, speak, cancelSpeech,
-  isTtsEnabled, setTtsEnabled,
+  isTtsEnabled, setTtsEnabled, isLikelyHallucination,
 } from "@/lib/voice";
 import { publishWatchState } from "@/lib/watch-state";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
@@ -95,8 +95,13 @@ export default function Home() {
         setIsRecording(false);
         setIsTranscribing(true);
         const text = await recorderRef.current!.stopAndTranscribe();
-        if (text) {
+        if (text && !isLikelyHallucination(text)) {
           setInput((prev) => (prev ? `${prev} ${text}` : text));
+        } else {
+          toast({
+            title: "No speech detected",
+            description: "I didn't catch any words. Try again a bit louder or closer to the mic.",
+          });
         }
       } catch (err) {
         toast({
@@ -125,6 +130,15 @@ export default function Home() {
     setTtsEnabled(next);
     if (!next) cancelSpeech();
   };
+
+  // Release the mic + cancel TTS on unmount so an in-progress recording
+  // doesn't keep the mic light on after you navigate away.
+  useEffect(() => {
+    return () => {
+      try { recorderRef.current?.cancel(); } catch { /* ignore */ }
+      cancelSpeech();
+    };
+  }, []);
   const [watchLog, setWatchLog] = useState<{ time: string; note: string; event?: string | null; confidence?: number | null; visibleText?: string | null }[]>([]);
   const [visionDetectedGame, setVisionDetectedGame] = useState<string | null>(null);
   const [compact, setCompact] = useState(false);

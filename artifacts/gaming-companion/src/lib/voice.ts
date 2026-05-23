@@ -72,6 +72,58 @@ export function speak(text: string): void {
   }
 }
 
+// ── Whisper hallucination filter ────────────────────────────────────────────
+//
+// Whisper-1 has well-known "silent input" hallucinations — when the recording
+// is silence, breath, keyboard clicks, or background hum, it returns one of a
+// small set of canned phrases (mostly YouTube-trained artifacts). We filter
+// those so the user doesn't get "Thank you" pasted into their composer every
+// time they tap the mic and don't speak.
+
+const WHISPER_HALLUCINATIONS = new Set(
+  [
+    "you",
+    "thank you",
+    "thank you.",
+    "thanks",
+    "thanks.",
+    "thanks for watching",
+    "thanks for watching!",
+    "thanks for watching.",
+    "thank you for watching",
+    "thank you for watching.",
+    "thank you for watching!",
+    "thank you so much",
+    "thank you so much for watching",
+    "bye",
+    "bye.",
+    "bye!",
+    "okay",
+    "okay.",
+    "ok",
+    "ok.",
+    "uh",
+    "um",
+    "hmm",
+    ".",
+    "..",
+    "...",
+    "!",
+    "?",
+  ].map((s) => s.toLowerCase())
+);
+
+export function isLikelyHallucination(text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return true;
+  if (WHISPER_HALLUCINATIONS.has(t)) return true;
+  // Strip surrounding punctuation and retry.
+  const stripped = t.replace(/^[\s.,!?]+|[\s.,!?]+$/g, "");
+  if (!stripped) return true;
+  if (WHISPER_HALLUCINATIONS.has(stripped)) return true;
+  return false;
+}
+
 // ── Recording ───────────────────────────────────────────────────────────────
 
 export type RecorderState = "idle" | "recording" | "transcribing";
