@@ -508,8 +508,10 @@ export default function OverlayPage() {
               rows={2}
               disabled={(isLoaded && !isSignedIn) || isRecording || isTranscribing}
               className="flex-1 resize-none border border-border focus:border-primary/60 focus:outline-none text-xs px-2 py-1.5 placeholder:text-muted-foreground/50"
-              style={{ backgroundColor: "rgba(8, 14, 11, 0.6)" }}
-              style={{ WebkitUserSelect: "text" } as React.CSSProperties}
+              style={{
+                backgroundColor: "rgba(8, 14, 11, 0.6)",
+                WebkitUserSelect: "text",
+              } as React.CSSProperties}
             />
             <button
               type="button"
