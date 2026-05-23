@@ -696,6 +696,21 @@ async function syncAllClerkCookiesFromProxy(): Promise<void> {
 
 app.whenReady().then(() => {
   setupLogFile();
+  // One-time cache eviction: v2.0.20 forwarded a 307 HTML response for
+  // /api/__clerk/npm/.../clerk.browser.js verbatim, and the browser
+  // cached that HTML body. On subsequent launches the cached entry
+  // satisfied conditional requests with a 304, the script tag re-loaded
+  // the HTML, and clerk-js refused to initialize with "Unexpected
+  // token <" → failed_to_load_clerk_js → every authed route 401s. The
+  // server-side fix shipped in v2.0.21+ never gets a chance to run
+  // unless the poisoned cache entry is evicted. Clear it on startup;
+  // it's a one-time cost on each launch and trivially small for an
+  // Electron app of this size.
+  void session.defaultSession.clearCache().catch((err) => {
+    appendServerLog(
+      `[main] clearCache failed: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+  });
   installClerkCookieMirror();
   startServer()
     .then(() => {

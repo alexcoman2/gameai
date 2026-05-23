@@ -172,6 +172,20 @@ export function clerkProxyPassthroughMiddleware(): RequestHandler {
     // No pathRewrite — hosted server expects the same /api/__clerk/*
     // prefix, so just forward the path as-is.
     on: {
+      proxyReq: (proxyReq) => {
+        // Defensive cache-poisoning guard. Earlier versions of this
+        // proxy returned an HTML 307 body for the unversioned
+        // clerk.browser.js URL; the browser cached that bad body, and
+        // on every subsequent launch its conditional re-validation
+        // (If-None-Match / If-Modified-Since) won a 304 and the
+        // poisoned body kept being served. Stripping the conditional
+        // headers here forces the upstream to send the full current
+        // body every time, so a fixed upstream immediately overwrites
+        // any stale cached entry.
+        proxyReq.removeHeader("if-none-match");
+        proxyReq.removeHeader("if-modified-since");
+        proxyReq.removeHeader("if-none-range");
+      },
       proxyRes: (proxyRes) => {
         // Rewrite redirect Locations that point at the hosted origin
         // back to local-relative paths. The hosted /api/__clerk often
