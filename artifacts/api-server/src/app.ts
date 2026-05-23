@@ -103,14 +103,20 @@ app.use(
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-app.use(
-  clerkMiddleware((req) => ({
-    publishableKey: publishableKeyFromHost(
-      getClerkProxyHost(req) ?? "",
-      process.env.CLERK_PUBLISHABLE_KEY,
-    ),
-  })),
-);
+// In proxy mode (Electron desktop) the local server has no Clerk secret key
+// and just forwards authenticated requests to the hosted backend, which has
+// the real Clerk configuration. Mounting clerkMiddleware here would call
+// assertValidSecretKey on every request and reject /api/healthz with a 500.
+if (!IS_PROXY) {
+  app.use(
+    clerkMiddleware((req) => ({
+      publishableKey: publishableKeyFromHost(
+        getClerkProxyHost(req) ?? "",
+        process.env.CLERK_PUBLISHABLE_KEY,
+      ),
+    })),
+  );
+}
 
 app.use("/api", router);
 
