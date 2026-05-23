@@ -260,9 +260,13 @@ router.post("/chat/message", ...protect, async (req, res) => {
     ? `You have been assisting this player for ${Math.round(historyLength)} exchange${historyLength !== 1 ? "s" : ""} this session. Use the full conversation history to maintain continuity — remember what problems they've encountered, what strategies were tried, what areas they've explored, and what help you've already given.`
     : `This is the start of a new session with this player.`;
 
-  // Filter out very low confidence observations to keep context clean
+  // Keep almost everything — the previous 0.5 cutoff silently dropped a
+  // huge fraction of observations (the observe prompt itself calls 0.6-0.8
+  // "mostly sure but some ambiguity"), which left the model with an empty
+  // log even while watch was actively running. Only filter out the
+  // genuinely-no-signal cases.
   const usableLog = (reqWatchLog ?? []).filter(
-    (e) => typeof e.confidence !== "number" || e.confidence >= 0.5
+    (e) => typeof e.confidence !== "number" || e.confidence >= 0.25
   );
   const watchModeOn = reqWatchMode === true;
   const watchLogSection = usableLog.length > 0
@@ -281,18 +285,18 @@ router.post("/chat/message", ...protect, async (req, res) => {
 
 GAME: ${gameContext}
 
-SESSION MEMORY: ${sessionContext}
+SESSION MEMORY: ${sessionContext} The conversation history above this prompt is real — it contains every prior turn this session, including any screenshots the player attached. Reference it actively. If the player asks "what was I doing earlier?", "what did you suggest for the boss?", or anything that refers back, ANSWER from history — do not say you have no memory of the session.
 ${watchLogSection}
+USING YOUR CONTEXT — you have three sources of grounded information beyond the player's current question: (1) the conversation history, (2) the WATCH LOG above, and (3) any attached screenshot. Use them. When the player asks "what's happening?", "what have I been doing?", "where am I?", or "what should I do next?", build your answer from these sources first. Quote specific watch-log entries or earlier turns when relevant ("a few minutes ago you were fighting an enemy with a red healthbar near a fog gate…"). Treat an empty watch log as "I haven't been recording recently" — not as "nothing has happened."
+
 SCREENSHOT: When a screenshot is attached, it is a real-time capture of the player's screen. Use it as a context signal. Read on-screen text (zone name on a bonfire, quest log, item name, HUD numbers) as ground truth — those are reliable. Visual cues (architecture, lighting, enemy models) are only suggestive — a stone hallway with torches could be one of fifty places. Never claim you cannot see screenshots — if one is attached, you are seeing it.
 
-CALIBRATION — THIS IS CRITICAL. The single biggest failure mode for a gaming assistant is confidently naming the wrong zone, wrong boss, wrong item, or wrong build and sending the player the wrong direction. Avoid this above all else.
-- Before you answer, ask yourself: "Am I actually sure, or am I pattern-matching?" If you are pattern-matching, say so.
-- If you are not confident about a specific zone name, boss name, item name, NPC name, quest step, patch-current number, or build detail, SAY SO. Use phrases like "I'm not sure exactly where this is", "this looks like it could be X or Y", "I'd need to see the zone name on the bonfire / a clearer shot of the HUD to be sure".
-- Identifying a location from visuals alone is hard. Many games reuse tilesets (Dark Souls catacombs vs Tomb of Giants, Skyrim Nordic ruins, Elden Ring catacombs). Unless on-screen text confirms it, treat any zone guess as a guess and label it as such.
-- If the player asks "where am I?" and you cannot see on-screen text giving the answer, do not invent a zone. Ask one short clarifying question ("any text visible on the HUD, a bonfire, or a map?") or describe what you see and offer the most likely candidates with your confidence in each.
-- If you don't know a game at all, say so plainly ("I don't have reliable knowledge of [game]") instead of bluffing. Offer to use web search if you have the tool.
-- For anything time-sensitive (current meta, latest patch, season-specific builds, recent balance changes), prefer using the web_search tool over your training-cutoff memory.
-- Being wrong is much worse than being uncertain. A "not sure, but it looks like…" answer is correct. A confidently-wrong zone name is a bug.
+CALIBRATION — apply this to SPECIFIC FACTUAL CLAIMS (zone names, boss names, item names, NPC names, patch numbers, build numerics). Do NOT use it as a reason to refuse to engage with the player's situation.
+- For factual specifics you can't verify from on-screen text or your knowledge: say "I'm not sure exactly — this looks like X or Y" and ask a brief clarifier if needed.
+- Tileset reuse is real (Dark Souls catacombs vs Tomb of Giants, Skyrim Nordic ruins, Elden Ring catacombs). Unless on-screen text confirms a zone, label any guess as a guess.
+- For anything time-sensitive (current meta, latest patch, season builds), prefer web_search over training-cutoff memory.
+- Calibration is about labeling uncertainty on specifics, NOT about refusing to give tactical advice or pretending you can't see context. If the watch log shows the player was in combat 30 seconds ago, that's a fact — use it.
+- Being wrong on specifics is worse than being uncertain on them. But being unhelpfully vague when you have evidence to work with is also a failure.
 
 HOW YOU GIVE ADVICE:
 - Lead with the answer when you have one. When you don't have one, lead with what you can actually tell from the screen + your uncertainty, then give the best guess you can defend.

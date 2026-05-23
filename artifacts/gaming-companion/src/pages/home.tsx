@@ -28,6 +28,7 @@ import {
   createVoiceRecorder, speak, cancelSpeech,
   isTtsEnabled, setTtsEnabled,
 } from "@/lib/voice";
+import { publishWatchState } from "@/lib/watch-state";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
@@ -392,6 +393,23 @@ export default function Home() {
       clearInterval(timer);
     };
   }, [isElectron, watchMode]);
+
+  // Mirror watch state (mode + log) to localStorage so the overlay window
+  // can include it in its own chat requests. Both windows share origin so
+  // they share localStorage. Without this, overlay chats had no watch
+  // context and the model defaulted to "Watch Mode is OFF".
+  useEffect(() => {
+    publishWatchState(watchMode, watchLog);
+  }, [watchMode, watchLog]);
+
+  // Refresh the "updatedAt" heartbeat every 20s while watch is on so the
+  // overlay's staleness check doesn't expire the mode flag mid-session
+  // (e.g. when no new observations have been recorded recently).
+  useEffect(() => {
+    if (!watchMode) return;
+    const id = setInterval(() => publishWatchState(true, watchLog), 20_000);
+    return () => clearInterval(id);
+  }, [watchMode, watchLog]);
 
   // Keep game name accessible to the watch effect without re-creating the interval
   useEffect(() => {

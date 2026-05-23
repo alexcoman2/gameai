@@ -9,6 +9,7 @@ import {
   createVoiceRecorder, speak, cancelSpeech,
   isTtsEnabled, setTtsEnabled,
 } from "@/lib/voice";
+import { readWatchState } from "@/lib/watch-state";
 
 type ElectronAPI = {
   captureScreenshot?: () => Promise<string>;
@@ -180,6 +181,7 @@ export default function OverlayPage() {
 
     try {
       const sessionId = await resolveOverlaySessionId();
+      const watchState = readWatchState();
       const res = await authFetch("/api/chat/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -187,6 +189,8 @@ export default function OverlayPage() {
           message,
           ...(screenshot ? { imageData: screenshot } : {}),
           ...(sessionId ? { sessionId } : {}),
+          ...(watchState.log.length > 0 ? { watchLog: watchState.log } : {}),
+          watchMode: watchState.mode,
         }),
       });
 
