@@ -11,6 +11,8 @@ directories:
 files:
   - dist/main.js
   - dist/preload.js
+  - assets/icon.png
+  - assets/icon.ico
   - package.json
   - "!node_modules"
   - "!src"
