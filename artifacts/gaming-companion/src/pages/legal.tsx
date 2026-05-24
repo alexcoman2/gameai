@@ -60,16 +60,23 @@ export function AboutPage() {
       </h2>
       <ul className="mt-3 text-sm space-y-2 text-foreground/90">
         <li>
-          <b>Free</b> — 25 chats and 30 minutes of Watch Mode per month. Hard
-          cap; no overage.
+          <b>Free</b> — 40 chats and 1 hour of Watch Mode per month. Hard cap;
+          no overage; voice mode not included.
         </li>
         <li>
-          <b>Pro — $29/month</b> — 200 chats and 2 hours of Watch Mode included,
-          then $0.05 / chat and $0.20 / minute of Watch Mode usage.
+          <b>Pro — $19/month</b> — 150 chats and 3 hours of Watch Mode
+          included, plus voice mode. Then $0.04 / chat and $0.15 / minute of
+          Watch Mode usage.
         </li>
         <li>
-          <b>Elite — $99/month</b> — 750 chats and 8 hours of Watch Mode
-          included, then $0.04 / chat and $0.15 / minute of Watch Mode usage.
+          <b>Pro+ — $39/month</b> — 400 chats and 8 hours of Watch Mode
+          included, plus voice mode. Then $0.04 / chat and $0.12 / minute of
+          Watch Mode usage.
+        </li>
+        <li>
+          <b>Elite — $99/month</b> — 1,500 chats and 25 hours of Watch Mode
+          included, plus voice mode. Then $0.03 / chat and $0.10 / minute of
+          Watch Mode usage.
         </li>
       </ul>
       <p className="mt-2 text-xs text-muted-foreground">
@@ -123,47 +130,62 @@ export function PricingPage() {
         Pricing
       </h1>
       <p className="mt-3 text-sm text-muted-foreground max-w-2xl">
-        Three plans. All prices in USD. Paid plans bill monthly and auto-renew
+        Four plans. All prices in USD. Paid plans bill monthly and auto-renew
         until you cancel. Cancel anytime — your plan stays active through the
         end of the period you've already paid for. Sold by{" "}
         {SITE_CONFIG.legalEntityName} via Paddle.com Market Limited (our
-        Merchant of Record).
+        Merchant of Record), with PayPal also available at checkout.
       </p>
 
-      <div className="mt-10 grid gap-6 md:grid-cols-3">
+      <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <PriceCard
           name="Free"
           price="$0"
           cadence=""
           included={[
-            "25 chats / month",
-            "30 minutes of Watch Mode / month",
+            "40 chats / month",
+            "1 hour of Watch Mode / month",
+            "Text + screenshot chat only",
             "Hard cap — usage stops at the limit",
           ]}
-          overage="No overage. When the cap is hit, the app blocks until next month."
+          overage="No overage. When the cap is hit, the app blocks until next month. Voice mode is not included on the free tier."
         />
         <PriceCard
           name="Pro"
-          price="$29"
+          price="$19"
           cadence="/ month USD"
           highlight
           included={[
-            "200 chats / month",
-            "2 hours of Watch Mode / month",
+            "150 chats / month",
+            "3 hours of Watch Mode / month",
+            "Voice mode (mic in, spoken replies)",
             "Cancel anytime",
           ]}
-          overage="Then $0.05 / additional chat and $0.20 / additional minute of Watch Mode, billed at the end of each period."
+          overage="Then $0.04 / additional chat and $0.15 / additional minute of Watch Mode, billed at the end of each period."
+        />
+        <PriceCard
+          name="Pro+"
+          price="$39"
+          cadence="/ month USD"
+          included={[
+            "400 chats / month",
+            "8 hours of Watch Mode / month",
+            "Voice mode included",
+            "Cancel anytime",
+          ]}
+          overage="Then $0.04 / additional chat and $0.12 / additional minute of Watch Mode, billed at the end of each period."
         />
         <PriceCard
           name="Elite"
           price="$99"
           cadence="/ month USD"
           included={[
-            "750 chats / month",
-            "8 hours of Watch Mode / month",
+            "1,500 chats / month",
+            "25 hours of Watch Mode / month",
+            "Voice mode included",
             "Priority response on support",
           ]}
-          overage="Then $0.04 / additional chat and $0.15 / additional minute of Watch Mode, billed at the end of each period."
+          overage="Then $0.03 / additional chat and $0.10 / additional minute of Watch Mode, billed at the end of each period."
         />
       </div>
 
@@ -175,8 +197,9 @@ export function PricingPage() {
           Your monthly allowance resets at the start of each billing period.
         </li>
         <li>
-          On Pro and Elite, going over your included allowance does not block
-          you — you keep using the app at the per-unit overage rates above.
+          On Pro, Pro+, and Elite, going over your included allowance does
+          not block you — you keep using the app at the per-unit overage
+          rates above.
         </li>
         <li>
           We total your overage usage at the end of the billing period and
@@ -323,7 +346,8 @@ export function TermsPage() {
       <h2>3. Subscriptions and Billing</h2>
       <p>
         Paid subscriptions are sold by Paddle.com Market Limited (or its
-        affiliates), which acts as our Merchant of Record. Plan prices,
+        affiliates), which acts as our Merchant of Record. PayPal is also
+        offered as an alternative payment method at checkout. Plan prices,
         included monthly allowances, and overage rates are displayed in the
         app's Upgrade screen and on our public website.
       </p>
@@ -434,25 +458,50 @@ export function PrivacyPage() {
           servers so you can resume past sessions.
         </li>
         <li>
-          <b>Game detection data</b> — the name and process identifier of the
-          foreground game on your machine while the app is running.
+          <b>Watch Mode screenshots</b> — while Watch Mode is switched on, the
+          app captures a screenshot of your active display roughly every 5
+          seconds and sends it to the AI so it can proactively offer tips.
+          These screenshots are processed and discarded within minutes of the
+          AI call; they are not kept long-term.
         </li>
         <li>
-          <b>Usage records</b> — the number of chats and seconds of Watch Mode
-          you used, along with the cost of the underlying AI calls, used for
-          billing and the daily spend safety cap.
+          <b>Voice audio</b> — if you use voice mode, the audio of your spoken
+          prompts is sent to our transcription provider (OpenAI Whisper).
+          Audio is not retained after transcription.
+        </li>
+        <li>
+          <b>Game detection data</b> — the name of the foreground game on your
+          machine while the app is running, plus a short-lived game-profile
+          record so the AI remembers your build / quest progress between
+          sessions for the games you play.
+        </li>
+        <li>
+          <b>Usage records</b> — the number of chats, seconds of Watch Mode
+          and voice minutes you used, along with the cost of the underlying
+          AI calls. Used for billing, the daily spend safety cap, and your
+          in-app usage dashboard.
         </li>
         <li>
           <b>Billing data</b> — the subscription tier you are on and a
-          customer/subscription identifier from Paddle. We do not see or
-          store your full payment card details.
+          customer/subscription identifier from Paddle or PayPal. We do not
+          see or store your full payment card details.
+        </li>
+        <li>
+          <b>Diagnostics</b> — crash reports and anonymous product-analytics
+          events (which screens are used, which features are clicked). No
+          screenshots, chat content, or voice audio is included in these.
         </li>
       </ul>
 
       <h2>2. Who we share it with (processors)</h2>
       <ul>
         <li>
-          <b>Anthropic</b> — to generate AI responses to your prompts.
+          <b>Anthropic</b> — to generate AI responses to your prompts
+          (Claude Sonnet 4.6 for chat, Claude Haiku 4.5 for Watch Mode).
+        </li>
+        <li>
+          <b>OpenAI</b> — for voice transcription (Whisper) and text-to-speech
+          replies when voice mode is on. Audio is not retained after the call.
         </li>
         <li>
           <b>Exa</b> — to retrieve web search results that ground the AI's
@@ -462,8 +511,18 @@ export function PrivacyPage() {
           <b>Clerk</b> — to authenticate your account.
         </li>
         <li>
-          <b>Paddle</b> — to process payments and manage your subscription
-          (acting as Merchant of Record).
+          <b>Paddle</b> — Merchant of Record for subscriptions (default
+          payment processor).
+        </li>
+        <li>
+          <b>PayPal</b> — alternative payment processor if you choose PayPal
+          at checkout.
+        </li>
+        <li>
+          <b>Sentry</b> (EU region) — error and crash diagnostics.
+        </li>
+        <li>
+          <b>PostHog</b> (EU region) — anonymous product analytics.
         </li>
         <li>
           <b>Replit</b> — to host the cloud portion of the Service.
@@ -471,7 +530,9 @@ export function PrivacyPage() {
       </ul>
       <p>
         We do not sell your personal data to anyone, and we do not use your
-        prompts or screenshots to train AI models.
+        prompts, screenshots, or voice audio to train AI models. Our AI
+        providers (Anthropic, OpenAI) are contractually bound to the same
+        no-training commitment for API traffic.
       </p>
 
       <h2>3. Retention</h2>
@@ -479,8 +540,8 @@ export function PrivacyPage() {
         Conversation history is kept while your account exists so you can
         resume past sessions. Usage records are kept for as long as needed
         for billing reconciliation and tax compliance (typically 7 years).
-        Screenshots that drive Watch Mode are processed and deleted within
-        minutes of the AI call.
+        Watch Mode screenshots and voice audio are processed and discarded
+        within minutes of the AI call.
       </p>
 
       <h2>4. Your rights</h2>
@@ -497,8 +558,9 @@ export function PrivacyPage() {
       <h2>5. Cookies</h2>
       <p>
         The web portion of the Service uses strictly necessary cookies set by
-        our authentication provider to keep you signed in. We do not use
-        advertising or analytics cookies.
+        our authentication provider to keep you signed in, plus a
+        first-party PostHog cookie for anonymous product analytics. We do not
+        use advertising cookies and we do not share data with ad networks.
       </p>
 
       <h2>6. Security</h2>

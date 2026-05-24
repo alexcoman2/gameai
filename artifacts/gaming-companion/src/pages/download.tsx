@@ -48,7 +48,7 @@ const FEATURES: Feature[] = [
     icon: Mic,
     title: "Voice in and out",
     body:
-      "Push-to-talk through the overlay and natural spoken replies, so you never have to look away from your game.",
+      "Tap a hotkey, speak your question, and Unstuck transcribes and answers — out loud if you want — so you never have to look away from your game. Voice mode is included on paid plans.",
   },
   {
     icon: Zap,
@@ -193,12 +193,12 @@ export function DownloadPage() {
             <Step
               n={3}
               title="Sign in"
-              body="On first launch you'll be asked to sign in. New accounts start on the free tier — 25 chats and 30 minutes of Watch Mode per month, no card required."
+              body="On first launch you'll be asked to sign in. New accounts start on the free tier — 40 chats and 1 hour of Watch Mode per month, no card required."
             />
             <Step
               n={4}
               title="Press your hotkey in-game"
-              body="Default is Ctrl+Shift+U to show the overlay, Ctrl+Shift+Space for push-to-talk. Both rebindable in Settings."
+              body="Ctrl+Shift+Space (or Alt+Space) to show or hide the overlay, Ctrl+Shift+V (or Alt+V) for voice input. Full list lives on the in-app Settings page."
             />
           </ol>
         </div>
@@ -250,7 +250,7 @@ export function DownloadPage() {
             />
             <Faq
               q="What about my data?"
-              a="Screenshots are sent only when you ask a question, never in the background. We don't sell data, don't train models on your gameplay, and you can delete your account at any time from Settings."
+              a="When Watch Mode is switched on, Unstuck sends a screenshot every few seconds so the AI can offer tips — the screenshots are discarded right after the AI reads them. Outside of Watch Mode, screenshots are only sent when you attach one to a chat. We don't sell data, don't train AI models on your gameplay, and you can request account and data deletion by emailing us — see the Privacy Policy for details."
             />
             <Faq
               q="Why does Windows warn about the publisher?"
