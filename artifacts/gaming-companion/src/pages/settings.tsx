@@ -86,7 +86,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="flex-1 p-4 md:p-6 max-w-4xl mx-auto w-full">
+    <div className="flex-1 overflow-y-auto p-4 md:p-6 max-w-4xl mx-auto w-full">
       <div className="mb-8 flex items-center gap-3 pb-4 border-b border-border">
         <Terminal className="w-6 h-6 text-primary" />
         <h1 className="text-2xl font-mono tracking-widest text-primary font-bold">SYSTEM CONFIGURATION</h1>
