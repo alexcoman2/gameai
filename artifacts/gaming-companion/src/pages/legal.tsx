@@ -102,18 +102,6 @@ export function AboutPage() {
       </p>
 
       <div className="mt-12 flex flex-wrap gap-x-6 gap-y-2 text-xs font-mono uppercase tracking-wider">
-        <Link href="/pricing" className="text-muted-foreground hover:text-primary">
-          Pricing
-        </Link>
-        <Link href="/legal/terms" className="text-muted-foreground hover:text-primary">
-          Terms of Service
-        </Link>
-        <Link href="/legal/privacy" className="text-muted-foreground hover:text-primary">
-          Privacy Policy
-        </Link>
-        <Link href="/legal/refund" className="text-muted-foreground hover:text-primary">
-          Refund Policy
-        </Link>
         <Link href="/sign-in" className="text-primary hover:underline">
           Open the app →
         </Link>
