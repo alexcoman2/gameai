@@ -800,14 +800,32 @@ export default function Home() {
       }, 250);
     };
 
-    // Electron + watch mode is the only auto-capture path now. Manual camera
-    // button still works via pendingScreenshot below. Outside watch mode
-    // there is no background screenshot — users opt in per-message.
+    // Three screenshot sources, in priority order:
+    //   1. pendingScreenshot — user clicked the Capture Now button before sending
+    //   2. watchScreenshot   — watch mode is on and has a recent frame
+    //   3. fresh capture     — includeScreenshot toggle is on in Electron, grab
+    //      one right now so the screenshot matches the question being asked
+    //      (this is the "auto-attach on send" path that replaces the old polling
+    //      auto-capture; only fires when the toggle is explicitly on).
+    let freshCapture: string | null = null;
+    if (
+      includeScreenshot &&
+      isElectron &&
+      !pendingScreenshot &&
+      !(watchMode && watchScreenshot) &&
+      electronAPI?.captureScreenshot
+    ) {
+      try {
+        freshCapture = await electronAPI.captureScreenshot();
+      } catch (err) {
+        console.error("[home] send-time capture failed", err);
+      }
+    }
     const latestImgData = isElectron && watchMode ? watchScreenshot : null;
-    // Auto-include the latest watch-mode frame when watch is on; honour the
-    // explicit manual toggle otherwise.
     const autoCapturing = isElectron && watchMode && !!latestImgData;
-    const sentScreenshot = (includeScreenshot || autoCapturing) ? (pendingScreenshot || latestImgData) : null;
+    const sentScreenshot = (includeScreenshot || autoCapturing)
+      ? (pendingScreenshot || latestImgData || freshCapture)
+      : null;
     const shouldSendScreenshot = !!(includeScreenshot || autoCapturing);
 
     const userMessage = {
@@ -1381,8 +1399,12 @@ export default function Home() {
                 onCheckedChange={setIncludeScreenshot}
                 className="data-[state=checked]:bg-primary"
               />
-              <Label htmlFor="include-screenshot" className="font-mono text-xs uppercase tracking-widest text-muted-foreground cursor-pointer">
-                Attach to next message
+              <Label
+                htmlFor="include-screenshot"
+                className="font-mono text-xs uppercase tracking-widest text-muted-foreground cursor-pointer"
+                title={isElectron ? "When ON, every message you send auto-captures and attaches a fresh screenshot" : "Click Capture Now first, then send"}
+              >
+                Auto-attach screenshot
               </Label>
             </div>
           </div>
