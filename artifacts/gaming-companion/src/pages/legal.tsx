@@ -40,6 +40,20 @@ export function AboutPage() {
         unstuck — boss fights, puzzles, builds, quests, anything.
       </p>
 
+      <a
+        href="https://www.producthunt.com/products/unstuck-2?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-unstuck-4"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-6 inline-block"
+      >
+        <img
+          alt="Unstuck - AI gaming assistant that gets you past any wall | Product Hunt"
+          width={250}
+          height={54}
+          src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1154934&theme=dark&t=1779654863968"
+        />
+      </a>
+
       <div className="mt-10 grid gap-6 md:grid-cols-3">
         <Tile
           title="Ask"
