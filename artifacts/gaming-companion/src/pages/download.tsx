@@ -116,6 +116,19 @@ export function DownloadPage() {
           <p className="text-xs font-mono uppercase tracking-widest text-muted-foreground">
             v{INSTALLER_VERSION} · 64-bit · ~120 MB
           </p>
+          <a
+            href="https://www.producthunt.com/products/unstuck-2?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-unstuck-4"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-block"
+          >
+            <img
+              alt="Unstuck - AI gaming assistant that gets you past any wall | Product Hunt"
+              width={250}
+              height={54}
+              src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1154934&theme=dark&t=1779654863968"
+            />
+          </a>
           {platform === "mac" && (
             <p className="mt-2 text-xs text-amber-400/90">
               Heads up — you're on macOS. The installer is Windows-only for
