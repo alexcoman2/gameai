@@ -843,7 +843,10 @@ export default function Home() {
     // half-finished follow-up question there.
     if (override === undefined) setInput("");
 
-    setIncludeScreenshot(false);
+    // Don't auto-toggle includeScreenshot off — user expects it to stay on
+    // for the whole conversation once enabled. They explicitly flip it off
+    // when they want to stop attaching. (pendingScreenshot is one-shot
+    // because Capture Now produces a single frame.)
     setPendingScreenshot(null);
 
     // Streaming send. Append empty assistant turn, mutate as deltas arrive.
