@@ -49,10 +49,6 @@ function stripBase(path: string): string {
     : path;
 }
 
-if (!clerkPubKey) {
-  throw new Error("Missing VITE_CLERK_PUBLISHABLE_KEY");
-}
-
 const queryClient = new QueryClient();
 
 const clerkAppearance = {
@@ -256,6 +252,16 @@ function WrappedAppRoutes() {
 
 function App() {
   const [, setLocation] = useLocation();
+
+  // Render-time guard so the Sentry ErrorBoundary in main.tsx catches it
+  // and shows a readable error. A top-level throw would happen before
+  // React mounts and leave both Electron windows pure-black blank, with
+  // no clue what failed unless the user opens DevTools.
+  if (!clerkPubKey) {
+    throw new Error(
+      "Missing VITE_CLERK_PUBLISHABLE_KEY — the renderer was built without the Clerk publishable key. Set VITE_CLERK_PUBLISHABLE_KEY in your shell before running the build pipeline.",
+    );
+  }
 
   return (
     <ClerkProvider

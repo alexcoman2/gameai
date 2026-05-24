@@ -41,6 +41,30 @@ function run(cmd, args, opts = {}) {
 }
 
 async function main() {
+  // Fail loudly if the Clerk publishable key is missing from the shell env.
+  // Without it the renderer build silently produces a bundle whose top-level
+  // module throws "Missing VITE_CLERK_PUBLISHABLE_KEY" the instant Electron
+  // loads it — both main window and overlay end up pure-black blank with no
+  // visible error. Better to refuse to build than to ship a broken installer.
+  if (!process.env.VITE_CLERK_PUBLISHABLE_KEY) {
+    console.error(
+      "\n✗ VITE_CLERK_PUBLISHABLE_KEY is not set in your shell environment."
+    );
+    console.error(
+      "  Set it before running the build, e.g.:"
+    );
+    console.error(
+      "    PowerShell:  $env:VITE_CLERK_PUBLISHABLE_KEY = \"pk_live_...\""
+    );
+    console.error(
+      "    cmd.exe:     set VITE_CLERK_PUBLISHABLE_KEY=pk_live_..."
+    );
+    console.error(
+      "    bash/zsh:    export VITE_CLERK_PUBLISHABLE_KEY=pk_live_...\n"
+    );
+    process.exit(1);
+  }
+
   console.log("\n=== Step 1: Build API server ===");
   await run(
     "pnpm",
