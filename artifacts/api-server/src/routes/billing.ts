@@ -405,22 +405,72 @@ router.post("/billing/paypal/cancel", ...protect, async (req, res) => {
     res.status(400).json({ error: "No active PayPal subscription on file." });
     return;
   }
-  try {
-    await paypalCancelSubscription(user.billingSubscriptionId, "User requested cancel via app");
-    // Downgrade locally — webhook will also fire and confirm.
+  // Helper to mark the user cancelled locally. We do this whether
+  // PayPal accepted the cancel OR returned "already cancelled / not
+  // found" — both mean "this subscription will not bill again", which
+  // is exactly the state we want to reflect.
+  const markCancelledLocally = async (newStatus: string) => {
     await db
       .update(usersTable)
       .set({
-        plan: "free",
-        subscriptionStatus: "canceled",
+        // Note: we keep `plan` as-is so the user retains paid access
+        // until subscriptionCurrentPeriodEnd. The status flip is what
+        // hides the cancel button and stops future renewals.
+        subscriptionStatus: newStatus,
         updatedAt: new Date(),
       })
       .where(eq(usersTable.id, userId));
+  };
+
+  try {
+    await paypalCancelSubscription(user.billingSubscriptionId, "User requested cancel via app");
+    await markCancelledLocally("canceled");
     res.json({ ok: true });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Unknown error";
-    logger.error({ err: e, userId }, "PayPal cancel failed");
-    res.status(500).json({ error: msg });
+    const err = e as Error & {
+      paypalStatus?: number;
+      paypalName?: string;
+      paypalMessage?: string;
+    };
+    // PayPal-side "subscription doesn't exist / already cancelled /
+    // already expired" — from the user's perspective there is nothing
+    // to cancel and the desired end state is reached. Clean up locally
+    // and return success so the UI flips to "canceled" instead of
+    // dumping a scary error toast.
+    const benignNames = new Set([
+      "RESOURCE_NOT_FOUND",
+      "INVALID_RESOURCE_ID",
+      "SUBSCRIPTION_STATUS_INVALID",
+    ]);
+    const benignByStatus = err.paypalStatus === 404;
+    const benignByName = !!err.paypalName && benignNames.has(err.paypalName);
+    // "INVALID_REQUEST" on the cancel endpoint typically means the
+    // subscription is already in a terminal state — PayPal will not let
+    // you cancel a CANCELLED/EXPIRED sub. Treat as benign.
+    const benignInvalidRequest =
+      err.paypalName === "INVALID_REQUEST" &&
+      /cancel|status|terminal|already/i.test(err.paypalMessage ?? "");
+
+    if (benignByStatus || benignByName || benignInvalidRequest) {
+      logger.warn(
+        { userId, paypalName: err.paypalName, paypalStatus: err.paypalStatus },
+        "PayPal cancel: subscription already gone — cleaning up locally",
+      );
+      await markCancelledLocally("canceled");
+      res.json({ ok: true, alreadyCancelled: true });
+      return;
+    }
+
+    logger.error(
+      { err: e, userId, paypalName: err.paypalName, paypalStatus: err.paypalStatus },
+      "PayPal cancel failed",
+    );
+    // User-facing message: friendly text + the PayPal message if any,
+    // but NEVER the raw response body, debug_id, links, or stack.
+    const friendly =
+      err.paypalMessage ??
+      "We couldn't cancel your subscription right now. Please try again or cancel from your PayPal account.";
+    res.status(502).json({ error: friendly });
   }
 });
 

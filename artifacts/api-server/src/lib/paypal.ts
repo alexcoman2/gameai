@@ -117,7 +117,30 @@ export async function paypalFetch<T = unknown>(
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`PayPal ${init.method ?? "GET"} ${path} failed: HTTP ${res.status} ${text}`);
+    // Best-effort parse — PayPal returns a JSON envelope with `name`,
+    // `message`, `debug_id`, `details[]`. Surface it as structured
+    // fields on the thrown Error so callers can branch on `name`
+    // (e.g. RESOURCE_NOT_FOUND, INVALID_REQUEST) without string-
+    // matching the raw payload.
+    let parsed: { name?: string; message?: string; debug_id?: string } | null = null;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      // not JSON — keep parsed null
+    }
+    const err = new Error(
+      `PayPal ${init.method ?? "GET"} ${path} failed: HTTP ${res.status} ${parsed?.message ?? text}`,
+    ) as Error & {
+      paypalStatus?: number;
+      paypalName?: string;
+      paypalMessage?: string;
+      paypalDebugId?: string;
+    };
+    err.paypalStatus = res.status;
+    err.paypalName = parsed?.name;
+    err.paypalMessage = parsed?.message;
+    err.paypalDebugId = parsed?.debug_id;
+    throw err;
   }
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
