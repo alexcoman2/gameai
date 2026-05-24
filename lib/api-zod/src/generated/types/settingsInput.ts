@@ -8,13 +8,6 @@
 
 export interface SettingsInput {
   /**
-     * Auto-screenshot interval in seconds (5-300)
-     * @nullable
-     */
-  screenshotInterval?: number | null;
-  /** @nullable */
-  autoCapture?: boolean | null;
-  /**
      * Steam Web API key for extended game detection (pass null to keep existing)
      * @nullable
      */

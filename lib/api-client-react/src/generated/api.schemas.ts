@@ -126,22 +126,11 @@ export interface ChatResponse {
 }
 
 export interface Settings {
-  /** Auto-screenshot interval in seconds */
-  screenshotInterval: number;
-  /** Whether auto screenshot capture is enabled */
-  autoCapture: boolean;
   /** Whether a Steam Web API key is configured */
   hasSteamApiKey: boolean;
 }
 
 export interface SettingsInput {
-  /**
-     * Auto-screenshot interval in seconds (5-300)
-     * @nullable
-     */
-  screenshotInterval?: number | null;
-  /** @nullable */
-  autoCapture?: boolean | null;
   /**
      * Steam Web API key for extended game detection (pass null to keep existing)
      * @nullable

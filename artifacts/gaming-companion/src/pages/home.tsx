@@ -5,7 +5,6 @@ import {
   useDetectGame, getDetectGameQueryKey,
   useCaptureScreenshot,
   useGetSettings, getGetSettingsQueryKey,
-  useGetLatestScreenshot, getGetLatestScreenshotQueryKey,
   useListSessions, getListSessionsQueryKey,
   useCreateSession,
   useDeleteSession,
@@ -75,7 +74,6 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [includeScreenshot, setIncludeScreenshot] = useState(false);
   const [pendingScreenshot, setPendingScreenshot] = useState<string | null>(null);
-  const [electronAutoScreenshot, setElectronAutoScreenshot] = useState<string | null>(null);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [newSessionName, setNewSessionName] = useState("");
   const [creatingSession, setCreatingSession] = useState(false);
@@ -323,14 +321,6 @@ export default function Home() {
     }
   });
 
-  const { data: latestScreenshot } = useGetLatestScreenshot({
-    query: {
-      refetchInterval: settings?.autoCapture ? settings.screenshotInterval * 1000 : false,
-      queryKey: getGetLatestScreenshotQueryKey(),
-      enabled: settings?.autoCapture === true
-    }
-  });
-
   const { data: sessions = [], isLoading: isLoadingSessions } = useListSessions({
     query: { queryKey: getListSessionsQueryKey() }
   });
@@ -484,24 +474,6 @@ export default function Home() {
     onHandsFreeToggle?: (cb: () => void) => () => void;
   };
   const electronAPI = (window as Window & { electronAPI?: ElectronAPI }).electronAPI;
-
-  // Electron auto-capture: run a timer in the frontend using desktopCapturer via IPC.
-  // This replaces the server-side screenshot-desktop approach entirely.
-  useEffect(() => {
-    if (!isElectron || !settings?.autoCapture || !electronAPI?.captureScreenshot) return;
-    const intervalMs = (settings.screenshotInterval || 30) * 1000;
-    const capture = async () => {
-      try {
-        const dataUrl = await electronAPI.captureScreenshot!();
-        if (dataUrl) setElectronAutoScreenshot(dataUrl);
-      } catch {
-        // Silent fail — screen capture may be denied
-      }
-    };
-    capture(); // Capture immediately on enable
-    const timer = setInterval(capture, intervalMs);
-    return () => clearInterval(timer);
-  }, [isElectron, settings?.autoCapture, settings?.screenshotInterval]);
 
   // Watch mode: two-tier loop.
   // Tier 1 — screenshot refresh at watchInterval (fast, no AI calls).
@@ -799,7 +771,7 @@ export default function Home() {
       trackEvent("chat_message_sent", {
         game: gameNameOverride.trim() || visionDetectedGame || gameDetection?.gameName || gameDetection?.processName || null,
         watchMode,
-        hasScreenshot: !!(includeScreenshot || (settings?.autoCapture || (isElectron && watchMode))),
+        hasScreenshot: !!(includeScreenshot || (isElectron && watchMode)),
         platform: isElectron ? "electron" : "web",
         ttsOn,
       }),
@@ -828,12 +800,13 @@ export default function Home() {
       }, 250);
     };
 
-    // Electron: use IPC-captured screenshot; Web: fall back to server-side capture
-    const latestImgData = isElectron
-      ? (watchMode && watchScreenshot ? watchScreenshot : electronAutoScreenshot)
-      : (latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : null);
-    // Auto-include latest screenshot when auto-capture/watch is on, or when user manually toggled
-    const autoCapturing = (settings?.autoCapture || (isElectron && watchMode)) && !!latestImgData;
+    // Electron + watch mode is the only auto-capture path now. Manual camera
+    // button still works via pendingScreenshot below. Outside watch mode
+    // there is no background screenshot — users opt in per-message.
+    const latestImgData = isElectron && watchMode ? watchScreenshot : null;
+    // Auto-include the latest watch-mode frame when watch is on; honour the
+    // explicit manual toggle otherwise.
+    const autoCapturing = isElectron && watchMode && !!latestImgData;
     const sentScreenshot = (includeScreenshot || autoCapturing) ? (pendingScreenshot || latestImgData) : null;
     const shouldSendScreenshot = !!(includeScreenshot || autoCapturing);
 
@@ -1282,13 +1255,13 @@ export default function Home() {
       </Card>
 
       <div className="space-y-3">
-        {(pendingScreenshot || latestScreenshot?.imageData) && includeScreenshot && (
+        {pendingScreenshot && includeScreenshot && (
           <div className="flex items-center gap-3 p-3 bg-card border border-primary/30 font-mono text-sm">
             <div className="w-12 h-8 bg-secondary border border-border flex items-center justify-center overflow-hidden">
-              <img src={pendingScreenshot || (latestScreenshot?.imageData ? toDataUrl(latestScreenshot.imageData) : "")} alt="thumb" className="w-full h-full object-cover opacity-70" />
+              <img src={pendingScreenshot} alt="thumb" className="w-full h-full object-cover opacity-70" />
             </div>
             <span className="text-primary tracking-widest uppercase flex-1">
-              Visual data attached {pendingScreenshot ? "(Manual)" : "(Auto)"}
+              Visual data attached (Manual)
             </span>
             <Button type="button" variant="ghost" size="icon" onClick={() => {
               setIncludeScreenshot(false);

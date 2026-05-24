@@ -4,13 +4,19 @@ export interface ScreenshotState {
   available: boolean;
 }
 
+// Server-side screenshot state. Historically populated by a screenshot-desktop
+// polling loop driven by autoCapture/screenshotInterval settings; that loop
+// was retired when watch mode took over the "continuous frames" use case.
+// The getter/setter are kept because chat.ts and the /screenshot route still
+// import them. In practice the renderer now sends screenshots inline with
+// each chat request (manual camera button or watchScreenshot), so the
+// server-side latest is always { available: false } at runtime — chat.ts
+// falls through that branch cleanly.
 let latestScreenshot: ScreenshotState = {
   imageData: null,
   capturedAt: null,
   available: false,
 };
-
-let autoCapureTimer: ReturnType<typeof setInterval> | null = null;
 
 export function getLatestScreenshot(): ScreenshotState {
   return latestScreenshot;
@@ -22,29 +28,4 @@ export function setLatestScreenshot(data: string, timestamp: string): void {
     capturedAt: timestamp,
     available: true,
   };
-}
-
-export function startAutoCapture(intervalSeconds: number): void {
-  if (autoCapureTimer) {
-    clearInterval(autoCapureTimer);
-    autoCapureTimer = null;
-  }
-
-  autoCapureTimer = setInterval(async () => {
-    try {
-      const screenshot = await import("screenshot-desktop");
-      const imgBuffer = await screenshot.default();
-      const base64 = imgBuffer.toString("base64");
-      setLatestScreenshot(base64, new Date().toISOString());
-    } catch {
-      // Silent fail - screenshot may not work in all environments
-    }
-  }, intervalSeconds * 1000);
-}
-
-export function stopAutoCapture(): void {
-  if (autoCapureTimer) {
-    clearInterval(autoCapureTimer);
-    autoCapureTimer = null;
-  }
 }

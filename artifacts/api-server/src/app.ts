@@ -7,7 +7,6 @@ import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes/index.js";
 import { logger } from "./lib/logger.js";
 import { loadConfig } from "./lib/config.js";
-import { startAutoCapture } from "./lib/screenshot-state.js";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
@@ -147,20 +146,6 @@ if (staticDir) {
   app.get(/.*/, (_req, res) => {
     res.sendFile(path.join(staticDir, "index.html"));
   });
-}
-
-const config = loadConfig();
-// Only run auto-capture in the local Electron context where a real display
-// is available. STATIC_DIR is only set when serving the packaged desktop app.
-// On the hosted Replit server there is no display and screenshot-desktop
-// would crash the process.
-const hasDisplay = !!process.env["STATIC_DIR"];
-if (hasDisplay && config.autoCapture) {
-  startAutoCapture(config.screenshotInterval);
-  logger.info(
-    { interval: config.screenshotInterval },
-    "Auto screenshot capture started"
-  );
 }
 
 // Loud startup sanity check for the Paddle billing wiring. In live mode

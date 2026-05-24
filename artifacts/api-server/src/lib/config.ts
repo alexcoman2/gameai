@@ -3,8 +3,6 @@ import path from "path";
 import os from "os";
 
 export interface AppConfig {
-  screenshotInterval: number;
-  autoCapture: boolean;
   steamApiKey: string;
 }
 
@@ -12,8 +10,6 @@ const CONFIG_DIR = path.join(os.homedir(), ".gaming-companion");
 const CONFIG_FILE = path.join(CONFIG_DIR, "config.json");
 
 const DEFAULT_CONFIG: AppConfig = {
-  screenshotInterval: 5,
-  autoCapture: true,
   steamApiKey: "",
 };
 
@@ -21,16 +17,12 @@ export function loadConfig(): AppConfig {
   try {
     if (fs.existsSync(CONFIG_FILE)) {
       const raw = fs.readFileSync(CONFIG_FILE, "utf-8");
+      // Old config files may still carry screenshotInterval/autoCapture
+      // from before watch mode replaced the polling loop — they are
+      // ignored here. The next saveConfig() rewrites the file without
+      // them, so the cruft self-cleans on first settings save.
       const parsed = JSON.parse(raw) as Partial<AppConfig>;
       return {
-        screenshotInterval:
-          typeof parsed.screenshotInterval === "number"
-            ? Math.max(5, Math.min(300, parsed.screenshotInterval))
-            : DEFAULT_CONFIG.screenshotInterval,
-        autoCapture:
-          typeof parsed.autoCapture === "boolean"
-            ? parsed.autoCapture
-            : DEFAULT_CONFIG.autoCapture,
         steamApiKey:
           typeof parsed.steamApiKey === "string"
             ? parsed.steamApiKey
@@ -46,14 +38,6 @@ export function loadConfig(): AppConfig {
 export function saveConfig(updates: Partial<AppConfig>): AppConfig {
   const current = loadConfig();
   const next: AppConfig = {
-    screenshotInterval:
-      updates.screenshotInterval !== undefined
-        ? Math.max(5, Math.min(300, updates.screenshotInterval))
-        : current.screenshotInterval,
-    autoCapture:
-      updates.autoCapture !== undefined
-        ? updates.autoCapture
-        : current.autoCapture,
     steamApiKey:
       updates.steamApiKey !== undefined
         ? updates.steamApiKey

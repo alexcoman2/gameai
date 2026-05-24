@@ -92,8 +92,6 @@ export const SendChatMessageResponse = zod.object({
  * @summary Get current settings
  */
 export const GetSettingsResponse = zod.object({
-  "screenshotInterval": zod.number().describe('Auto-screenshot interval in seconds'),
-  "autoCapture": zod.boolean().describe('Whether auto screenshot capture is enabled'),
   "hasSteamApiKey": zod.boolean().describe('Whether a Steam Web API key is configured')
 })
 
@@ -103,14 +101,10 @@ export const GetSettingsResponse = zod.object({
  * @summary Save settings
  */
 export const SaveSettingsBody = zod.object({
-  "screenshotInterval": zod.number().nullish().describe('Auto-screenshot interval in seconds (5-300)'),
-  "autoCapture": zod.boolean().nullish(),
   "steamApiKey": zod.string().nullish().describe('Steam Web API key for extended game detection (pass null to keep existing)')
 })
 
 export const SaveSettingsResponse = zod.object({
-  "screenshotInterval": zod.number().describe('Auto-screenshot interval in seconds'),
-  "autoCapture": zod.boolean().describe('Whether auto screenshot capture is enabled'),
   "hasSteamApiKey": zod.boolean().describe('Whether a Steam Web API key is configured')
 })
 

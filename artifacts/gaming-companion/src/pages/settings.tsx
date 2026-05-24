@@ -3,19 +3,15 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
-import { Switch } from "@/components/ui/switch";
-import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { useGetSettings, getGetSettingsQueryKey, useSaveSettings } from "@workspace/api-client-react";
-import { Loader2, Save, Terminal, Zap, Gamepad2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Save, Terminal, Gamepad2, Eye, EyeOff } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 const settingsSchema = z.object({
-  screenshotInterval: z.number().min(5).max(300),
-  autoCapture: z.boolean(),
   steamApiKey: z.string(),
 });
 
@@ -35,19 +31,13 @@ export default function Settings() {
   const form = useForm<SettingsFormValues>({
     resolver: zodResolver(settingsSchema),
     defaultValues: {
-      screenshotInterval: 5,
-      autoCapture: true,
       steamApiKey: "",
     },
   });
 
   useEffect(() => {
     if (settings) {
-      form.reset({
-        screenshotInterval: settings.screenshotInterval,
-        autoCapture: settings.autoCapture,
-        steamApiKey: "",
-      });
+      form.reset({ steamApiKey: "" });
     }
   }, [settings, form]);
 
@@ -55,8 +45,6 @@ export default function Settings() {
     try {
       await saveMutation.mutateAsync({
         data: {
-          screenshotInterval: data.screenshotInterval,
-          autoCapture: data.autoCapture,
           steamApiKey: data.steamApiKey || null,
         }
       });
@@ -94,90 +82,6 @@ export default function Settings() {
 
       <div className="grid gap-6">
         <Card className="bg-card/50 border-border rounded-none relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-1 h-full bg-primary/80"></div>
-          <CardHeader>
-            <CardTitle className="font-mono flex items-center gap-2 text-lg">
-              <Zap className="w-5 h-5 text-muted-foreground" />
-              TELEMETRY MODULE
-            </CardTitle>
-            <CardDescription className="font-mono text-xs uppercase tracking-wider">
-              Screen capture settings for AI context
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                <FormField
-                  control={form.control}
-                  name="autoCapture"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-none border border-border p-4 bg-background/50">
-                      <div className="space-y-1">
-                        <FormLabel className="font-mono text-sm tracking-widest text-foreground">AUTO-CAPTURE VISUALS</FormLabel>
-                        <FormDescription className="font-mono text-[10px] uppercase">
-                          Periodically capture screen state for AI context
-                        </FormDescription>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          className="data-[state=checked]:bg-primary"
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="screenshotInterval"
-                  render={({ field }) => (
-                    <FormItem className={`space-y-4 rounded-none border border-border p-4 bg-background/50 transition-opacity ${!form.watch("autoCapture") ? "opacity-50 pointer-events-none" : ""}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
-                          <FormLabel className="font-mono text-sm tracking-widest">CAPTURE INTERVAL</FormLabel>
-                          <FormDescription className="font-mono text-[10px] uppercase">
-                            Delay between automatic captures
-                          </FormDescription>
-                        </div>
-                        <div className="font-mono font-bold text-primary bg-primary/10 border border-primary/20 px-3 py-1">
-                          {field.value}s
-                        </div>
-                      </div>
-                      <FormControl>
-                        <Slider
-                          min={5}
-                          max={300}
-                          step={5}
-                          value={[field.value]}
-                          onValueChange={(vals) => field.onChange(vals[0])}
-                          disabled={!form.watch("autoCapture")}
-                          className="py-4"
-                        />
-                      </FormControl>
-                      <FormMessage className="font-mono text-xs" />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="pt-4 flex justify-end">
-                  <Button
-                    type="submit"
-                    disabled={saveMutation.isPending}
-                    className="font-mono rounded-none uppercase tracking-widest h-12 px-8 bg-primary text-primary-foreground hover:bg-primary/90"
-                  >
-                    {saveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    <Save className="mr-2 h-4 w-4" />
-                    Commit Changes
-                  </Button>
-                </div>
-              </form>
-            </Form>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/50 border-border rounded-none relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/80"></div>
           <CardHeader>
             <CardTitle className="font-mono flex items-center gap-2 text-lg">
@@ -196,7 +100,7 @@ export default function Settings() {
                     <div className="space-y-1">
                       <p className="font-mono text-sm tracking-widest text-foreground">STEAM API KEY</p>
                       <p className="font-mono text-[10px] uppercase text-muted-foreground">
-                        Enables detection of thousands of additional Steam titles
+                        Optional — improves detection for obscure or indie titles
                       </p>
                     </div>
                     {settings?.hasSteamApiKey && (
