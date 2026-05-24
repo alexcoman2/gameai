@@ -1,0 +1,134 @@
+  ⨯ C:\Users\Stepan\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\Bin\makensis.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE
+Exit code:
+1
+Output:
+Command line defined: "APP_ID=gg.unstuck.app"
+Command line defined: "APP_GUID=aedf0a0e-65b5-591e-baa7-4c1d7a53fbf6"
+Command line defined: "UNINSTALL_APP_KEY=aedf0a0e-65b5-591e-baa7-4c1d7a53fbf6"
+Command line defined: "PRODUCT_NAME=Unstuck"
+Command line defined: "PRODUCT_FILENAME=Unstuck"
+Command line defined: "APP_FILENAME=@workspaceelectron-app"
+Command line defined: "APP_DESCRIPTION=Unstuck � AI gaming assistant desktop app"
+Command line defined: "VERSION=2.0.37"
+Command line defined: "PROJECT_DIR=D:\gameai\artifacts\electron-app"
+Command line defined: "BUILD_RESOURCES_DIR=D:\gameai\artifacts\electron-app\assets"
+Command line defined: "APP_PACKAGE_NAME=@workspace\electron-app"
+Command line defined: "MUI_ICON=D:\gameai\artifacts\electron-app\assets\icon.ico"
+Command line defined: "MUI_UNICON=D:\gameai\artifacts\electron-app\assets\icon.ico"
+Command line defined: "APP_64=D:\gameai\artifacts\electron-app\dist-release\@workspaceelectron-app-2.0.37-x64.nsis.7z"
+Command line defined: "APP_64_NAME=@workspaceelectron-app-2.0.37-x64.nsis.7z"
+Command line defined: "APP_64_HASH=E32687FB19F5834BD1DB6CE402C48C3123C02E55911D2642F97B2168C8005407153F6DBE6F3A0010138E2E97E8018F5EA3996A4C9C37A7EC4F5360164FB42070"
+Command line defined: "APP_64_UNPACKED_SIZE=313362"
+Command line defined: "COMPANY_NAME=Replit"
+Command line defined: "APP_PRODUCT_FILENAME=Unstuck"
+Command line defined: "APP_INSTALLER_STORE_FILE=@workspaceelectron-app-updater\installer.exe"
+Command line defined: "COMPRESSION_METHOD=7z"
+Command line defined: "ONE_CLICK"
+Command line defined: "RUN_AFTER_FINISH"
+Command line defined: "SHORTCUT_NAME=Unstuck"
+Command line defined: "UNINSTALL_DISPLAY_NAME=Unstuck 2.0.37"
+Command line defined: "ESTIMATED_SIZE=313362"
+Command line defined: "COMPRESS=auto"
+Command line defined: "UNINSTALLER_OUT_FILE=D:\gameai\artifacts\electron-app\dist-release\__uninstaller-nsis-@workspaceelectron-app.exe"
+Processing config: C:\Users\Stepan\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\nsisconf.nsh
+Processing script file: "<stdin>" (UTF8)
+
+Processed 1 file, 10 command line commands, writing output (x86-unicode):
+
+Output: "D:\gameai\artifacts\electron-app\dist-release\Unstuck Setup 2.0.37.exe"
+
+Error output:
+Can't open output file
+Error - aborting creation process
+  failedTask=build stackTrace=Error: C:\Users\Stepan\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\Bin\makensis.exe process failed ERR_ELECTRON_BUILDER_CANNOT_EXECUTE
+Exit code:
+1
+Output:
+Command line defined: "APP_ID=gg.unstuck.app"
+Command line defined: "APP_GUID=aedf0a0e-65b5-591e-baa7-4c1d7a53fbf6"
+Command line defined: "UNINSTALL_APP_KEY=aedf0a0e-65b5-591e-baa7-4c1d7a53fbf6"
+Command line defined: "PRODUCT_NAME=Unstuck"
+Command line defined: "PRODUCT_FILENAME=Unstuck"
+Command line defined: "APP_FILENAME=@workspaceelectron-app"
+Command line defined: "APP_DESCRIPTION=Unstuck � AI gaming assistant desktop app"
+Command line defined: "VERSION=2.0.37"
+Command line defined: "PROJECT_DIR=D:\gameai\artifacts\electron-app"
+Command line defined: "BUILD_RESOURCES_DIR=D:\gameai\artifacts\electron-app\assets"
+Command line defined: "APP_PACKAGE_NAME=@workspace\electron-app"
+Command line defined: "MUI_ICON=D:\gameai\artifacts\electron-app\assets\icon.ico"
+Command line defined: "MUI_UNICON=D:\gameai\artifacts\electron-app\assets\icon.ico"
+Command line defined: "APP_64=D:\gameai\artifacts\electron-app\dist-release\@workspaceelectron-app-2.0.37-x64.nsis.7z"
+Command line defined: "APP_64_NAME=@workspaceelectron-app-2.0.37-x64.nsis.7z"
+Command line defined: "APP_64_HASH=E32687FB19F5834BD1DB6CE402C48C3123C02E55911D2642F97B2168C8005407153F6DBE6F3A0010138E2E97E8018F5EA3996A4C9C37A7EC4F5360164FB42070"
+Command line defined: "APP_64_UNPACKED_SIZE=313362"
+Command line defined: "COMPANY_NAME=Replit"
+Command line defined: "APP_PRODUCT_FILENAME=Unstuck"
+Command line defined: "APP_INSTALLER_STORE_FILE=@workspaceelectron-app-updater\installer.exe"
+Command line defined: "COMPRESSION_METHOD=7z"
+Command line defined: "ONE_CLICK"
+Command line defined: "RUN_AFTER_FINISH"
+Command line defined: "SHORTCUT_NAME=Unstuck"
+Command line defined: "UNINSTALL_DISPLAY_NAME=Unstuck 2.0.37"
+Command line defined: "ESTIMATED_SIZE=313362"
+Command line defined: "COMPRESS=auto"
+Command line defined: "UNINSTALLER_OUT_FILE=D:\gameai\artifacts\electron-app\dist-release\__uninstaller-nsis-@workspaceelectron-app.exe"
+Processing config: C:\Users\Stepan\AppData\Local\electron-builder\Cache\nsis\nsis-3.0.4.1\nsisconf.nsh
+Processing script file: "<stdin>" (UTF8)
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                                 Processed 1 file, 10 command line commands,
+writing output (x86-unicode):
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                                 Output: "D:\gameai\artifacts\electron-app\di
+st-release\Unstuck Setup 2.0.37.exe"
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                                 Error output:
+Can't open output file
+Error - aborting creation process
+
+
+
+
+
+
+
+
+
+                                                                                                                                                                                                                     at ChildProcess.<anonymous> (D:\gameai\n
+ode_modules\.pnpm\builder-util@25.1.7\node_modules\builder-util\src\util.ts:255:14)
+    at Object.onceWrapper (node:events:631:26)
+    at ChildProcess.emit (node:events:509:28)
+    at ChildProcess.cp.emit (D:\gameai\node_modules\.pnpm\cross-spawn@7.0.6\node_modules\cross-spawn\lib\enoent.js:34:29)
+    at maybeClose (node:internal/child_process:1124:16)
+    at Process.ChildProcess._handle.onexit (node:internal/child_process:306:5)
+
+✗ electron-builder failed (exit code 1)
+[ELIFECYCLE] Command failed with exit code 1.
+D:\gameai\artifacts\electron-app:
+[ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @workspace/electron-app@2.0.37 package: `pnpm run build-all && pnpm run dist`
+Exit status 1
+
+Stepan@DESKTOP-P42N4EK MINGW64 /d/gameai (main)
