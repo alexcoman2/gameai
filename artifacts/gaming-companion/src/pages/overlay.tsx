@@ -41,6 +41,21 @@ type Turn = {
 
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// Detect cap / plan-gating error messages from checkUsageCap so the overlay
+// can render an Upgrade CTA. Mirrors the strings in
+// artifacts/api-server/src/lib/usage.ts.
+function isUpgradeableError(content: string): boolean {
+  const c = content.toLowerCase();
+  return (
+    c.includes("free plan limit reached") ||
+    c.includes("free watch trial used") ||
+    c.includes("requires a pro") ||
+    c.includes("monthly chat ceiling reached") ||
+    c.includes("monthly watch ceiling reached") ||
+    c.includes("daily spend safety cap reached")
+  );
+}
+
 // Shared with chat-context. Lets the overlay write into the same session the
 // main window is currently viewing, so overlay chats show up in the chat list.
 const ACTIVE_SESSION_LS_KEY = "unstuck:activeSessionId";
@@ -767,6 +782,15 @@ export default function OverlayPage() {
                   : "ERROR"}
               </div>
               <div>{turn.content}</div>
+              {turn.role === "error" && isUpgradeableError(turn.content) && (
+                <button
+                  type="button"
+                  onClick={() => void electronAPI?.overlayOpenMain?.()}
+                  className="mt-2 px-3 py-1 text-[10px] font-mono uppercase tracking-widest bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  Open main window to upgrade
+                </button>
+              )}
             </div>
           ))}
 

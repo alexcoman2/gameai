@@ -62,6 +62,22 @@ function compressScreenshot(dataUrl: string, quality = 0.8): Promise<string> {
   });
 }
 
+// Detect the cap/plan-gating error messages the server returns via
+// checkUsageCap so the chat bubble can render an Upgrade CTA. Strings
+// mirror artifacts/api-server/src/lib/usage.ts reason strings.
+function isUpgradeableError(content: string): boolean {
+  if (!content.startsWith("ERROR:")) return false;
+  const c = content.toLowerCase();
+  return (
+    c.includes("free plan limit reached") ||
+    c.includes("free watch trial used") ||
+    c.includes("requires a pro") ||
+    c.includes("monthly chat ceiling reached") ||
+    c.includes("monthly watch ceiling reached") ||
+    c.includes("daily spend safety cap reached")
+  );
+}
+
 export default function Home() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -1253,6 +1269,15 @@ export default function Home() {
                       </Dialog>
                     )}
                     <div className="whitespace-pre-wrap">{msg.content}</div>
+                    {msg.role === "assistant" && isUpgradeableError(msg.content) && (
+                      <Button
+                        type="button"
+                        onClick={goUpgrade}
+                        className={`mt-3 rounded-none bg-primary text-primary-foreground hover:bg-primary/90 font-mono uppercase tracking-wider ${compact ? "h-7 px-3 text-[10px]" : "h-9 px-4 text-xs"}`}
+                      >
+                        Upgrade plan
+                      </Button>
+                    )}
                   </div>
                 </div>
               );
