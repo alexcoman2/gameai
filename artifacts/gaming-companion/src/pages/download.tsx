@@ -58,9 +58,9 @@ const FEATURES: Feature[] = [
   },
   {
     icon: Shield,
-    title: "Private by default",
+    title: "You're in control",
     body:
-      "Screenshots are sent only when you ask a question. No background telemetry of your gameplay, ever.",
+      "Watch Mode only captures screenshots while you have it switched on, and they're discarded right after the AI reads them. We never train models on your gameplay or sell your data.",
   },
   {
     icon: Monitor,
