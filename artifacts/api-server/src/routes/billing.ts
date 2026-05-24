@@ -298,6 +298,47 @@ router.post("/billing/paypal/create-subscription", ...protect, async (req, res) 
     return;
   }
 
+  // Load the user's current subscription state so we can:
+  //   (a) refuse a same-tier "switch" (would silently double-bill), and
+  //   (b) cancel any existing PayPal sub before creating the new one,
+  //       so the customer isn't billed for both tiers in parallel after
+  //       the switch completes. PayPal has no plan-change endpoint —
+  //       the only safe pattern is cancel-old → create-new.
+  const userRows = await db
+    .select({
+      plan: usersTable.plan,
+      billingProvider: usersTable.billingProvider,
+      billingSubscriptionId: usersTable.billingSubscriptionId,
+      subscriptionStatus: usersTable.subscriptionStatus,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId))
+    .limit(1);
+  const currentUser = userRows[0];
+
+  // Reject same-tier purchase outright. The UI already labels the
+  // current plan's button "Active" + disabled, but defense-in-depth
+  // matters because a tampered request would otherwise create a
+  // second identical subscription with no way for the customer to
+  // tell them apart in PayPal.
+  if (
+    currentUser?.plan === tier &&
+    currentUser?.subscriptionStatus &&
+    isActivePaypalStatus(currentUser.subscriptionStatus)
+  ) {
+    res.status(400).json({
+      error: `You're already subscribed to the ${tier} plan.`,
+    });
+    return;
+  }
+
+  // NOTE: We deliberately do NOT cancel the existing subscription here.
+  // If the user bails out of the PayPal approval flow, we'd leave them
+  // with no active sub even though they paid for the current period.
+  // Instead, the old subscription is cancelled inside /paypal/confirm
+  // ONLY after the new one is verified ACTIVE (see "Plan-switch:
+  // cancel previous subscription" block below).
+
   // Build absolute return/cancel URLs from the request's own origin so we
   // work in dev (localhost), Electron proxy, and the public deployment
   // without a hard-coded env var.
@@ -365,6 +406,65 @@ router.post("/billing/paypal/confirm", ...protect, async (req, res) => {
     const periodEnd = sub.billing_info?.next_billing_time
       ? new Date(sub.billing_info.next_billing_time)
       : null;
+
+    // Plan-switch: cancel previous subscription. Runs ONLY after the
+    // new sub came back ACTIVE from PayPal and the custom_id matches —
+    // so a user who bailed out of PayPal approval keeps their old plan
+    // untouched. We handle BOTH provider cases: a Paddle-on-file user
+    // switching to PayPal would otherwise be double-billed forever.
+    // The previous-sub ID must not equal the new one (idempotent
+    // replay of /confirm should be a no-op, not a self-cancel).
+    if (active) {
+      const prevRows = await db
+        .select({
+          billingProvider: usersTable.billingProvider,
+          billingSubscriptionId: usersTable.billingSubscriptionId,
+          subscriptionStatus: usersTable.subscriptionStatus,
+        })
+        .from(usersTable)
+        .where(eq(usersTable.id, userId))
+        .limit(1);
+      const prev = prevRows[0];
+      const prevSubId = prev?.billingSubscriptionId ?? null;
+      const prevProvider = prev?.billingProvider ?? null;
+      const prevStatus = prev?.subscriptionStatus ?? null;
+      const prevLooksActive =
+        prevProvider === "paypal"
+          ? !!prevStatus && isActivePaypalStatus(prevStatus)
+          : prevProvider === "paddle"
+            ? prevStatus !== "canceled" && prevStatus !== "canceled_locally"
+            : false;
+
+      if (prevSubId && prevSubId !== sub.id && prevLooksActive) {
+        try {
+          if (prevProvider === "paypal") {
+            await paypalCancelSubscription(prevSubId, `Switched plan to ${knownTier}`);
+            logger.info(
+              { userId, prevSubId, newSubId: sub.id, toTier: knownTier },
+              "Plan switch: cancelled previous PayPal sub after new one activated",
+            );
+          } else if (prevProvider === "paddle") {
+            const paddle = getPaddle();
+            await paddle.subscriptions.cancel(prevSubId, { effectiveFrom: "immediately" });
+            logger.info(
+              { userId, prevSubId, newSubId: sub.id, toTier: knownTier },
+              "Plan switch: cancelled previous Paddle sub after new PayPal one activated",
+            );
+          }
+        } catch (e) {
+          // Log loudly but DO NOT abort — the new sub is already active
+          // and the user has been charged. Failing to cancel the old
+          // one is a serious billing issue that needs manual cleanup,
+          // but blocking here would also strand them on the new plan
+          // with no entitlement update. Surface in logs for ops.
+          logger.error(
+            { err: e, userId, prevSubId, prevProvider, newSubId: sub.id },
+            "PLAN SWITCH WARNING: failed to cancel previous subscription — manual reconciliation required to prevent double-billing",
+          );
+        }
+      }
+    }
+
     await db
       .update(usersTable)
       .set({

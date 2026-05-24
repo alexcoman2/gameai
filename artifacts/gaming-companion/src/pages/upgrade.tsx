@@ -7,6 +7,16 @@ import { authFetch } from "@/lib/auth-fetch";
 import { useToast } from "@/hooks/use-toast";
 import { useMe } from "@/hooks/use-me";
 import { trackEvent } from "@/lib/posthog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type PlanTier = "free" | "pro" | "pro_plus" | "elite";
 
@@ -95,6 +105,10 @@ export default function Upgrade() {
   const [loadingPaypalTier, setLoadingPaypalTier] = useState<PaidTier | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [paypalEnabled, setPaypalEnabled] = useState(false);
+  // When a paying customer clicks "Switch to <other tier>", hold the
+  // target tier in state so the AlertDialog can confirm the no-proration
+  // behavior before we actually hit PayPal.
+  const [pendingSwitchTier, setPendingSwitchTier] = useState<PaidTier | null>(null);
   const isAdmin = me?.isAdmin ?? false;
   // Admin-only toggle: lets the admin bypass the "no purchases" block and run
   // a real checkout end-to-end to verify the payment portal. Real money will
@@ -514,7 +528,16 @@ export default function Upgrade() {
                       <button
                         type="button"
                         disabled={isCurrent || loadingTier !== null || loadingPaypalTier !== null || (isAdmin && !adminTestMode)}
-                        onClick={() => handlePaypalUpgrade(tier.id as PaidTier)}
+                        onClick={() => {
+                          // First paid sub → straight to PayPal.
+                          // Switching plans → confirm first because PayPal
+                          // doesn't prorate and we'll cancel the old sub.
+                          if (status?.isSubscriptionActive && currentPlan !== "free") {
+                            setPendingSwitchTier(tier.id as PaidTier);
+                          } else {
+                            handlePaypalUpgrade(tier.id as PaidTier);
+                          }
+                        }}
                         className={`w-full py-3 font-mono text-xs uppercase tracking-wider border transition-colors ${
                           highlight
                             ? "bg-primary text-primary-foreground border-primary hover:bg-primary/90"
@@ -577,6 +600,52 @@ export default function Upgrade() {
             : "Powered by Paddle · Secure checkout · Cancel anytime"}
         </p>
       </div>
+
+      {/* Plan-switch confirmation. PayPal subscriptions don't support
+          plan changes in-place — we have to cancel the current sub and
+          create a new one. We're up-front about the no-proration so
+          the customer can't be surprised by the unrefunded remainder
+          of their current period. */}
+      <AlertDialog
+        open={pendingSwitchTier !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingSwitchTier(null);
+        }}
+      >
+        <AlertDialogContent className="rounded-none border-border font-mono">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="uppercase tracking-widest">
+              Switch to {pendingSwitchTier ? displayTier(pendingSwitchTier) : ""}?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-foreground/80 space-y-2">
+              <span className="block">
+                Your current {displayTier(currentPlan)} subscription will be
+                cancelled and a new {pendingSwitchTier ? displayTier(pendingSwitchTier) : ""} subscription will start today.
+              </span>
+              <span className="block text-muted-foreground">
+                PayPal does not prorate plan changes — the remaining time on
+                your current billing period is not refunded. You'll be charged
+                the new plan's price immediately.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-none font-mono uppercase tracking-wider">
+              Keep current plan
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="rounded-none font-mono uppercase tracking-wider"
+              onClick={() => {
+                const target = pendingSwitchTier;
+                setPendingSwitchTier(null);
+                if (target) handlePaypalUpgrade(target);
+              }}
+            >
+              Continue to PayPal
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
