@@ -101,7 +101,7 @@ export default function Settings() {
                   fallback: ["Alt", "Space"],
                 },
                 {
-                  label: "Voice input — tap once to start, tap again to send",
+                  label: "Voice input — tap once, speak, it auto-sends when you stop",
                   primary: ["Ctrl", "Shift", "V"],
                   fallback: ["Alt", "V"],
                 },
