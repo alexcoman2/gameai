@@ -67,6 +67,22 @@ export function publishWatchState(mode: boolean, log: WatchLogEntry[]): void {
   }
 }
 
+// Like readWatchState but skips the staleness check. Used by the main
+// window to restore its own toggle on remount (navigating away from
+// /chat unmounts Home; without this the toggle resets to OFF and the
+// user-visible state diverges from the overlay). Home is the source of
+// truth, so if it previously wrote "on" we trust that on remount.
+export function readPersistedWatchMode(): boolean {
+  try {
+    const raw = localStorage.getItem(WATCH_STATE_LS_KEY);
+    if (!raw) return false;
+    const parsed = JSON.parse(raw) as Partial<WatchState>;
+    return parsed.mode === true;
+  } catch {
+    return false;
+  }
+}
+
 export function readWatchState(): WatchState {
   try {
     const raw = localStorage.getItem(WATCH_STATE_LS_KEY);

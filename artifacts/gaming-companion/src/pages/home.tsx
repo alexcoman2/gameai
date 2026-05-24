@@ -30,7 +30,7 @@ import {
   isHandsFreeEnabled, setHandsFreeEnabled, HANDS_FREE_LS_KEY, TTS_ENABLED_LS_KEY,
   VOICE_BLOCKED_EVENT,
 } from "@/lib/voice";
-import { publishWatchState, WATCH_REQUEST_LS_KEY, parseWatchRequest } from "@/lib/watch-state";
+import { publishWatchState, readPersistedWatchMode, WATCH_REQUEST_LS_KEY, parseWatchRequest } from "@/lib/watch-state";
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
 import { DialogTitle } from "@radix-ui/react-dialog";
 import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
@@ -98,7 +98,11 @@ export default function Home() {
   const [sessionInitialized, setSessionInitialized] = useState(false);
   const historyLoadedRef = useRef<Set<string>>(new Set());
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
-  const [watchMode, setWatchMode] = useState(false);
+  // Lazy-init from localStorage so navigating away from /chat and back
+  // restores the toggle. Home is the source of truth for watchMode —
+  // when it unmounts the capture loop stops, but if the user comes back
+  // we want to resume rather than silently flip the toggle to OFF.
+  const [watchMode, setWatchMode] = useState<boolean>(() => readPersistedWatchMode());
   const [watchScreenshot, setWatchScreenshot] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
