@@ -212,6 +212,26 @@ export default function Home() {
     }
   };
 
+  // Subscribe to the global hands-free hotkey (Ctrl+Shift+H / Alt+H) fired
+  // from the Electron main process. Ref pattern avoids stale closures so
+  // the IPC listener never has to re-bind across renders.
+  const toggleHandsFreeRef = useRef(toggleHandsFree);
+  toggleHandsFreeRef.current = toggleHandsFree;
+  useEffect(() => {
+    const api = (window as Window & {
+      electronAPI?: { onHandsFreeToggle?: (cb: () => void) => () => void };
+    }).electronAPI;
+    if (!api?.onHandsFreeToggle) return;
+    const off = api.onHandsFreeToggle(() => {
+      if (voiceLocked) {
+        goUpgrade();
+        return;
+      }
+      toggleHandsFreeRef.current();
+    });
+    return off;
+  }, [voiceLocked]);
+
   // Cross-window sync: when the overlay flips TTS or hands-free, mirror
   // it in the main window (same origin, same localStorage).
   useEffect(() => {
@@ -461,6 +481,7 @@ export default function Home() {
     getLastGameScreenshot?: () => Promise<string | null>;
     getAlwaysOnTop?: () => Promise<boolean>;
     toggleAlwaysOnTop?: () => Promise<boolean>;
+    onHandsFreeToggle?: (cb: () => void) => () => void;
   };
   const electronAPI = (window as Window & { electronAPI?: ElectronAPI }).electronAPI;
 

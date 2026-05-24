@@ -24,6 +24,7 @@ type ElectronAPI = {
   overlayGetPttHotkey?: () => Promise<string | null>;
   onOverlayShown?: (cb: () => void) => () => void;
   onPttToggle?: (cb: () => void) => () => void;
+  onHandsFreeToggle?: (cb: () => void) => () => void;
 };
 
 function getElectronAPI(): ElectronAPI | null {
@@ -521,6 +522,22 @@ export default function OverlayPage() {
     return off;
   }, [electronAPI]);
 
+  // Subscribe to the global hands-free hotkey. Same ref pattern as PTT so
+  // toggleHandsFree always sees current state without re-binding the IPC
+  // listener on every render.
+  const toggleHandsFreeRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!electronAPI?.onHandsFreeToggle) return;
+    const off = electronAPI.onHandsFreeToggle(() => {
+      if (voiceLocked) {
+        openMainForUpgrade();
+        return;
+      }
+      toggleHandsFreeRef.current();
+    });
+    return off;
+  }, [electronAPI, voiceLocked]);
+
   const toggleTts = () => {
     const next = !ttsOn;
     setTtsOn(next);
@@ -531,6 +548,9 @@ export default function OverlayPage() {
     else primeTtsPlayback();
   };
 
+  // Defined below; assigned into the ref each render so the IPC hands-free
+  // listener (registered in the effect above) always invokes the freshest
+  // copy without needing to re-bind on every state change.
   const toggleHandsFree = () => {
     const next = !handsFree;
     setHandsFree(next);
@@ -559,6 +579,8 @@ export default function OverlayPage() {
       }
     }
   };
+
+  toggleHandsFreeRef.current = toggleHandsFree;
 
   // Live refs for handleSend's setTimeout rearm: avoids referencing stale
   // React state from the closure when the timeout fires.
