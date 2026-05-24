@@ -12,13 +12,13 @@
 export const SITE_CONFIG = {
   productName: "Unstuck",
   legalEntityName:
-    import.meta.env.VITE_LEGAL_ENTITY_NAME ?? "Unstuck (sole proprietor)",
+    import.meta.env.VITE_LEGAL_ENTITY_NAME ?? "Alexandru Coman",
   contactEmail:
-    import.meta.env.VITE_CONTACT_EMAIL ?? "support@unstuck.app",
+    import.meta.env.VITE_CONTACT_EMAIL ?? "comanalex972@gmail.com",
   refundsEmail:
-    import.meta.env.VITE_REFUNDS_EMAIL ?? "billing@unstuck.app",
+    import.meta.env.VITE_REFUNDS_EMAIL ?? "comanalex972@gmail.com",
   privacyEmail:
-    import.meta.env.VITE_PRIVACY_EMAIL ?? "privacy@unstuck.app",
+    import.meta.env.VITE_PRIVACY_EMAIL ?? "comanalex972@gmail.com",
   // ISO 3166-1 alpha-2 country code of the governing-law jurisdiction.
   jurisdiction:
     import.meta.env.VITE_LEGAL_JURISDICTION ?? "the United States",
