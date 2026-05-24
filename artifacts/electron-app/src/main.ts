@@ -63,6 +63,11 @@ const OVERLAY_HOTKEY_FALLBACK = "Alt+Space";
 // game-input doesn't trigger both at once.
 const PTT_HOTKEY_PRIMARY = "Control+Shift+V";
 const PTT_HOTKEY_FALLBACK = "Alt+V";
+// Hands-free (continuous voice) toggle: flips the assistant between
+// click-to-talk and always-listening mode. Same dual-binding logic as PTT
+// so a game intercepting one combo still leaves the other available.
+const HF_HOTKEY_PRIMARY = "Control+Shift+H";
+const HF_HOTKEY_FALLBACK = "Alt+H";
 const OVERLAY_WIDTH = 440;
 const OVERLAY_HEIGHT = 560;
 
@@ -603,6 +608,27 @@ function toggleOverlay(): void {
 let pttListenerReady = false;
 let pendingPttToggles = 0;
 
+// Same listener-ready / pending-press dance as PTT: a press before the
+// renderer mounts would otherwise be silently dropped, and on cold launch
+// the first user keystroke is exactly the most important one.
+let hfListenerReady = false;
+let pendingHfToggles = 0;
+
+function hfHotkeyPressed(): void {
+  const fresh = !overlayWindow || overlayWindow.isDestroyed();
+  if (fresh) {
+    createOverlayWindow();
+    showOverlay();
+  } else if (overlayWindow && !overlayWindow.isVisible()) {
+    showOverlay();
+  }
+  if (hfListenerReady && overlayWindow && !overlayWindow.isDestroyed()) {
+    overlayWindow.webContents.send("overlay-handsfree-toggle");
+  } else {
+    pendingHfToggles += 1;
+  }
+}
+
 function pttHotkeyPressed(): void {
   // Ensure the overlay is visible first — the user needs to see the
   // recording pulse + transcript appear so they know it's listening.
@@ -630,6 +656,8 @@ function registerOverlayHotkeys(): void {
   globalShortcut.register(OVERLAY_HOTKEY_FALLBACK, toggleOverlay);
   globalShortcut.register(PTT_HOTKEY_PRIMARY, pttHotkeyPressed);
   globalShortcut.register(PTT_HOTKEY_FALLBACK, pttHotkeyPressed);
+  globalShortcut.register(HF_HOTKEY_PRIMARY, hfHotkeyPressed);
+  globalShortcut.register(HF_HOTKEY_FALLBACK, hfHotkeyPressed);
 }
 
 process.on("uncaughtException", (err) => {
@@ -975,6 +1003,26 @@ ipcMain.handle("overlay-get-ptt-hotkey", () => {
   }
   if (globalShortcut.isRegistered(PTT_HOTKEY_FALLBACK)) {
     return PTT_HOTKEY_FALLBACK;
+  }
+  return null;
+});
+
+ipcMain.on("overlay-handsfree-ready", () => {
+  hfListenerReady = true;
+  if (pendingHfToggles > 0 && overlayWindow && !overlayWindow.isDestroyed()) {
+    pendingHfToggles = 0;
+    overlayWindow.webContents.send("overlay-handsfree-toggle");
+  } else {
+    pendingHfToggles = 0;
+  }
+});
+
+ipcMain.handle("overlay-get-handsfree-hotkey", () => {
+  if (globalShortcut.isRegistered(HF_HOTKEY_PRIMARY)) {
+    return HF_HOTKEY_PRIMARY;
+  }
+  if (globalShortcut.isRegistered(HF_HOTKEY_FALLBACK)) {
+    return HF_HOTKEY_FALLBACK;
   }
   return null;
 });

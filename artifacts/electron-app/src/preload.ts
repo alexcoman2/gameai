@@ -21,6 +21,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.invoke("overlay-get-hotkey"),
   overlayGetPttHotkey: (): Promise<string | null> =>
     ipcRenderer.invoke("overlay-get-ptt-hotkey"),
+  overlayGetHandsFreeHotkey: (): Promise<string | null> =>
+    ipcRenderer.invoke("overlay-get-handsfree-hotkey"),
   onOverlayShown: (cb: () => void): (() => void) => {
     const listener = () => cb();
     ipcRenderer.on("overlay-shown", listener);
@@ -33,6 +35,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     // presses captured before the renderer mounted.
     ipcRenderer.send("overlay-ptt-ready");
     return () => ipcRenderer.removeListener("overlay-ptt-toggle", listener);
+  },
+  onHandsFreeToggle: (cb: () => void): (() => void) => {
+    const listener = () => cb();
+    ipcRenderer.on("overlay-handsfree-toggle", listener);
+    ipcRenderer.send("overlay-handsfree-ready");
+    return () =>
+      ipcRenderer.removeListener("overlay-handsfree-toggle", listener);
   },
 
   // Open a URL in the user's default OS browser instead of inside the
