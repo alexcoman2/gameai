@@ -126,11 +126,23 @@ router.get("/billing/status", ...protect, async (req, res) => {
     res.status(404).json({ error: "User not found" });
     return;
   }
+  // "active" here means we still need to talk to the processor to wind
+  // it down — i.e. the user can still meaningfully click "Cancel". Once
+  // the webhook flips status to canceled/expired we surface that and
+  // hide the cancel button on the client.
+  const isSubscriptionActive =
+    !!user.billingSubscriptionId &&
+    user.subscriptionStatus !== null &&
+    !["canceled", "cancelled", "expired", "deleted"].includes(
+      (user.subscriptionStatus ?? "").toLowerCase(),
+    );
   res.json({
     plan: user.plan,
+    billingProvider: user.billingProvider,
     subscriptionStatus: user.subscriptionStatus,
     subscriptionCurrentPeriodEnd: user.subscriptionCurrentPeriodEnd,
     hasSubscription: !!user.billingSubscriptionId,
+    isSubscriptionActive,
   });
 });
 

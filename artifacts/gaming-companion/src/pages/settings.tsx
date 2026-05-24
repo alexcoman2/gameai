@@ -2,14 +2,28 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { Link } from "wouter";
+import { useClerk } from "@clerk/react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { useGetSettings, getGetSettingsQueryKey, useSaveSettings } from "@workspace/api-client-react";
-import { Loader2, Save, Terminal, Gamepad2, Eye, EyeOff, Keyboard } from "lucide-react";
+import { Loader2, Save, Terminal, Gamepad2, Eye, EyeOff, Keyboard, CreditCard, AlertTriangle, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { authFetch } from "@/lib/auth-fetch";
 
 const settingsSchema = z.object({
   steamApiKey: z.string(),
@@ -17,10 +31,30 @@ const settingsSchema = z.object({
 
 type SettingsFormValues = z.infer<typeof settingsSchema>;
 
+type BillingStatus = {
+  plan: "free" | "pro" | "pro_plus" | "elite";
+  billingProvider: "paddle" | "paypal" | "stripe" | null;
+  subscriptionStatus: string | null;
+  subscriptionCurrentPeriodEnd: string | null;
+  hasSubscription: boolean;
+  isSubscriptionActive: boolean;
+};
+
+function displayTier(t: BillingStatus["plan"]): string {
+  if (t === "pro_plus") return "Pro+";
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 export default function Settings() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { signOut } = useClerk();
   const [showSteamKey, setShowSteamKey] = useState(false);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [billingLoading, setBillingLoading] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
 
   const { data: settings, isLoading } = useGetSettings({
     query: { queryKey: getGetSettingsQueryKey() }
@@ -40,6 +74,27 @@ export default function Settings() {
       form.reset({ steamApiKey: "" });
     }
   }, [settings, form]);
+
+  // Load billing status on mount. Failures fall back to "free" so the
+  // billing card always renders (signed-out users see a Sign-in prompt).
+  useEffect(() => {
+    let cancelled = false;
+    setBillingLoading(true);
+    authFetch("/api/billing/status")
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((data) => {
+        if (!cancelled) setBilling(data as BillingStatus);
+      })
+      .catch(() => {
+        if (!cancelled) setBilling({ plan: "free", billingProvider: null, subscriptionStatus: null, subscriptionCurrentPeriodEnd: null, hasSubscription: false, isSubscriptionActive: false });
+      })
+      .finally(() => {
+        if (!cancelled) setBillingLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const onSubmit = async (data: SettingsFormValues) => {
     try {
@@ -64,6 +119,75 @@ export default function Settings() {
       });
     }
   };
+
+  async function handleCancelSubscription() {
+    if (!billing?.isSubscriptionActive) return;
+    setCancelling(true);
+    try {
+      // Branch strictly by provider — never blind-fallback between the
+      // two, otherwise an already-cancelled PayPal sub can incorrectly
+      // open the Paddle portal.
+      if (billing.billingProvider === "paypal") {
+        const res = await authFetch("/api/billing/paypal/cancel", { method: "POST" });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+        toast({
+          title: "Subscription cancelled",
+          description: "Your plan will stay active until the end of the current billing period.",
+        });
+        const updated = await authFetch("/api/billing/status").then((r) => r.json());
+        setBilling(updated);
+      } else if (billing.billingProvider === "paddle") {
+        const portalRes = await authFetch("/api/billing/portal", { method: "POST" });
+        if (!portalRes.ok) {
+          const body = await portalRes.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${portalRes.status}`);
+        }
+        const { url } = await portalRes.json();
+        window.open(url, "_blank", "noopener,noreferrer");
+      } else {
+        throw new Error("Unknown billing provider — contact support.");
+      }
+    } catch (e) {
+      toast({
+        title: "Couldn't cancel subscription",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    try {
+      const res = await authFetch("/api/me", { method: "DELETE" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error ?? `HTTP ${res.status}`);
+      }
+      toast({
+        title: "Account deleted",
+        description: "Your data has been removed. Signing you out…",
+      });
+      // Give the toast a beat, then sign out (which redirects to /).
+      setTimeout(() => {
+        signOut({ redirectUrl: "/" }).catch(() => {
+          window.location.href = "/";
+        });
+      }, 800);
+    } catch (e) {
+      toast({
+        title: "Account deletion failed",
+        description: e instanceof Error ? e.message : "Unknown error",
+        variant: "destructive",
+      });
+      setDeleting(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -162,6 +286,74 @@ export default function Settings() {
           </CardContent>
         </Card>
 
+        {/* ── Billing & Subscription ─────────────────────────────────── */}
+        <Card className="bg-card/50 border-border rounded-none relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500/80"></div>
+          <CardHeader>
+            <CardTitle className="font-mono flex items-center gap-2 text-lg">
+              <CreditCard className="w-5 h-5 text-muted-foreground" />
+              BILLING & SUBSCRIPTION
+            </CardTitle>
+            <CardDescription className="font-mono text-xs uppercase tracking-wider">
+              Current plan, upgrades, and cancellation
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-none border border-border bg-background/50 p-4 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Current plan
+                  </p>
+                  <p className="mt-1 font-mono text-lg font-bold text-primary uppercase">
+                    {billingLoading ? "…" : displayTier(billing?.plan ?? "free")}
+                    {billing?.subscriptionStatus && (
+                      <span className="ml-2 text-[10px] text-muted-foreground normal-case tracking-normal">
+                        ({billing.subscriptionStatus})
+                      </span>
+                    )}
+                  </p>
+                  {billing?.subscriptionCurrentPeriodEnd && (
+                    <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      Renews{" "}
+                      {new Date(billing.subscriptionCurrentPeriodEnd).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+                <Link
+                  href="/upgrade"
+                  className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-widest border border-primary text-primary px-4 py-2 hover:bg-primary hover:text-primary-foreground transition-colors"
+                >
+                  {billing?.hasSubscription ? "Change plan" : "Upgrade"}
+                </Link>
+              </div>
+
+              {billing?.isSubscriptionActive && (
+                <div className="flex items-center justify-between flex-wrap gap-3 pt-3 border-t border-border/60">
+                  <p className="font-mono text-xs text-muted-foreground max-w-md">
+                    Cancellation stops auto-renew. Paid access continues until
+                    the end of the current billing period.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleCancelSubscription}
+                    disabled={cancelling}
+                    className="font-mono rounded-none uppercase tracking-widest text-xs h-9"
+                  >
+                    {cancelling ? (
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                    )}
+                    Cancel subscription
+                  </Button>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
         <Card className="bg-card/50 border-border rounded-none relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/80"></div>
           <CardHeader>
@@ -246,6 +438,84 @@ export default function Settings() {
                 </div>
               </form>
             </Form>
+          </CardContent>
+        </Card>
+
+        {/* ── Danger Zone ────────────────────────────────────────────── */}
+        <Card className="bg-card/50 border-destructive/50 rounded-none relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-destructive/80"></div>
+          <CardHeader>
+            <CardTitle className="font-mono flex items-center gap-2 text-lg text-destructive">
+              <AlertTriangle className="w-5 h-5" />
+              DANGER ZONE
+            </CardTitle>
+            <CardDescription className="font-mono text-xs uppercase tracking-wider">
+              Irreversible account actions
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-none border border-destructive/40 bg-destructive/5 p-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="max-w-md">
+                <p className="font-mono text-sm text-foreground">Delete account</p>
+                <p className="mt-1 font-mono text-xs text-muted-foreground">
+                  Permanently deletes your Unstuck account, all chat history,
+                  usage records, and game profiles. Cancels any active paid
+                  subscription. This cannot be undone.
+                </p>
+              </div>
+              <AlertDialog
+                onOpenChange={(open) => {
+                  if (!open) setConfirmText("");
+                }}
+              >
+                <AlertDialogTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    className="font-mono rounded-none uppercase tracking-widest text-xs h-9 shrink-0"
+                  >
+                    Delete account
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="rounded-none border-destructive/60 font-mono">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="text-destructive uppercase tracking-widest">
+                      Delete account?
+                    </AlertDialogTitle>
+                    <AlertDialogDescription className="text-foreground/80">
+                      This permanently deletes your account, your chat
+                      history, usage records and game profiles, and cancels
+                      any active subscription. There is no undo. Type{" "}
+                      <span className="font-bold text-destructive">DELETE</span>{" "}
+                      to confirm.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <Input
+                    value={confirmText}
+                    onChange={(e) => setConfirmText(e.target.value)}
+                    placeholder="DELETE"
+                    autoComplete="off"
+                    className="font-mono rounded-none bg-background border-destructive/40"
+                  />
+                  <AlertDialogFooter>
+                    <AlertDialogCancel className="rounded-none font-mono uppercase tracking-widest">
+                      Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction
+                      disabled={confirmText !== "DELETE" || deleting}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        if (confirmText === "DELETE") handleDeleteAccount();
+                      }}
+                      className="rounded-none font-mono uppercase tracking-widest bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleting && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
+                      Delete forever
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
           </CardContent>
         </Card>
       </div>

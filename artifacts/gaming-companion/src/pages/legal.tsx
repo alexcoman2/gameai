@@ -80,8 +80,8 @@ export function AboutPage() {
         </li>
       </ul>
       <p className="mt-2 text-xs text-muted-foreground">
-        Subscriptions auto-renew monthly. Overage is billed at the end of each
-        billing period via Paddle. A $5/day per-user safety fuse caps any
+        Subscriptions auto-renew monthly through PayPal. Overage is billed at
+        the end of each billing period. A $5/day per-user safety fuse caps any
         single day's spend.
       </p>
 
@@ -133,8 +133,7 @@ export function PricingPage() {
         Four plans. All prices in USD. Paid plans bill monthly and auto-renew
         until you cancel. Cancel anytime — your plan stays active through the
         end of the period you've already paid for. Sold by{" "}
-        {SITE_CONFIG.legalEntityName} via Paddle.com Market Limited (our
-        Merchant of Record), with PayPal also available at checkout.
+        {SITE_CONFIG.legalEntityName}, with PayPal as the payment processor.
       </p>
 
       <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
@@ -203,7 +202,7 @@ export function PricingPage() {
         </li>
         <li>
           We total your overage usage at the end of the billing period and
-          charge it as a single line item via Paddle alongside your next
+          charge it as a single line item via PayPal alongside your next
           renewal.
         </li>
         <li>
@@ -345,11 +344,11 @@ export function TermsPage() {
 
       <h2>3. Subscriptions and Billing</h2>
       <p>
-        Paid subscriptions are sold by Paddle.com Market Limited (or its
-        affiliates), which acts as our Merchant of Record. PayPal is also
-        offered as an alternative payment method at checkout. Plan prices,
-        included monthly allowances, and overage rates are displayed in the
-        app's Upgrade screen and on our public website.
+        Paid subscriptions are sold by {SITE_CONFIG.legalEntityName} and
+        processed through PayPal, which collects payment and handles
+        recurring billing on our behalf. Plan prices, included monthly
+        allowances, and overage rates are displayed in the app's Upgrade
+        screen and on our public website.
       </p>
       <p>
         Subscriptions renew automatically each month at the then-current
@@ -359,8 +358,9 @@ export function TermsPage() {
         each billing period.
       </p>
       <p>
-        You can cancel at any time from the in-app Upgrade screen. Cancellation
-        takes effect at the end of the current billing period.
+        You can cancel at any time from the in-app Settings → Billing &
+        Subscription panel, or from your PayPal account. Cancellation takes
+        effect at the end of the current billing period.
       </p>
 
       <h2>4. Acceptable use</h2>
@@ -483,8 +483,8 @@ export function PrivacyPage() {
         </li>
         <li>
           <b>Billing data</b> — the subscription tier you are on and a
-          customer/subscription identifier from Paddle or PayPal. We do not
-          see or store your full payment card details.
+          customer/subscription identifier from PayPal. We do not see or
+          store your full payment card details.
         </li>
         <li>
           <b>Diagnostics</b> — crash reports and anonymous product-analytics
@@ -511,12 +511,8 @@ export function PrivacyPage() {
           <b>Clerk</b> — to authenticate your account.
         </li>
         <li>
-          <b>Paddle</b> — Merchant of Record for subscriptions (default
-          payment processor).
-        </li>
-        <li>
-          <b>PayPal</b> — alternative payment processor if you choose PayPal
-          at checkout.
+          <b>PayPal</b> — payment processor for subscriptions and recurring
+          billing.
         </li>
         <li>
           <b>Sentry</b> (EU region) — error and crash diagnostics.
@@ -546,8 +542,11 @@ export function PrivacyPage() {
 
       <h2>4. Your rights</h2>
       <p>
-        You may request a copy of the personal data we hold about you, ask
-        us to correct it, or ask us to delete your account by writing to{" "}
+        You can delete your account at any time from the in-app Settings →
+        Danger Zone panel — this immediately wipes your chat history, usage
+        records and game profiles, and cancels any active paid subscription.
+        You may also request a copy of the personal data we hold about you
+        or ask us to correct it by writing to{" "}
         <a href={`mailto:${SITE_CONFIG.privacyEmail}`}>
           {SITE_CONFIG.privacyEmail}
         </a>
@@ -599,9 +598,10 @@ export function RefundPage() {
 
       <h2>1. Cancelling a subscription</h2>
       <p>
-        You can cancel at any time from the in-app Upgrade screen. Cancellation
-        stops automatic renewal — you will continue to have paid access until
-        the end of the current billing period.
+        You can cancel at any time from the in-app Settings → Billing &
+        Subscription panel, or from your PayPal account. Cancellation stops
+        automatic renewal — you will continue to have paid access until the
+        end of the current billing period.
       </p>
 
       <h2>2. 14-day satisfaction window</h2>
@@ -639,8 +639,8 @@ export function RefundPage() {
       <p>
         Nothing in this policy limits any non-waivable rights you have under
         the consumer-protection laws of your country (for example, the EU
-        consumer right of withdrawal). Refunds are processed by Paddle, our
-        Merchant of Record, back to the original payment method.
+        consumer right of withdrawal). Refunds are processed via PayPal back
+        to the original payment method.
       </p>
 
       <h2>6. Contact</h2>
