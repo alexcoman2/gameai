@@ -101,12 +101,12 @@ export default function Settings() {
                   fallback: ["Alt", "Space"],
                 },
                 {
-                  label: "Push-to-talk (hold to record voice)",
+                  label: "Voice input — tap once to start, tap again to send",
                   primary: ["Ctrl", "Shift", "V"],
                   fallback: ["Alt", "V"],
                 },
                 {
-                  label: "Hands-free voice (toggle on / off)",
+                  label: "Hands-free mode (auto-listen on / off)",
                   primary: ["Ctrl", "Shift", "H"],
                   fallback: ["Alt", "H"],
                 },
