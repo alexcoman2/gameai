@@ -12,9 +12,11 @@ type PlanTier = "free" | "pro" | "pro_plus" | "elite";
 
 type BillingStatus = {
   plan: PlanTier;
+  billingProvider: "paddle" | "paypal" | "stripe" | null;
   subscriptionStatus: string | null;
   subscriptionCurrentPeriodEnd: string | null;
   hasSubscription: boolean;
+  isSubscriptionActive: boolean;
 };
 
 type PaidTier = "pro" | "pro_plus" | "elite";
@@ -294,13 +296,33 @@ export default function Upgrade() {
   async function handlePortal() {
     setPortalLoading(true);
     try {
-      const res = await authFetch("/api/billing/portal", { method: "POST" });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? `HTTP ${res.status}`);
+      // Branch by provider — Paddle has a hosted portal, PayPal does not
+      // (cancellations happen via our own /api/billing/paypal/cancel
+      // endpoint or in the user's PayPal account).
+      if (status?.billingProvider === "paypal") {
+        const res = await authFetch("/api/billing/paypal/cancel", { method: "POST" });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+        toast({
+          title: "Subscription cancelled",
+          description:
+            "Your plan will stay active until the end of the current billing period.",
+        });
+        const updated = await authFetch("/api/billing/status").then((r) => r.json());
+        setStatus(updated);
+      } else if (status?.billingProvider === "paddle") {
+        const res = await authFetch("/api/billing/portal", { method: "POST" });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error ?? `HTTP ${res.status}`);
+        }
+        const { url } = await res.json();
+        window.open(url, "_blank", "noopener,noreferrer");
+      } else {
+        throw new Error("Unknown billing provider — contact support.");
       }
-      const { url } = await res.json();
-      window.open(url, "_blank", "noopener,noreferrer");
     } catch (e) {
       toast({
         title: "Couldn't open billing portal",
@@ -399,7 +421,7 @@ export default function Upgrade() {
                 ) : (
                   <ExternalLink className="w-4 h-4" />
                 )}
-                Manage billing
+                {status?.billingProvider === "paypal" ? "Cancel subscription" : "Manage billing"}
               </button>
             </div>
           )}
