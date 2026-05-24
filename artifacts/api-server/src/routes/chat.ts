@@ -381,7 +381,7 @@ RESOURCE AWARENESS: Factor in the player's state from the watch log (health, sta
     //   advantage is reasoning. Same vision encoder, ~5x sonnet cost,
     //   ~2x sonnet latency. Not worth it.
     // Flip this constant to swap models — no other code change needed.
-    const SCREEN_TEXT_MODEL = "claude-sonnet-4-5";
+    const SCREEN_TEXT_MODEL = "claude-sonnet-4-6";
 
     let extractedScreenText = "";
     if (imageBase64) {
@@ -459,7 +459,7 @@ RESOURCE AWARENESS: Factor in the player's state from the watch log (health, sta
     // Opus stays the cost-tier label since it's the most expensive model
     // we'd ever bill against and acts as a safe upper bound. If we later
     // add an "Opus mode" toggle, flip this constant in one place.
-    const CHAT_MODEL = "claude-sonnet-4-5";
+    const CHAT_MODEL = "claude-sonnet-4-6";
     let response = await client.messages.create({
       model: CHAT_MODEL,
       max_tokens: 2048,
@@ -955,7 +955,7 @@ RESOURCE AWARENESS: Factor in the player's state from the watch log (health, sta
     // so quality is preserved (the model just won't be able to name a zone
     // that only appears in the screenshot for this turn). Bounds worst-case
     // TTFT at roughly DEADLINE + sonnet TTFT.
-    const SCREEN_TEXT_MODEL = "claude-sonnet-4-5";
+    const SCREEN_TEXT_MODEL = "claude-sonnet-4-6";
     const SCREEN_TEXT_DEADLINE_MS = 1500;
     const SCREEN_TEXT_SYSTEM = `You extract on-screen text from gaming screenshots. Output ONLY text that is literally readable in the image — zone names on signs/bonfires/loading screens, HUD labels (HP/MP/stamina numbers, currency, level, area name in corners), quest log titles and step text, item/spell/skill names with tooltips, menu/inventory entries, NPC names above dialog boxes, subtitle text, mission objectives, map labels, button prompts.\n\nRules:\n- Verbatim only. Do not paraphrase. Do not infer.\n- Do NOT describe visuals (architecture, characters, lighting, what the player is doing).\n- Do NOT name the zone/boss/game based on what it "looks like." Names only if they appear as text on screen.\n- If nothing is readable, output exactly: NO_READABLE_TEXT\n- Format: one item per line, prefixed with its location, e.g.\n  HUD-top-left: "Limgrave"\n  Bonfire: "Site of Grace - Stranded Graveyard"\n  Item tooltip: "Lordsworn's Greatsword +3"\n  Subtitle: "..."\nKeep it tight — only the actual text strings.`;
     let extractedScreenText = "";
@@ -1087,7 +1087,7 @@ RESOURCE AWARENESS: Factor in the player's state from the watch log (health, sta
     const cachedSystem = [
       { type: "text" as const, text: systemPrompt, cache_control: { type: "ephemeral" as const } },
     ];
-    const CHAT_MODEL = "claude-sonnet-4-5";
+    const CHAT_MODEL = "claude-sonnet-4-6";
 
     let finalAnswerText = "";
     let allStreamedText = "";
