@@ -7,7 +7,7 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from "@/component
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useGetSettings, getGetSettingsQueryKey, useSaveSettings } from "@workspace/api-client-react";
-import { Loader2, Save, Terminal, Gamepad2, Eye, EyeOff } from "lucide-react";
+import { Loader2, Save, Terminal, Gamepad2, Eye, EyeOff, Keyboard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -81,6 +81,87 @@ export default function Settings() {
       </div>
 
       <div className="grid gap-6">
+        <Card className="bg-card/50 border-border rounded-none relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-1 h-full bg-primary/80"></div>
+          <CardHeader>
+            <CardTitle className="font-mono flex items-center gap-2 text-lg">
+              <Keyboard className="w-5 h-5 text-muted-foreground" />
+              KEYBOARD SHORTCUTS
+            </CardTitle>
+            <CardDescription className="font-mono text-xs uppercase tracking-wider">
+              Global hotkeys — work even while a game is focused
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border border border-border bg-background/50 font-mono text-sm">
+              {[
+                {
+                  label: "Show / hide chat overlay",
+                  primary: ["Ctrl", "Shift", "Space"],
+                  fallback: ["Alt", "Space"],
+                },
+                {
+                  label: "Push-to-talk (hold to record voice)",
+                  primary: ["Ctrl", "Shift", "V"],
+                  fallback: ["Alt", "V"],
+                },
+                {
+                  label: "Hands-free voice (toggle on / off)",
+                  primary: ["Ctrl", "Shift", "H"],
+                  fallback: ["Alt", "H"],
+                },
+                {
+                  label: "Close / hide overlay while focused",
+                  primary: ["Esc"],
+                },
+              ].map((row) => (
+                <li
+                  key={row.label}
+                  className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <span className="text-foreground/90 text-xs sm:text-sm">
+                    {row.label}
+                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex items-center gap-1">
+                      {row.primary.map((k) => (
+                        <kbd
+                          key={k}
+                          className="rounded-none border border-primary/40 bg-primary/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-primary"
+                        >
+                          {k}
+                        </kbd>
+                      ))}
+                    </span>
+                    {row.fallback && (
+                      <>
+                        <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                          or
+                        </span>
+                        <span className="flex items-center gap-1">
+                          {row.fallback.map((k) => (
+                            <kbd
+                              key={k}
+                              className="rounded-none border border-border bg-muted/40 px-2 py-0.5 text-[10px] uppercase tracking-widest text-muted-foreground"
+                            >
+                              {k}
+                            </kbd>
+                          ))}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground mt-3">
+              If the primary combo is taken by another app, Unstuck
+              automatically falls back to the alternate. The active binding is
+              shown inside the overlay.
+            </p>
+          </CardContent>
+        </Card>
+
         <Card className="bg-card/50 border-border rounded-none relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-500/80"></div>
           <CardHeader>
