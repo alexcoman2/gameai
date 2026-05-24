@@ -444,12 +444,13 @@ router.post("/billing/paypal/cancel", ...protect, async (req, res) => {
     ]);
     const benignByStatus = err.paypalStatus === 404;
     const benignByName = !!err.paypalName && benignNames.has(err.paypalName);
-    // "INVALID_REQUEST" on the cancel endpoint typically means the
-    // subscription is already in a terminal state — PayPal will not let
-    // you cancel a CANCELLED/EXPIRED sub. Treat as benign.
-    const benignInvalidRequest =
-      err.paypalName === "INVALID_REQUEST" &&
-      /cancel|status|terminal|already/i.test(err.paypalMessage ?? "");
+    // "INVALID_REQUEST" on the cancel endpoint typically means either
+    // (a) the subscription is already in a terminal state — PayPal
+    // refuses to cancel a CANCELLED/EXPIRED sub, or (b) the
+    // subscription ID itself is malformed/unknown to PayPal. Either
+    // way the sub will not bill us again, so clean up locally instead
+    // of dumping a scary error toast on the customer.
+    const benignInvalidRequest = err.paypalName === "INVALID_REQUEST";
 
     if (benignByStatus || benignByName || benignInvalidRequest) {
       logger.warn(

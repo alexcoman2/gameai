@@ -395,7 +395,7 @@ export default function Upgrade() {
               </div>
             </div>
           )}
-          {status?.hasSubscription && (
+          {status?.isSubscriptionActive && (
             <div className="mb-8 border border-border bg-card p-4 flex items-center justify-between">
               <div>
                 <p className="text-xs font-mono text-muted-foreground uppercase tracking-wider">
