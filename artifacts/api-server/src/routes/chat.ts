@@ -15,6 +15,7 @@ import {
   updateSession,
   saveScreenshotFile,
 } from "../lib/sessions-store.js";
+import * as sessionsDb from "../lib/sessions-db.js";
 import { requireAuth } from "../middlewares/requireAuth.js";
 import { checkUsageCap, recordUsage, calcAnthropicCostMicrocents } from "../lib/usage.js";
 import { IS_HOSTED } from "../lib/server-mode.js";
@@ -71,28 +72,26 @@ function fromHistoryEntries(entries: HistoryEntry[]): ConversationMessage[] {
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
-router.post("/chat/clear", async (req, res) => {
+router.post("/chat/clear", ...protect, async (req, res) => {
   const { sessionId } = req.body as { sessionId?: string };
-  const hostedUrl = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
 
-  if (hostedUrl) {
-    // Proxy mode: clear local state only — hosted server is stateless, nothing to clear there
-    if (sessionId) {
-      // session clear is handled by the dedicated /sessions/:id/clear endpoint
-    } else {
-      globalHistory = [];
-      clearHistory();
-    }
-  } else {
-    // Direct mode
-    if (sessionId) {
-      // Handled by sessions route
-    } else {
-      globalHistory = [];
-      clearHistory();
-    }
+  // Hosted mode: per-session clears go through /sessions/:id/clear scoped
+  // by Clerk userId. There is intentionally no global clear here — the
+  // old behavior touched a process-wide `globalHistory` shared across all
+  // hosted users, which we treat as legacy single-tenant state. Just
+  // no-op so old clients that hit this route on hosted don't break.
+  if (IS_HOSTED) {
+    res.json({ ok: true });
+    return;
   }
 
+  // Dev / proxy: keep legacy local-disk clear so engineers + the local
+  // Electron server retain the "wipe everything" debug button.
+  if (!sessionId) {
+    globalHistory = [];
+    clearHistory();
+  }
+  // Per-session clears are still handled by /sessions/:id/clear.
   res.json({ ok: true });
 });
 
@@ -132,11 +131,18 @@ router.post("/chat/message", ...protect, async (req, res) => {
   }
 
   // ── PROXY MODE ──────────────────────────────────────────────────────────────
-  // Local Electron server. Loads history from disk, attaches screenshot, then
-  // forwards everything to the stateless hosted server. Persists the result.
+  // Local Electron server. Thin pass-through to the hosted server: we
+  // forward the request (with the user's Authorization header relayed
+  // so the hosted side can scope by Clerk userId) and return the
+  // response. Chat history persistence USED to live on local disk at
+  // ~/.gaming-companion/sessions/, which leaked across accounts on the
+  // same machine (signing into a different account showed the previous
+  // account's chats) and never followed the user to other devices.
+  // History now lives in the hosted Postgres DB keyed by userId, so
+  // the proxy intentionally does NO local persistence and ships NO
+  // history field — the hosted side loads it from the DB by sessionId.
   const hostedUrl = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
   if (hostedUrl) {
-    // Resolve screenshot
     let imageData: string | null = reqImageData ?? null;
     if (!imageData && includeScreenshot) {
       const latest = getLatestScreenshot();
@@ -144,13 +150,6 @@ router.post("/chat/message", ...protect, async (req, res) => {
         imageData = latest.imageData;
       }
     }
-
-    // Load conversation history from local disk
-    const useSession = sessionId ? getSession(sessionId) !== null : false;
-    const localHistory: ConversationMessage[] = useSession
-      ? loadSessionHistory(sessionId!)
-      : globalHistory;
-    const historyEntries = toHistoryEntries(localHistory);
 
     try {
       const authHeader = req.headers.authorization;
@@ -160,69 +159,21 @@ router.post("/chat/message", ...protect, async (req, res) => {
           "Content-Type": "application/json",
           ...(authHeader ? { Authorization: authHeader } : {}),
         },
-        body: JSON.stringify({ message, gameName, imageData, history: historyEntries, watchLog: reqWatchLog, watchMode: reqWatchMode }),
+        body: JSON.stringify({
+          message,
+          gameName,
+          imageData,
+          sessionId,
+          watchLog: reqWatchLog,
+          watchMode: reqWatchMode,
+        }),
       });
 
       const data = (await upstream.json()) as Record<string, unknown>;
-
       if (!upstream.ok) {
         res.status(upstream.status).json(data);
         return;
       }
-
-      const reply = data.reply as string;
-      const updatedHistoryRaw = data.updatedHistory as HistoryEntry[] | undefined;
-
-      if (reply && updatedHistoryRaw) {
-        const updatedHistory = fromHistoryEntries(updatedHistoryRaw);
-
-        // Persist updated history locally
-        if (useSession) {
-          saveSessionHistory(sessionId!, updatedHistory);
-
-          const now = new Date().toLocaleTimeString([], {
-            hour: "2-digit",
-            minute: "2-digit",
-          });
-          const messageCount = Math.floor(updatedHistory.length / 2);
-          const userMsgId = `${Date.now()}-user`;
-          const assistantMsgId = `${Date.now() + 1}-assistant`;
-
-          let screenshotRef: string | null = null;
-          if (imageData) {
-            const clean = imageData.replace(/^data:image\/\w+;base64,/, "");
-            saveScreenshotFile(sessionId!, userMsgId, clean);
-            screenshotRef = `file:${userMsgId}`;
-          }
-
-          appendSessionMessages(sessionId!, [
-            {
-              id: userMsgId,
-              role: "user",
-              content: message.trim(),
-              timestamp: now,
-              screenshot: screenshotRef,
-            },
-            {
-              id: assistantMsgId,
-              role: "assistant",
-              content: reply,
-              timestamp: now,
-              screenshot: null,
-            },
-          ]);
-          updateSession(sessionId!, {
-            updatedAt: new Date().toISOString(),
-            messageCount,
-            gameContext: gameName ?? null,
-          });
-        } else {
-          globalHistory = updatedHistory;
-          saveHistory(updatedHistory);
-        }
-      }
-
-      // Return just the chat response fields (strip updatedHistory from client response)
       res.json({
         reply: data.reply,
         model: data.model,
@@ -245,16 +196,30 @@ router.post("/chat/message", ...protect, async (req, res) => {
     return;
   }
 
-  // Stateless mode: history provided by the caller (proxy or external client)
-  const stateless = Array.isArray(reqHistory);
+  // Resolve where conversation history lives for this request:
+  // - useDbSession: hosted server with auth + sessionId → load from Postgres
+  //   (per-account, follows the user across devices). This wins over every
+  //   other branch so an old client that still ships `history` in the body
+  //   doesn't corrupt the canonical DB version.
+  // - stateless: caller provided history in the body (no sessionId / dev)
+  // - useSession: legacy dev/fs path keyed by sessionId
+  // - else: process-wide globalHistory (legacy, single-tenant dev only)
+  const useDbSession = IS_HOSTED && !!req.userId && !!sessionId;
+  const stateless = !useDbSession && Array.isArray(reqHistory);
+  const useSession =
+    !useDbSession && !stateless && sessionId
+      ? getSession(sessionId) !== null
+      : false;
 
-  const useSession = !stateless && sessionId ? getSession(sessionId) !== null : false;
-
-  let conversationHistory: ConversationMessage[] = stateless
-    ? fromHistoryEntries(reqHistory!)
-    : useSession
-    ? loadSessionHistory(sessionId!)
-    : globalHistory;
+  let conversationHistory: ConversationMessage[] = useDbSession
+    ? await sessionsDb.loadSessionHistory(req.userId!, sessionId!)
+    : stateless
+      ? fromHistoryEntries(reqHistory!)
+      : useSession
+        ? loadSessionHistory(sessionId!)
+        : IS_HOSTED
+          ? [] // hosted + no sessionId + no history → start fresh; never touch shared globalHistory
+          : globalHistory;
 
   const client = new Anthropic({ apiKey });
 
@@ -556,6 +521,27 @@ RESOURCE AWARENESS: Factor in the player's state from the watch log (health, sta
       await recordUsage(req.userId, "chat", cost, 0);
     }
 
+    if (useDbSession) {
+      // Hosted DB path — per-account chat history in Postgres.
+      await sessionsDb.persistChatTurn({
+        userId: req.userId!,
+        sessionId: sessionId!,
+        userMessage: message.trim(),
+        assistantReply: reply,
+        imageDataUrl: imageBase64
+          ? `data:${chatMediaType};base64,${imageBase64}`
+          : null,
+        history: conversationHistory,
+        gameName: gameName ?? null,
+      });
+      res.json({
+        reply,
+        model: response.model,
+        tokensUsed: response.usage.input_tokens + response.usage.output_tokens,
+      });
+      return;
+    }
+
     if (stateless) {
       // Stateless: return updated history to the caller — no disk writes
       res.json({
@@ -606,10 +592,11 @@ RESOURCE AWARENESS: Factor in the player's state from the watch log (health, sta
         messageCount,
         gameContext: gameName ?? null,
       });
-    } else {
+    } else if (!IS_HOSTED) {
       globalHistory = conversationHistory;
       saveHistory(conversationHistory);
     }
+    // hosted with no sessionId: stateless-no-op, do not persist to shared globalHistory.
 
     res.json({
       reply,
@@ -685,6 +672,11 @@ router.post("/chat/message/stream", ...protect, async (req, res) => {
   };
 
   // ── PROXY MODE — pipe upstream SSE through ──────────────────────────────
+  // Same rationale as the non-streaming proxy branch: history lives in
+  // the hosted Postgres DB now (per-account, cross-device), so the
+  // proxy is a pure pass-through. We forward sessionId + auth header
+  // and pipe the SSE bytes straight through to the renderer — no local
+  // disk reads or writes, no need to parse out finalUpdatedHistory.
   const hostedUrl = process.env.UNSTUCK_API_URL ?? process.env.NEXUS_LINK_API_URL;
   if (hostedUrl) {
     let imageData: string | null = reqImageData ?? null;
@@ -692,15 +684,6 @@ router.post("/chat/message/stream", ...protect, async (req, res) => {
       const latest = getLatestScreenshot();
       if (latest.available && latest.imageData) imageData = latest.imageData;
     }
-    const useSession = sessionId ? getSession(sessionId) !== null : false;
-    const localHistory: ConversationMessage[] = useSession
-      ? loadSessionHistory(sessionId!)
-      : globalHistory;
-    const historyEntries = toHistoryEntries(localHistory);
-
-    let accumulated = "";
-    let finalReply = "";
-    let finalUpdatedHistory: HistoryEntry[] | undefined;
 
     try {
       const authHeader = req.headers.authorization;
@@ -711,7 +694,14 @@ router.post("/chat/message/stream", ...protect, async (req, res) => {
           Accept: "text/event-stream",
           ...(authHeader ? { Authorization: authHeader } : {}),
         },
-        body: JSON.stringify({ message, gameName, imageData, history: historyEntries, watchLog: reqWatchLog, watchMode: reqWatchMode }),
+        body: JSON.stringify({
+          message,
+          gameName,
+          imageData,
+          sessionId,
+          watchLog: reqWatchLog,
+          watchMode: reqWatchMode,
+        }),
       });
 
       if (!upstream.ok || !upstream.body) {
@@ -721,93 +711,13 @@ router.post("/chat/message/stream", ...protect, async (req, res) => {
         return;
       }
 
-      // Parse SSE line-by-line from upstream so we can capture the final
-      // payload (we need updatedHistory to persist locally) while forwarding
-      // every event byte-for-byte to the renderer.
       const reader = upstream.body.getReader();
       const decoder = new TextDecoder();
-      let buf = "";
-      let curEvent = "";
-      let curData = "";
-
-      const flushEvent = () => {
-        if (curEvent === "delta" && curData) {
-          try {
-            const d = JSON.parse(curData) as { text?: string };
-            if (d.text) accumulated += d.text;
-          } catch { /* noop */ }
-        } else if (curEvent === "done" && curData) {
-          try {
-            const d = JSON.parse(curData) as { reply?: string; updatedHistory?: HistoryEntry[] };
-            if (d.reply) finalReply = d.reply;
-            if (d.updatedHistory) finalUpdatedHistory = d.updatedHistory;
-          } catch { /* noop */ }
-        }
-        curEvent = "";
-        curData = "";
-      };
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        res.write(chunk); // forward raw bytes immediately
-        buf += chunk;
-        let idx: number;
-        while ((idx = buf.indexOf("\n")) !== -1) {
-          const line = buf.slice(0, idx).replace(/\r$/, "");
-          buf = buf.slice(idx + 1);
-          if (line === "") {
-            flushEvent();
-          } else if (line.startsWith("event: ")) {
-            curEvent = line.slice(7).trim();
-          } else if (line.startsWith("data: ")) {
-            curData += (curData ? "\n" : "") + line.slice(6);
-          }
-        }
+        res.write(decoder.decode(value, { stream: true }));
       }
-      // Always attempt a final flush — the upstream may end without a
-      // terminal blank line but with pending event/data accumulated.
-      if (buf.length > 0) {
-        // process any remaining lines (no trailing newline)
-        const trailing = buf.replace(/\r$/, "");
-        if (trailing.startsWith("event: ")) curEvent = trailing.slice(7).trim();
-        else if (trailing.startsWith("data: ")) curData += (curData ? "\n" : "") + trailing.slice(6);
-        buf = "";
-      }
-      flushEvent();
-
-      // Persist updated history locally
-      const reply = finalReply || accumulated;
-      if (reply && finalUpdatedHistory) {
-        const updatedHistory = fromHistoryEntries(finalUpdatedHistory);
-        if (useSession) {
-          saveSessionHistory(sessionId!, updatedHistory);
-          const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-          const messageCount = Math.floor(updatedHistory.length / 2);
-          const userMsgId = `${Date.now()}-user`;
-          const assistantMsgId = `${Date.now() + 1}-assistant`;
-          let screenshotRef: string | null = null;
-          if (imageData) {
-            const clean = imageData.replace(/^data:image\/\w+;base64,/, "");
-            saveScreenshotFile(sessionId!, userMsgId, clean);
-            screenshotRef = `file:${userMsgId}`;
-          }
-          appendSessionMessages(sessionId!, [
-            { id: userMsgId, role: "user", content: message.trim(), timestamp: now, screenshot: screenshotRef },
-            { id: assistantMsgId, role: "assistant", content: reply, timestamp: now, screenshot: null },
-          ]);
-          updateSession(sessionId!, {
-            updatedAt: new Date().toISOString(),
-            messageCount,
-            gameContext: gameName ?? null,
-          });
-        } else {
-          globalHistory = updatedHistory;
-          saveHistory(updatedHistory);
-        }
-      }
-
       res.end();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Unknown error";
@@ -825,13 +735,23 @@ router.post("/chat/message/stream", ...protect, async (req, res) => {
     return;
   }
 
-  const stateless = Array.isArray(reqHistory);
-  const useSession = !stateless && sessionId ? getSession(sessionId) !== null : false;
-  let conversationHistory: ConversationMessage[] = stateless
-    ? fromHistoryEntries(reqHistory!)
-    : useSession
-    ? loadSessionHistory(sessionId!)
-    : globalHistory;
+  // Same DB-first resolution as the non-streaming handler — see the long
+  // comment there for the precedence rationale.
+  const useDbSession = IS_HOSTED && !!req.userId && !!sessionId;
+  const stateless = !useDbSession && Array.isArray(reqHistory);
+  const useSession =
+    !useDbSession && !stateless && sessionId
+      ? getSession(sessionId) !== null
+      : false;
+  let conversationHistory: ConversationMessage[] = useDbSession
+    ? await sessionsDb.loadSessionHistory(req.userId!, sessionId!)
+    : stateless
+      ? fromHistoryEntries(reqHistory!)
+      : useSession
+        ? loadSessionHistory(sessionId!)
+        : IS_HOSTED
+          ? [] // hosted + no sessionId + no history → start fresh; never touch shared globalHistory
+          : globalHistory;
 
   const client = new Anthropic({ apiKey });
 
@@ -1234,7 +1154,19 @@ RESOURCE AWARENESS: Factor in the player's state from the watch log (health, sta
       return;
     }
 
-    if (useSession) {
+    if (useDbSession) {
+      await sessionsDb.persistChatTurn({
+        userId: req.userId!,
+        sessionId: sessionId!,
+        userMessage: message.trim(),
+        assistantReply: reply,
+        imageDataUrl: imageBase64
+          ? `data:${chatMediaType};base64,${imageBase64}`
+          : null,
+        history: conversationHistory,
+        gameName: gameName ?? null,
+      });
+    } else if (useSession) {
       saveSessionHistory(sessionId!, conversationHistory);
       const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
       const messageCount = Math.floor(conversationHistory.length / 2);
@@ -1254,10 +1186,11 @@ RESOURCE AWARENESS: Factor in the player's state from the watch log (health, sta
         messageCount,
         gameContext: gameName ?? null,
       });
-    } else {
+    } else if (!stateless && !IS_HOSTED) {
       globalHistory = conversationHistory;
       saveHistory(conversationHistory);
     }
+    // hosted with no sessionId: stateless-no-op, do not persist to shared globalHistory.
 
     send("done", {
       reply,

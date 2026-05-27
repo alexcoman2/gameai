@@ -740,7 +740,54 @@ function installClerkCookieMirror(): void {
   // Live: mirror every future change.
   cookies.on("changed", (_evt, cookie, cause, removed) => {
     void mirrorCookie(cookie, cause, removed);
+    // Track sign-in/sign-out transitions so we can notify the overlay
+    // window. clerk-js initializes once per BrowserWindow lifecycle and
+    // caches the auth state in memory; mirroring new cookies onto the
+    // local origin updates the cookie jar but does NOT re-run clerk-js
+    // in the already-loaded overlay renderer. Without this nudge the
+    // overlay keeps showing the pre-sign-in UI ("Please sign in") until
+    // the whole app is restarted.
+    if (
+      cookie.name === "__session" &&
+      (cookie.domain ?? "").endsWith(PROXY_HOST_SUFFIX)
+    ) {
+      const isRealRemoval =
+        removed && (cause === "explicit" || cause === "expired");
+      const nextValue = isRealRemoval ? "" : cookie.value;
+      maybeBroadcastAuthChange(nextValue);
+    }
   });
+}
+
+// Last known __session value (empty string = signed out). Used to debounce
+// the auth-changed broadcast so we only fire on real sign-in/out edges,
+// not on every cookie re-set storm Chromium produces (which can fire
+// 5-10 events per single Clerk login).
+let lastSessionValue: string | null = null;
+let authBroadcastTimer: NodeJS.Timeout | null = null;
+function maybeBroadcastAuthChange(nextValue: string): void {
+  if (lastSessionValue === null) {
+    // First observation. Seed the baseline without broadcasting — the
+    // overlay was created from scratch and already saw whatever cookies
+    // existed at load time.
+    lastSessionValue = nextValue;
+    return;
+  }
+  if (lastSessionValue === nextValue) return;
+  lastSessionValue = nextValue;
+  // Coalesce bursts: Clerk's sign-in flow rewrites __session a few times
+  // in quick succession (cookie domain variants, JWT refreshes). Wait a
+  // beat and only reload once.
+  if (authBroadcastTimer) clearTimeout(authBroadcastTimer);
+  authBroadcastTimer = setTimeout(() => {
+    authBroadcastTimer = null;
+    appendServerLog(
+      `[main] auth-changed: notifying overlay (signed ${nextValue ? "in" : "out"})\n`,
+    );
+    if (overlayWindow && !overlayWindow.isDestroyed()) {
+      overlayWindow.webContents.send("auth-changed");
+    }
+  }, 300);
 }
 
 // Bulk pull: snapshot every Clerk cookie currently scoped to the proxy

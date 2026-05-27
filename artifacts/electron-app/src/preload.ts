@@ -44,6 +44,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
       ipcRenderer.removeListener("overlay-handsfree-toggle", listener);
   },
 
+  // Fired by the main process when the mirrored __session cookie on the
+  // local origin transitions (sign-in or sign-out). The overlay listens
+  // and hard-reloads so clerk-js re-initializes against the new cookie
+  // state instead of holding its stale in-memory snapshot.
+  onAuthChanged: (cb: () => void): (() => void) => {
+    const listener = () => cb();
+    ipcRenderer.on("auth-changed", listener);
+    return () => ipcRenderer.removeListener("auth-changed", listener);
+  },
+
   // Open a URL in the user's default OS browser instead of inside the
   // Electron BrowserWindow. Used for PayPal checkout so the user gets
   // their real browser's WebAuthn provider (Windows Hello, saved cards,

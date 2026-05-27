@@ -25,6 +25,7 @@ type ElectronAPI = {
   onOverlayShown?: (cb: () => void) => () => void;
   onPttToggle?: (cb: () => void) => () => void;
   onHandsFreeToggle?: (cb: () => void) => () => void;
+  onAuthChanged?: (cb: () => void) => () => void;
 };
 
 function getElectronAPI(): ElectronAPI | null {
@@ -182,6 +183,20 @@ export default function OverlayPage() {
   useEffect(() => {
     void electronAPI?.overlayGetHotkey?.().then((h) => setHotkey(h));
     void electronAPI?.overlayGetPttHotkey?.().then((h) => setPttHotkey(h));
+  }, [electronAPI]);
+
+  // Reload the overlay window when the main process detects a sign-in or
+  // sign-out (mirrored __session cookie changed on the local origin).
+  // clerk-js caches the auth state in memory at first mount, so without
+  // this nudge the overlay keeps rendering the pre-sign-in UI even after
+  // the user signs in on the main window. A hard reload is the cleanest
+  // way to force clerk-js to re-initialize against the fresh cookies.
+  useEffect(() => {
+    if (!electronAPI?.onAuthChanged) return;
+    const off = electronAPI.onAuthChanged(() => {
+      window.location.reload();
+    });
+    return off;
   }, [electronAPI]);
 
   // Force <html> and <body> to be transparent on the overlay route.
