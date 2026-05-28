@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ClerkProvider, SignIn, SignUp, useClerk, useAuth } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, useClerk, useAuth, useSignIn } from "@clerk/react";
 import { setAuthTokenGetter as setApiClientAuthTokenGetter } from "@workspace/api-client-react";
 import { setAuthTokenGetter } from "@/lib/auth-fetch";
 import { identifyUser, resetUser, trackPageview } from "@/lib/posthog";
@@ -127,6 +127,56 @@ function SignUpPage() {
   );
 }
 
+// Browser-based desktop sign-in landing page. Reached when the Electron app
+// opens https://<hosted>/desktop/auth?state=<nonce> in the user's real OS
+// browser. If the visitor isn't signed in, render the normal Clerk <SignIn>
+// returning to this same URL (preserving the state nonce). Once signed in,
+// forward the browser to the token-minting endpoint, which 302-redirects to
+// the unstuck:// deep link that hands control back to the desktop app.
+function DesktopAuthPage() {
+  const { isLoaded, isSignedIn } = useAuth();
+  const search =
+    typeof window !== "undefined" ? window.location.search : "";
+  const state = new URLSearchParams(search).get("state") ?? "";
+  const selfUrl = `${window.location.origin}${basePath}/desktop/auth${
+    state ? `?state=${encodeURIComponent(state)}` : ""
+  }`;
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    const tokenUrl = `${basePath}/api/desktop/token${
+      state ? `?state=${encodeURIComponent(state)}` : ""
+    }`;
+    window.location.href = tokenUrl;
+  }, [isLoaded, isSignedIn, state]);
+
+  if (isLoaded && isSignedIn) {
+    return (
+      <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-3 bg-background px-4 text-center">
+        <p className="font-mono text-sm uppercase tracking-wider text-primary">
+          Returning you to Unstuck…
+        </p>
+        <p className="max-w-sm text-xs text-muted-foreground">
+          If your desktop app doesn&apos;t come back to focus, you can close
+          this tab and return to it manually.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center bg-background px-4">
+      <SignIn
+        routing="path"
+        path={`${basePath}/desktop/auth`}
+        signUpUrl={`${basePath}/sign-up`}
+        forceRedirectUrl={selfUrl}
+        fallbackRedirectUrl={selfUrl}
+      />
+    </div>
+  );
+}
+
 function ClerkAuthTokenBridge() {
   const { getToken, isLoaded } = useAuth();
   useEffect(() => {
@@ -145,6 +195,43 @@ function ClerkAuthTokenBridge() {
       setApiClientAuthTokenGetter(null);
     };
   }, [getToken, isLoaded]);
+  return null;
+}
+
+// Inside Electron only. The desktop app sends a short-lived Clerk sign-in
+// token (minted by the hosted server and delivered through the unstuck://
+// deep link) once the user has signed in inside their real OS browser. We
+// exchange that ticket for an active session on the local origin so the
+// whole app (main window + overlay) becomes signed-in, with Clerk's cookies
+// written first-party through the /api/__clerk proxy.
+function DesktopAuthTicketBridge() {
+  const { signIn } = useSignIn();
+  useEffect(() => {
+    if (!signIn) return;
+    const api = (window as Window & {
+      electronAPI?: {
+        onDesktopAuthTicket?: (
+          cb: (payload: { ticket: string }) => void,
+        ) => () => void;
+      };
+    }).electronAPI;
+    if (!api?.onDesktopAuthTicket) return;
+    const off = api.onDesktopAuthTicket(({ ticket }) => {
+      if (!ticket) return;
+      void (async () => {
+        // Signal-based custom flow: ticket() drives the SignIn resource to
+        // `complete`, then finalize() promotes it to the active session
+        // (updating useUser / useAuth everywhere). Errors are returned, not
+        // thrown — an expired/used ticket just leaves the user to retry.
+        const { error } = await signIn.ticket({ ticket });
+        if (error) return;
+        if (signIn.status === "complete") {
+          await signIn.finalize();
+        }
+      })();
+    });
+    return off;
+  }, [signIn]);
   return null;
 }
 
@@ -213,6 +300,7 @@ function AppRoutes() {
     <Switch>
       <Route path="/sign-in/*?" component={SignInPage} />
       <Route path="/sign-up/*?" component={SignUpPage} />
+      <Route path="/desktop/auth/*?" component={DesktopAuthPage} />
       <Route path="/" component={RootRoute} />
       <Route path="/settings" component={Settings} />
       <Route path="/upgrade" component={Upgrade} />
@@ -233,7 +321,10 @@ function AppRoutes() {
 
 function WrappedAppRoutes() {
   const [location] = useLocation();
-  const isAuthPage = location.startsWith("/sign-in") || location.startsWith("/sign-up");
+  const isAuthPage =
+    location.startsWith("/sign-in") ||
+    location.startsWith("/sign-up") ||
+    location.startsWith("/desktop/auth");
   // Overlay renders standalone (frameless transparent window in Electron) — no
   // app chrome, no header, no padding.
   const isOverlayPage = location.startsWith("/overlay");
@@ -287,6 +378,7 @@ function App() {
     >
       <QueryClientProvider client={queryClient}>
         <ClerkAuthTokenBridge />
+        <DesktopAuthTicketBridge />
         <ClerkQueryClientCacheInvalidator />
         <TooltipProvider>
           <ChatProvider>

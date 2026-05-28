@@ -10,16 +10,36 @@ const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 function AuthPill() {
   const { user } = useUser();
   const { signOut } = useClerk();
+  const electronAPI = (window as Window & {
+    electronAPI?: {
+      isElectron?: boolean;
+      startDesktopSignIn?: () => Promise<boolean>;
+    };
+  }).electronAPI;
+  const isElectron = !!electronAPI?.isElectron;
+  const signInClass =
+    "flex items-center gap-2 px-3 py-2 border border-primary/40 text-primary text-xs font-mono uppercase tracking-wider hover:bg-primary hover:text-primary-foreground transition-colors";
   return (
     <>
       <Show when="signed-out">
-        <Link
-          href="/sign-in"
-          className="flex items-center gap-2 px-3 py-2 border border-primary/40 text-primary text-xs font-mono uppercase tracking-wider hover:bg-primary hover:text-primary-foreground transition-colors"
-        >
-          <LogIn className="w-4 h-4" />
-          Sign in
-        </Link>
+        {/* Inside the desktop app, sign-in happens in the user's real OS
+            browser (where Google OAuth / passkeys work) and is handed back
+            via a deep link. On the public website, navigate to /sign-in. */}
+        {isElectron ? (
+          <button
+            type="button"
+            onClick={() => void electronAPI?.startDesktopSignIn?.()}
+            className={signInClass}
+          >
+            <LogIn className="w-4 h-4" />
+            Sign in
+          </button>
+        ) : (
+          <Link href="/sign-in" className={signInClass}>
+            <LogIn className="w-4 h-4" />
+            Sign in
+          </Link>
+        )}
       </Show>
       <Show when="signed-in">
         <div className="flex items-center gap-2">

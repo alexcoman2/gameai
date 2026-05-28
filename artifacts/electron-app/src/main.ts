@@ -12,6 +12,7 @@ import {
   type UtilityProcess,
 } from "electron";
 import { execFileSync } from "child_process";
+import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as http from "http";
 import * as net from "net";
@@ -42,6 +43,40 @@ if (!gotSingleInstanceLock) {
   app.quit();
   process.exit(0);
 }
+
+// ── Custom protocol for browser-based sign-in ──────────────────────────────
+// Sign-in happens in the user's real OS browser (where Google OAuth and
+// passkeys work) at https://<hosted>/desktop/auth. Once authenticated the
+// hosted server 302-redirects to `unstuck://auth?ticket=…&state=…`, which the
+// OS routes back to this app. Register Unstuck as the handler for that scheme.
+const DEEP_LINK_PROTOCOL = "unstuck";
+if (process.defaultApp) {
+  // electron-vite / `electron .` dev: argv[1] is the app entry path, which
+  // must be forwarded so Windows re-launches us correctly on a deep link.
+  if (process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient(DEEP_LINK_PROTOCOL, process.execPath, [
+      path.resolve(process.argv[1]),
+    ]);
+  }
+} else {
+  app.setAsDefaultProtocolClient(DEEP_LINK_PROTOCOL);
+}
+
+// The hosted web origin that runs the browser sign-in flow. Same host the
+// proxy talks to; overridable for staging via UNSTUCK_API_URL.
+const HOSTED_WEB_ORIGIN =
+  process.env.UNSTUCK_API_URL ||
+  process.env.NEXUS_LINK_API_URL ||
+  "https://game-companion-ai.replit.app";
+
+// Opaque nonce for the in-flight sign-in. Set when the renderer asks us to
+// start sign-in, echoed by the hosted server in the deep link, and verified
+// before we exchange the ticket — so a stray unstuck:// link can't inject an
+// arbitrary session.
+let pendingDesktopAuthState: string | null = null;
+// Ticket that arrived before the renderer was ready to receive it (cold-start
+// deep link). Flushed once the main window finishes loading.
+let pendingAuthTicket: { ticket: string; state: string } | null = null;
 
 // Locked to a single fixed port. The origin (http://127.0.0.1:8765) is part
 // of Clerk's cookie scope — if the port shifts between launches, the user's
@@ -359,56 +394,8 @@ function createWindow(): void {
   mainWindow.webContents.on("did-navigate-in-page", (_evt, url) => {
     appendServerLog(`[main] did-navigate-in-page url=${url}\n`);
   });
-  // Safety net: if Clerk (or anything else) sends us to the hosted Replit
-  // origin for a non-API page, rewrite the navigation back to the local
-  // server so the Electron window stays on http://127.0.0.1:8765. We MUST
-  // still allow /api/__clerk/* callbacks through — those endpoints set the
-  // Clerk session cookies (proxied) before the final redirect home.
-  const HOSTED_ORIGIN = "https://game-companion-ai.replit.app";
-  const rewriteHostedToLocal = (
-    rawUrl: string,
-  ): string | null => {
-    if (!rawUrl.startsWith(HOSTED_ORIGIN)) return null;
-    let parsed: URL;
-    try {
-      parsed = new URL(rawUrl);
-    } catch {
-      return null;
-    }
-    // Leave Clerk proxy callbacks (and any other /api/ endpoint that must
-    // stay on the hosted origin to set/read cookies) untouched.
-    if (parsed.pathname.startsWith("/api/")) return null;
-    const local = new URL(mainUrl);
-    local.pathname = parsed.pathname;
-    local.search = parsed.search;
-    local.hash = parsed.hash;
-    return local.toString();
-  };
-  mainWindow.webContents.on("will-redirect", (evt, url) => {
+  mainWindow.webContents.on("will-redirect", (_evt, url) => {
     appendServerLog(`[main] will-redirect → ${url}\n`);
-    const rewritten = rewriteHostedToLocal(url);
-    if (rewritten) {
-      appendServerLog(
-        `[main] rewriting hosted→local: ${url} → ${rewritten}\n`,
-      );
-      evt.preventDefault();
-      void mainWindow?.loadURL(rewritten);
-      return;
-    }
-    // Any redirect that lands on the local origin: pull a full snapshot
-    // of every Clerk cookie from the proxy host onto the local origin
-    // BEFORE the page loads, so clerk-js initializes against a coherent
-    // state. We can't gate this on webContents.getURL() containing the
-    // proxy host — during a chained redirect that getter still returns
-    // the last fully-loaded page (e.g. /sign-in), not the intermediate
-    // hosted URLs. The sync is cheap and idempotent, so just always run
-    // it on redirect-to-local.
-    if (url.startsWith(mainUrl)) {
-      evt.preventDefault();
-      void syncAllClerkCookiesFromProxy().finally(() => {
-        void mainWindow?.loadURL(url);
-      });
-    }
   });
   // Hand off PayPal (and any other external payment / OAuth host whose
   // WebAuthn flow we can't satisfy inside Electron) to the user's OS
@@ -428,15 +415,6 @@ function createWindow(): void {
       appendServerLog(`[main] handing off to OS browser: ${url}\n`);
       evt.preventDefault();
       void shell.openExternal(url);
-      return;
-    }
-    const rewritten = rewriteHostedToLocal(url);
-    if (rewritten) {
-      appendServerLog(
-        `[main] rewriting hosted→local: ${url} → ${rewritten}\n`,
-      );
-      evt.preventDefault();
-      void mainWindow?.loadURL(rewritten);
     }
   });
   mainWindow.webContents.on(
@@ -464,6 +442,18 @@ function createWindow(): void {
   });
 
   void mainWindow.loadURL(mainUrl);
+
+  // Flush any deep-link sign-in ticket that arrived before the renderer was
+  // ready (cold-start launch via unstuck://). did-finish-load guarantees the
+  // React tree (and the ticket listener) is mounted.
+  mainWindow.webContents.on("did-finish-load", () => {
+    if (pendingAuthTicket && mainWindow && !mainWindow.isDestroyed()) {
+      const payload = pendingAuthTicket;
+      pendingAuthTicket = null;
+      appendServerLog(`[main] flushing queued sign-in ticket to renderer\n`);
+      mainWindow.webContents.send("desktop-auth-ticket", payload);
+    }
+  });
 
   mainWindow.once("ready-to-show", () => {
     mainWindow?.show();
@@ -668,100 +658,37 @@ process.on("unhandledRejection", (reason) => {
   appendServerLog(`[main] unhandledRejection: ${String(reason)}\n`);
 });
 
-// Clerk's OAuth callback lands on the hosted proxy host
-// (game-companion-ai.replit.app) and sets cookies scoped there. Our app
-// runs at http://127.0.0.1:8765, so document.cookie at that origin can't
-// see them and Clerk reports "signed out". Mirror Clerk-related cookies
-// from the hosted proxy host onto the local origin inside Electron's
-// shared cookie store so the local app sees the session.
-function installClerkCookieMirror(): void {
+// Watch the local-origin __session cookie so we can nudge the overlay
+// (a separate BrowserWindow with its own clerk-js instance) to re-init when
+// the user signs in or out in the main window. Sign-in now flows through the
+// browser hand-back + ticket exchange, which writes Clerk's cookies on the
+// local origin via the /api/__clerk first-party proxy — so we only ever need
+// to watch the local origin here. We do NOT mirror, clear, or rewrite any
+// cookies; clerk-js owns the cookie jar.
+function installAuthChangeWatcher(): void {
   const cookies = session.defaultSession.cookies;
-  const PROXY_HOST_SUFFIX = "game-companion-ai.replit.app";
-  const LOCAL_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
-  // Clerk cookies: __client, __session, __client_uat, __clerk_db_jwt,
-  // and any __refresh_* / __session_* variants. Mirror anything that
-  // looks Clerk-shaped so we don't have to chase new names.
-  const isClerkCookie = (name: string): boolean =>
-    name.startsWith("__client") ||
-    name.startsWith("__session") ||
-    name.startsWith("__refresh") ||
-    name.startsWith("__clerk");
-
-  const mirrorCookie = async (
-    cookie: Electron.Cookie,
-    cause: string,
-    removed: boolean,
-  ): Promise<void> => {
-    if (!isClerkCookie(cookie.name)) return;
-    const domain = cookie.domain ?? "";
-    if (!domain.endsWith(PROXY_HOST_SUFFIX)) return;
+  // Seed the baseline from whatever __session is already on the local origin
+  // at startup so the first real sign-in/out edge after launch is detected.
+  void (async () => {
     try {
-      if (removed) {
-        // Chromium fires `removed=true` with cause="overwrite" whenever the
-        // same cookie is re-set (e.g. once for ".game-companion-ai.replit.app"
-        // and once for "game-companion-ai.replit.app"). If we mirror that as
-        // an actual delete on the local origin we wipe the session we just
-        // installed. Only mirror genuine removals.
-        if (cause !== "explicit" && cause !== "expired") {
-          return;
-        }
-        await cookies.remove(LOCAL_URL, cookie.name);
-        appendServerLog(
-          `[main] clerk cookie mirror: removed ${cookie.name} on local (cause=${cause})\n`,
-        );
-        return;
-      }
-      await cookies.set({
-        url: LOCAL_URL,
-        name: cookie.name,
-        value: cookie.value,
-        path: cookie.path || "/",
-        httpOnly: cookie.httpOnly,
-        // http://127.0.0.1 cannot accept Secure cookies; force off.
-        secure: false,
-        // SameSite=None requires Secure; downgrade to Lax for localhost.
-        sameSite: cookie.sameSite === "no_restriction" ? "lax" : cookie.sameSite,
-        expirationDate: cookie.expirationDate,
+      const local = await cookies.get({
+        url: `http://${SERVER_HOST}:${SERVER_PORT}`,
+        name: "__session",
       });
-      appendServerLog(
-        `[main] clerk cookie mirror: set ${cookie.name} on local (from ${domain})\n`,
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      appendServerLog(
-        `[main] clerk cookie mirror: failed for ${cookie.name}: ${msg}\n`,
-      );
+      const seed = local.find((c) => c.name === "__session");
+      if (lastSignedIn === null) {
+        lastSignedIn = (seed?.value ?? "").length > 0;
+      }
+    } catch {
+      // ignore — first cookie event will seed instead
     }
-  };
-
-  // One-shot: copy any cookies already in the store (re-launch case).
-  void syncAllClerkCookiesFromProxy();
-
-  // Live: mirror every future change.
-  cookies.on("changed", (_evt, cookie, cause, removed) => {
-    void mirrorCookie(cookie, cause, removed);
-    void cause;
-    void removed;
-    // Track sign-in/sign-out transitions so we can notify the overlay
-    // window. clerk-js initializes once per BrowserWindow lifecycle and
-    // caches the auth state in memory; updating cookies does NOT re-run
-    // clerk-js in the already-loaded overlay renderer. Without this
-    // nudge the overlay keeps showing the pre-sign-in UI ("Please sign
-    // in") until the whole app is restarted.
-    //
-    // Watch BOTH origins:
-    //  - PROXY_HOST_SUFFIX: legacy/OAuth-callback path that sets cookies
-    //    directly on the hosted proxy domain.
-    //  - LOCAL (127.0.0.1): primary path when Clerk traffic flows
-    //    through VITE_CLERK_PROXY_URL (/api/__clerk) — Set-Cookie comes
-    //    back rewritten to the local origin, never touching the proxy
-    //    host.
+  })();
+  cookies.on("changed", (_evt, cookie) => {
+    // Don't try to infer sign-in/out from the event payload — `cause` and
+    // `removed` vary across Electron versions and fire for plain value
+    // overwrites (Clerk rotates __session ~every 50s). Re-query the store
+    // and check whether a non-empty __session exists on the local origin.
     if (cookie.name === "__session") {
-      // Don't try to infer sign-in/out from the event payload — `cause`
-      // varies across Electron versions and `removed=true` fires for
-      // plain value-update overwrites too. Just re-query the cookie
-      // store and check if any non-empty __session exists on either
-      // the proxy host or the local origin.
       void recomputeAuthAndMaybeBroadcast();
     }
   });
@@ -770,12 +697,11 @@ function installClerkCookieMirror(): void {
 async function recomputeAuthAndMaybeBroadcast(): Promise<void> {
   const cookies = session.defaultSession.cookies;
   try {
-    const [proxy, local] = await Promise.all([
-      cookies.get({ name: "__session" }),
-      cookies.get({ url: `http://${SERVER_HOST}:${SERVER_PORT}`, name: "__session" }),
-    ]);
-    const allSessions = [...proxy, ...local];
-    const signedIn = allSessions.some((c) => (c.value ?? "").length > 0);
+    const local = await cookies.get({
+      url: `http://${SERVER_HOST}:${SERVER_PORT}`,
+      name: "__session",
+    });
+    const signedIn = local.some((c) => (c.value ?? "").length > 0);
     maybeBroadcastAuthChange(signedIn ? "x" : "");
   } catch {
     // ignore — next event will retry
@@ -800,116 +726,87 @@ function maybeBroadcastAuthChange(nextValue: string): void {
   }
   if (lastSignedIn === nextSignedIn) return;
   lastSignedIn = nextSignedIn;
-  // Coalesce bursts: Clerk's sign-in flow rewrites __session a few times
-  // in quick succession (cookie domain variants, JWT refreshes). Wait a
-  // beat and only reload once.
+  // Coalesce bursts: the ticket exchange + setActive rewrites __session a
+  // few times in quick succession (cookie domain variants, JWT refreshes).
+  // Wait a beat and only reload once.
   if (authBroadcastTimer) clearTimeout(authBroadcastTimer);
   authBroadcastTimer = setTimeout(() => {
     authBroadcastTimer = null;
-    // Destroy the overlay window outright instead of asking the renderer
-    // to reload. A renderer-side window.location.reload() can rehydrate
-    // stale Clerk state from localStorage/sessionStorage and end up
-    // showing the same "signed out" UI even after the cookies changed.
-    // Destroying the BrowserWindow guarantees the next overlay show
-    // mounts a fresh React tree with a fresh clerk-js init against the
-    // current cookie jar. If the overlay isn't currently open, this is
-    // a no-op — the next hotkey press already creates a fresh window.
+    // Ask the overlay renderer to reload so its clerk-js re-initializes
+    // against the current cookie jar. We intentionally do NOT destroy the
+    // window or clear storage here — clearing the local origin's storage
+    // wiped Clerk's own persisted state and was the root cause of the
+    // logout-on-restart / broken-sign-in bug. A plain reload re-bootstraps
+    // clerk-js cleanly from the cookies. If the overlay isn't open this is
+    // a no-op — the next hotkey press creates a fresh window.
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       appendServerLog(
-        `[main] auth-changed: destroying overlay (signed ${nextSignedIn ? "in" : "out"})\n`,
+        `[main] auth-changed: reloading overlay (signed ${nextSignedIn ? "in" : "out"})\n`,
       );
-      // Clear Clerk's per-origin storage on the shared session before
-      // tearing down the window. Otherwise clerk-js can rehydrate a
-      // stale auth snapshot from localStorage/IndexedDB on the next
-      // fresh window mount and stay locked in the previous user's
-      // signed-in/out state even though the cookies now disagree.
-      const LOCAL_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
-      void session.defaultSession
-        .clearStorageData({
-          origin: LOCAL_URL,
-          storages: ["localstorage", "indexdb", "cachestorage", "serviceworkers"],
-        })
-        .catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          appendServerLog(`[main] auth-changed: clearStorageData failed: ${msg}\n`);
-        })
-        .finally(() => {
-          if (overlayWindow && !overlayWindow.isDestroyed()) {
-            overlayWindow.destroy();
-          }
-          overlayWindow = null;
-        });
+      overlayWindow.webContents.send("auth-changed");
     } else {
       appendServerLog(
-        `[main] auth-changed: no overlay window to destroy (signed ${nextSignedIn ? "in" : "out"})\n`,
+        `[main] auth-changed: no overlay window to reload (signed ${nextSignedIn ? "in" : "out"})\n`,
       );
     }
   }, 1500);
 }
 
-// Bulk pull: snapshot every Clerk cookie currently scoped to the proxy
-// host and re-set it on the local origin. Used at startup and after the
-// OAuth round-trip lands back on http://127.0.0.1:8765 — at that moment
-// the per-event listener has only seen Set-Cookie for __client (the only
-// header in the final callback response), but clerk-js on the local
-// page needs __client_uat* and __session* to recognize the user as
-// signed in. Pulling everything in one shot guarantees a coherent snap-
-// shot regardless of which individual events fired or were missed.
-async function syncAllClerkCookiesFromProxy(): Promise<void> {
-  const cookies = session.defaultSession.cookies;
-  const PROXY_HOST_SUFFIX = "game-companion-ai.replit.app";
-  const LOCAL_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
-  const isClerkCookie = (name: string): boolean =>
-    name.startsWith("__client") ||
-    name.startsWith("__session") ||
-    name.startsWith("__refresh") ||
-    name.startsWith("__clerk");
+// ── Browser-based sign-in deep-link handling ───────────────────────────────
+
+// Parse and act on an incoming unstuck:// URL. Validates the state nonce
+// against the sign-in we initiated, then forwards the ticket to the renderer.
+function handleDeepLink(rawUrl: string): void {
+  let parsed: URL;
   try {
-    const existing = await cookies.get({ domain: PROXY_HOST_SUFFIX });
-    // Seed the auth-change baseline from whatever __session is already in
-    // the cookie jar at startup so the FIRST real sign-in/out edge after
-    // launch is detected. Check BOTH origins — Clerk via /api/__clerk
-    // sets cookies on local origin, OAuth callback sets them on proxy.
-    if (lastSignedIn === null) {
-      const proxySession = existing.find((c) => c.name === "__session");
-      let localSession: Electron.Cookie | undefined;
-      try {
-        const local = await cookies.get({ url: LOCAL_URL });
-        localSession = local.find((c) => c.name === "__session");
-      } catch {
-        // ignore
-      }
-      const seedValue =
-        localSession?.value ?? proxySession?.value ?? "";
-      lastSignedIn = seedValue.length > 0;
-    }
-    let synced = 0;
-    for (const c of existing) {
-      if (!isClerkCookie(c.name)) continue;
-      try {
-        await cookies.set({
-          url: LOCAL_URL,
-          name: c.name,
-          value: c.value,
-          path: c.path || "/",
-          httpOnly: c.httpOnly,
-          secure: false,
-          sameSite:
-            c.sameSite === "no_restriction" ? "lax" : c.sameSite,
-          expirationDate: c.expirationDate,
-        });
-        synced++;
-      } catch {
-        // Skip individual failures; continue the rest of the snapshot.
-      }
-    }
-    appendServerLog(
-      `[main] clerk cookie mirror: full sync copied ${synced} cookies to local\n`,
-    );
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    appendServerLog(`[main] clerk cookie mirror: full sync failed: ${msg}\n`);
+    parsed = new URL(rawUrl);
+  } catch {
+    return;
   }
+  if (parsed.protocol !== `${DEEP_LINK_PROTOCOL}:`) return;
+  appendServerLog(`[main] deep-link received: ${parsed.host}${parsed.pathname}\n`);
+  // unstuck://auth?ticket=…&state=…
+  const ticket = parsed.searchParams.get("ticket");
+  const state = parsed.searchParams.get("state") ?? "";
+  if (!ticket) {
+    appendServerLog(`[main] deep-link: no ticket present, ignoring\n`);
+    return;
+  }
+  if (!pendingDesktopAuthState || state !== pendingDesktopAuthState) {
+    appendServerLog(`[main] deep-link: state mismatch, ignoring ticket\n`);
+    return;
+  }
+  // Single-use: consume the nonce so a replayed link can't re-trigger.
+  pendingDesktopAuthState = null;
+  deliverAuthTicket(ticket, state);
+}
+
+// Send a verified ticket to the renderer for exchange. If the main window
+// isn't ready yet (cold-start deep link), stash it and flush once loaded.
+function deliverAuthTicket(ticket: string, state: string): void {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    if (!mainWindow.isVisible()) mainWindow.show();
+    mainWindow.focus();
+  }
+  const payload = { ticket, state };
+  if (
+    mainWindow &&
+    !mainWindow.isDestroyed() &&
+    !mainWindow.webContents.isLoading()
+  ) {
+    appendServerLog(`[main] deep-link: delivering ticket to renderer\n`);
+    mainWindow.webContents.send("desktop-auth-ticket", payload);
+  } else {
+    appendServerLog(`[main] deep-link: renderer not ready, queuing ticket\n`);
+    pendingAuthTicket = payload;
+  }
+}
+
+// Pull any unstuck:// URL out of a process argv array (Windows delivers the
+// deep link as a launch argument on both cold start and second-instance).
+function findDeepLinkInArgv(argv: string[]): string | null {
+  return argv.find((a) => a.startsWith(`${DEEP_LINK_PROTOCOL}://`)) ?? null;
 }
 
 app.whenReady().then(async () => {
@@ -926,12 +823,17 @@ app.whenReady().then(async () => {
       `[main] clearCache failed: ${err instanceof Error ? err.message : String(err)}\n`,
     );
   }
-  installClerkCookieMirror();
+  installAuthChangeWatcher();
   startServer()
     .then(() => {
       createWindow();
       createOverlayWindow();
       registerOverlayHotkeys();
+      // Cold start via deep link (Windows passes the unstuck:// URL as a
+      // launch argument). Handle it after the window exists so the ticket
+      // can be delivered/queued for the renderer.
+      const coldLink = findDeepLinkInArgv(process.argv);
+      if (coldLink) handleDeepLink(coldLink);
     })
     .catch((err: unknown) => {
       const msg = err instanceof Error ? err.message : String(err);
@@ -955,12 +857,24 @@ app.on("window-all-closed", () => {
 
 // If the user launches Unstuck while it's already running, focus the existing
 // window instead of letting a second copy try (and fail) to bind the port.
-app.on("second-instance", () => {
+// On Windows a browser sign-in hand-back also arrives here: the OS re-launches
+// the app with the unstuck:// URL in argv, the single-instance lock bounces it,
+// and the URL is delivered to us through this event.
+app.on("second-instance", (_evt, argv) => {
   if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore();
     if (!mainWindow.isVisible()) mainWindow.show();
     mainWindow.focus();
   }
+  const link = findDeepLinkInArgv(argv);
+  if (link) handleDeepLink(link);
+});
+
+// macOS / Linux deliver custom-protocol launches through this event instead
+// of argv. Harmless to handle on all platforms.
+app.on("open-url", (evt, url) => {
+  evt.preventDefault();
+  handleDeepLink(url);
 });
 
 app.on("will-quit", () => {
@@ -1009,6 +923,26 @@ app.on("before-quit", () => {
 // bypasses before-quit.
 process.on("exit", () => {
   killServerProcess();
+});
+
+// Kick off browser-based sign-in. Generate a fresh opaque nonce, remember it
+// so we can verify the hand-back, and open the hosted /desktop/auth page in
+// the user's real OS browser. The browser handles Google OAuth / passkeys
+// (which Electron's Chromium can't), then the hosted server deep-links a
+// short-lived sign-in ticket back to us via unstuck://auth.
+ipcMain.handle("start-desktop-sign-in", async () => {
+  try {
+    const nonce = randomUUID();
+    pendingDesktopAuthState = nonce;
+    const url = `${HOSTED_WEB_ORIGIN}/desktop/auth?state=${encodeURIComponent(nonce)}`;
+    await shell.openExternal(url);
+    appendServerLog(`[main] start-desktop-sign-in → opened browser\n`);
+    return true;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    appendServerLog(`[main] start-desktop-sign-in failed: ${msg}\n`);
+    return false;
+  }
 });
 
 // Open a URL in the user's default OS browser. The renderer uses this for
@@ -1148,25 +1082,3 @@ ipcMain.handle("overlay-get-handsfree-hotkey", () => {
   return null;
 });
 
-// Lets the overlay renderer ask the main process whether the cookie
-// jar believes the user is signed in. The renderer can't see __session
-// (HttpOnly), and Clerk's other indicators (__client_uat) may or may
-// not be present depending on the install. The main process can
-// authoritatively inspect every cookie, so it's the source of truth
-// for the overlay's self-heal-via-reload logic.
-ipcMain.handle("get-cookie-auth-state", async () => {
-  try {
-    const LOCAL_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
-    const jar = await session.defaultSession.cookies.get({ url: LOCAL_URL });
-    const sessionCookie = jar.find((c) => c.name === "__session");
-    const clientCookie = jar.find((c) => c.name === "__client");
-    const uatCookie = jar.find((c) => c.name === "__client_uat");
-    return {
-      hasSession: !!sessionCookie && !!sessionCookie.value,
-      hasClient: !!clientCookie && !!clientCookie.value,
-      uat: uatCookie?.value ?? null,
-    };
-  } catch {
-    return { hasSession: false, hasClient: false, uat: null };
-  }
-});

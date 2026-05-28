@@ -28,6 +28,11 @@ extraResources:
     filter:
       - "**/*"
 
+protocols:
+  - name: Unstuck Sign-In
+    schemes:
+      - unstuck
+
 win:
   icon: assets/icon.ico
   target:

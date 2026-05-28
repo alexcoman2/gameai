@@ -61,14 +61,25 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openExternal: (url: string): Promise<boolean> =>
     ipcRenderer.invoke("open-external", url),
 
-  // Authoritative view of the Clerk cookie jar from the main process.
-  // The renderer can't see HttpOnly cookies like __session via
-  // document.cookie, so the overlay's auto-reload self-heal asks main.
-  getCookieAuthState: (): Promise<{
-    hasSession: boolean;
-    hasClient: boolean;
-    uat: string | null;
-  }> => ipcRenderer.invoke("get-cookie-auth-state"),
+  // Browser-based sign-in. Opens the hosted /desktop/auth page in the user's
+  // real OS browser (where Google OAuth and passkeys work). The main process
+  // generates a one-time state nonce and waits for the unstuck:// hand-back.
+  startDesktopSignIn: (): Promise<boolean> =>
+    ipcRenderer.invoke("start-desktop-sign-in"),
+
+  // Fired by the main process when a verified sign-in ticket arrives via the
+  // unstuck:// deep link. The renderer exchanges it for an active Clerk
+  // session (signIn.create({ strategy: "ticket" }) + setActive).
+  onDesktopAuthTicket: (
+    cb: (payload: { ticket: string; state: string }) => void,
+  ): (() => void) => {
+    const listener = (
+      _evt: unknown,
+      payload: { ticket: string; state: string },
+    ) => cb(payload);
+    ipcRenderer.on("desktop-auth-ticket", listener);
+    return () => ipcRenderer.removeListener("desktop-auth-ticket", listener);
+  },
 
   isElectron: true as const,
 });

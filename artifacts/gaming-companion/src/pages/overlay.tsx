@@ -26,11 +26,6 @@ type ElectronAPI = {
   onPttToggle?: (cb: () => void) => () => void;
   onHandsFreeToggle?: (cb: () => void) => () => void;
   onAuthChanged?: (cb: () => void) => () => void;
-  getCookieAuthState?: () => Promise<{
-    hasSession: boolean;
-    hasClient: boolean;
-    uat: string | null;
-  }>;
 };
 
 function getElectronAPI(): ElectronAPI | null {
@@ -203,45 +198,6 @@ export default function OverlayPage() {
     });
     return off;
   }, [electronAPI]);
-
-  // Self-healing: clerk-js sometimes gets stuck holding an in-memory
-  // session ID whose token-refresh endpoint returns 401 forever (we've
-  // chased this for v2.0.50–2.0.59 without a clean root-cause fix).
-  // The user discovered manually reloading the overlay always fixes it.
-  // Automate it: if clerk-js has finished bootstrapping and reports
-  // signed-out, but a __session cookie IS present on this origin, the
-  // in-memory state is out of sync with the cookies — force one reload.
-  // Guarded by a sessionStorage flag so we never reload twice in a row
-  // (which would mask a genuinely-signed-out state).
-  useEffect(() => {
-    if (!isLoaded || isSignedIn) return;
-    // __session and __client are HttpOnly, so document.cookie can't see
-    // them from the renderer. Ask the main process — it can read the
-    // full cookie jar via Electron's session.cookies API — whether
-    // there's an active session. If yes but clerk-js disagrees, the
-    // in-memory state is stale and a page reload will re-bootstrap it.
-    if (!electronAPI?.getCookieAuthState) return;
-    const STORAGE_KEY = "unstuck:overlay:autoReloadedAt";
-    let cancelled = false;
-    // Grace period for clerk-js's first /v1/client call to settle.
-    const timer = window.setTimeout(async () => {
-      if (cancelled) return;
-      try {
-        const state = await electronAPI.getCookieAuthState!();
-        if (!state.hasSession && !state.hasClient) return;
-        const last = Number(sessionStorage.getItem(STORAGE_KEY) || "0");
-        if (Date.now() - last < 30_000) return;
-        sessionStorage.setItem(STORAGE_KEY, String(Date.now()));
-        window.location.reload();
-      } catch {
-        // ignore — if the IPC fails, leave the user with manual reload
-      }
-    }, 2000);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [isLoaded, isSignedIn, electronAPI]);
 
   // Force <html> and <body> to be transparent on the overlay route.
   // The Tailwind base layer applies `bg-background` to <body> globally

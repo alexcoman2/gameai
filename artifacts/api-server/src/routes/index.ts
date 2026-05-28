@@ -15,6 +15,7 @@ import adminRouter from "./admin.js";
 import meRouter from "./me.js";
 import profilesRouter from "./profiles.js";
 import gamesLibraryRouter from "./games-library.js";
+import desktopAuthRouter from "./desktop-auth.js";
 import { IS_LOCAL_ROUTES_ENABLED } from "../lib/server-mode.js";
 
 const router: IRouter = Router();
@@ -29,6 +30,9 @@ router.use(adminRouter);
 router.use(meRouter);
 router.use(profilesRouter);
 router.use(gamesLibraryRouter);
+// Browser-based desktop sign-in hand-back. Self-gates to hosted mode
+// internally (mints a Clerk sign-in token, deep-links it to unstuck://).
+router.use(desktopAuthRouter);
 // Sessions are now DB-backed on hosted (per-account, requireAuth) and
 // pass-through on proxy/dev, so the router is safe to mount everywhere.
 router.use(sessionsRouter);
