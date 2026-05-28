@@ -815,37 +815,36 @@ function maybeBroadcastAuthChange(nextValue: string): void {
     // current cookie jar. If the overlay isn't currently open, this is
     // a no-op — the next hotkey press already creates a fresh window.
     if (overlayWindow && !overlayWindow.isDestroyed()) {
-      const wasVisible = overlayWindow.isVisible();
       appendServerLog(
-        `[main] auth-changed: destroying overlay (signed ${nextSignedIn ? "in" : "out"}, wasVisible=${wasVisible})\n`,
+        `[main] auth-changed: destroying overlay (signed ${nextSignedIn ? "in" : "out"})\n`,
       );
-      overlayWindow.destroy();
-      overlayWindow = null;
-      // If the user had the overlay open, recreate it immediately so
-      // they don't lose context. The fresh window will bootstrap Clerk
-      // against the new cookies and show the correct signed-in/out UI.
-      if (wasVisible) {
-        createOverlayWindow();
-        // ready-to-show is wired inside createOverlayWindow → showOverlay
-        // path; just call show to surface it once the renderer is ready.
-        if (overlayWindow) {
-          const ow = overlayWindow as BrowserWindow;
-          const reveal = () => {
-            if (!ow.isDestroyed()) ow.show();
-          };
-          if ((ow as BrowserWindow).webContents.isLoading()) {
-            ow.once("ready-to-show", reveal);
-          } else {
-            reveal();
+      // Clear Clerk's per-origin storage on the shared session before
+      // tearing down the window. Otherwise clerk-js can rehydrate a
+      // stale auth snapshot from localStorage/IndexedDB on the next
+      // fresh window mount and stay locked in the previous user's
+      // signed-in/out state even though the cookies now disagree.
+      const LOCAL_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
+      void session.defaultSession
+        .clearStorageData({
+          origin: LOCAL_URL,
+          storages: ["localstorage", "indexdb", "cachestorage", "serviceworkers"],
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          appendServerLog(`[main] auth-changed: clearStorageData failed: ${msg}\n`);
+        })
+        .finally(() => {
+          if (overlayWindow && !overlayWindow.isDestroyed()) {
+            overlayWindow.destroy();
           }
-        }
-      }
+          overlayWindow = null;
+        });
     } else {
       appendServerLog(
         `[main] auth-changed: no overlay window to destroy (signed ${nextSignedIn ? "in" : "out"})\n`,
       );
     }
-  }, 300);
+  }, 1500);
 }
 
 // Bulk pull: snapshot every Clerk cookie currently scoped to the proxy
