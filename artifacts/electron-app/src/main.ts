@@ -740,6 +740,8 @@ function installClerkCookieMirror(): void {
   // Live: mirror every future change.
   cookies.on("changed", (_evt, cookie, cause, removed) => {
     void mirrorCookie(cookie, cause, removed);
+    void cause;
+    void removed;
     // Track sign-in/sign-out transitions so we can notify the overlay
     // window. clerk-js initializes once per BrowserWindow lifecycle and
     // caches the auth state in memory; updating cookies does NOT re-run
@@ -755,25 +757,29 @@ function installClerkCookieMirror(): void {
     //    back rewritten to the local origin, never touching the proxy
     //    host.
     if (cookie.name === "__session") {
-      const domain = cookie.domain ?? "";
-      const isProxyDomain = domain.endsWith(PROXY_HOST_SUFFIX);
-      const isLocalDomain =
-        domain === SERVER_HOST ||
-        domain === `.${SERVER_HOST}` ||
-        domain === "localhost" ||
-        domain === ".localhost" ||
-        // Some Electron/Chromium versions report host-only cookies with
-        // an empty domain string instead of the host. Treat those as
-        // local-origin __session events too.
-        (domain === "" && cookie.hostOnly === true);
-      if (isProxyDomain || isLocalDomain) {
-        const isRealRemoval =
-          removed && (cause === "explicit" || cause === "expired");
-        const nextValue = isRealRemoval ? "" : cookie.value;
-        maybeBroadcastAuthChange(nextValue);
-      }
+      // Don't try to infer sign-in/out from the event payload — `cause`
+      // varies across Electron versions and `removed=true` fires for
+      // plain value-update overwrites too. Just re-query the cookie
+      // store and check if any non-empty __session exists on either
+      // the proxy host or the local origin.
+      void recomputeAuthAndMaybeBroadcast();
     }
   });
+}
+
+async function recomputeAuthAndMaybeBroadcast(): Promise<void> {
+  const cookies = session.defaultSession.cookies;
+  try {
+    const [proxy, local] = await Promise.all([
+      cookies.get({ name: "__session" }),
+      cookies.get({ url: `http://${SERVER_HOST}:${SERVER_PORT}`, name: "__session" }),
+    ]);
+    const allSessions = [...proxy, ...local];
+    const signedIn = allSessions.some((c) => (c.value ?? "").length > 0);
+    maybeBroadcastAuthChange(signedIn ? "x" : "");
+  } catch {
+    // ignore — next event will retry
+  }
 }
 
 // Last known auth state as a boolean (true = signed in, false = signed out,
