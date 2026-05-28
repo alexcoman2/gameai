@@ -210,8 +210,15 @@ export default function OverlayPage() {
   // (which would mask a genuinely-signed-out state).
   useEffect(() => {
     if (!isLoaded || isSignedIn) return;
-    const hasSessionCookie = /(?:^|;\s*)__session=/.test(document.cookie);
-    if (!hasSessionCookie) return;
+    // __session is HttpOnly so document.cookie can't see it. Check
+    // __client_uat instead — Clerk's non-HttpOnly "user-active-at"
+    // timestamp cookie, set to a unix-seconds value when signed in
+    // and "0" when signed out. Presence of a non-zero value means
+    // the cookie jar believes someone is signed in, so if clerk-js
+    // disagrees, its in-memory state is stale.
+    const match = document.cookie.match(/(?:^|;\s*)__client_uat=([^;]+)/);
+    const uat = match?.[1] ?? "";
+    if (!uat || uat === "0") return;
     const STORAGE_KEY = "unstuck:overlay:autoReloadedAt";
     const last = Number(sessionStorage.getItem(STORAGE_KEY) || "0");
     // Only auto-reload once per 30s window to avoid infinite reload loops
