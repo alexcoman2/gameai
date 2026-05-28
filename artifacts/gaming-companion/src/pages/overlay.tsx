@@ -199,6 +199,34 @@ export default function OverlayPage() {
     return off;
   }, [electronAPI]);
 
+  // Self-healing: clerk-js sometimes gets stuck holding an in-memory
+  // session ID whose token-refresh endpoint returns 401 forever (we've
+  // chased this for v2.0.50–2.0.59 without a clean root-cause fix).
+  // The user discovered manually reloading the overlay always fixes it.
+  // Automate it: if clerk-js has finished bootstrapping and reports
+  // signed-out, but a __session cookie IS present on this origin, the
+  // in-memory state is out of sync with the cookies — force one reload.
+  // Guarded by a sessionStorage flag so we never reload twice in a row
+  // (which would mask a genuinely-signed-out state).
+  useEffect(() => {
+    if (!isLoaded || isSignedIn) return;
+    const hasSessionCookie = /(?:^|;\s*)__session=/.test(document.cookie);
+    if (!hasSessionCookie) return;
+    const STORAGE_KEY = "unstuck:overlay:autoReloadedAt";
+    const last = Number(sessionStorage.getItem(STORAGE_KEY) || "0");
+    // Only auto-reload once per 30s window to avoid infinite reload loops
+    // if clerk-js stays stuck for any other reason.
+    if (Date.now() - last < 30_000) return;
+    // Give clerk-js a brief grace period to settle on first mount — its
+    // /v1/client call usually completes in <1s. If we're still stuck
+    // after 2s, the in-memory state is wrong and a reload is the cure.
+    const timer = window.setTimeout(() => {
+      sessionStorage.setItem(STORAGE_KEY, String(Date.now()));
+      window.location.reload();
+    }, 2000);
+    return () => window.clearTimeout(timer);
+  }, [isLoaded, isSignedIn]);
+
   // Force <html> and <body> to be transparent on the overlay route.
   // The Tailwind base layer applies `bg-background` to <body> globally
   // (an opaque dark fill), which paints behind our translucent panels
