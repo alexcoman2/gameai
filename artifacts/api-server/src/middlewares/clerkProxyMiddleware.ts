@@ -280,26 +280,6 @@ export function clerkProxyPassthroughMiddleware(): RequestHandler {
       for (const cookie of rawSetCookies) {
         setCookies.push(cookie.replace(/;\s*Domain=[^;]+/gi, ""));
       }
-
-      // Self-healing: if Clerk rejected a session-refresh call with 401
-      // (session signed out / expired / replaced server-side but the
-      // local __client cookie still references the dead session ID),
-      // clerk-js silently keeps showing "signed out" with no path to
-      // recovery — every subsequent refresh hits the same 401. Force the
-      // local Clerk cookies to expire so the next renderer mount comes
-      // up cleanly signed-out and the user can re-authenticate.
-      // Only act on the session-token endpoint to avoid clobbering
-      // cookies on normal 401s elsewhere (e.g. webhook signing routes).
-      const isSessionTokenCall =
-        upstreamRes.status === 401 &&
-        /\/v1\/client\/sessions\/[^/]+\/tokens(\/|$|\?)/.test(req.originalUrl);
-      if (isSessionTokenCall) {
-        const stalePaths = ["__session", "__client", "__client_uat", "__clerk_db_jwt"];
-        for (const name of stalePaths) {
-          setCookies.push(`${name}=; Path=/; Max-Age=0; SameSite=Lax`);
-        }
-      }
-
       if (setCookies.length > 0) {
         res.setHeader("set-cookie", setCookies);
       }
