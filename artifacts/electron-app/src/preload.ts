@@ -61,5 +61,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openExternal: (url: string): Promise<boolean> =>
     ipcRenderer.invoke("open-external", url),
 
+  // Authoritative view of the Clerk cookie jar from the main process.
+  // The renderer can't see HttpOnly cookies like __session via
+  // document.cookie, so the overlay's auto-reload self-heal asks main.
+  getCookieAuthState: (): Promise<{
+    hasSession: boolean;
+    hasClient: boolean;
+    uat: string | null;
+  }> => ipcRenderer.invoke("get-cookie-auth-state"),
+
   isElectron: true as const,
 });

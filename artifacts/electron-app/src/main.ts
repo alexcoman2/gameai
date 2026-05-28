@@ -1147,3 +1147,26 @@ ipcMain.handle("overlay-get-handsfree-hotkey", () => {
   }
   return null;
 });
+
+// Lets the overlay renderer ask the main process whether the cookie
+// jar believes the user is signed in. The renderer can't see __session
+// (HttpOnly), and Clerk's other indicators (__client_uat) may or may
+// not be present depending on the install. The main process can
+// authoritatively inspect every cookie, so it's the source of truth
+// for the overlay's self-heal-via-reload logic.
+ipcMain.handle("get-cookie-auth-state", async () => {
+  try {
+    const LOCAL_URL = `http://${SERVER_HOST}:${SERVER_PORT}`;
+    const jar = await session.defaultSession.cookies.get({ url: LOCAL_URL });
+    const sessionCookie = jar.find((c) => c.name === "__session");
+    const clientCookie = jar.find((c) => c.name === "__client");
+    const uatCookie = jar.find((c) => c.name === "__client_uat");
+    return {
+      hasSession: !!sessionCookie && !!sessionCookie.value,
+      hasClient: !!clientCookie && !!clientCookie.value,
+      uat: uatCookie?.value ?? null,
+    };
+  } catch {
+    return { hasSession: false, hasClient: false, uat: null };
+  }
+});
