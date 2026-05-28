@@ -742,19 +742,36 @@ function installClerkCookieMirror(): void {
     void mirrorCookie(cookie, cause, removed);
     // Track sign-in/sign-out transitions so we can notify the overlay
     // window. clerk-js initializes once per BrowserWindow lifecycle and
-    // caches the auth state in memory; mirroring new cookies onto the
-    // local origin updates the cookie jar but does NOT re-run clerk-js
-    // in the already-loaded overlay renderer. Without this nudge the
-    // overlay keeps showing the pre-sign-in UI ("Please sign in") until
-    // the whole app is restarted.
-    if (
-      cookie.name === "__session" &&
-      (cookie.domain ?? "").endsWith(PROXY_HOST_SUFFIX)
-    ) {
-      const isRealRemoval =
-        removed && (cause === "explicit" || cause === "expired");
-      const nextValue = isRealRemoval ? "" : cookie.value;
-      maybeBroadcastAuthChange(nextValue);
+    // caches the auth state in memory; updating cookies does NOT re-run
+    // clerk-js in the already-loaded overlay renderer. Without this
+    // nudge the overlay keeps showing the pre-sign-in UI ("Please sign
+    // in") until the whole app is restarted.
+    //
+    // Watch BOTH origins:
+    //  - PROXY_HOST_SUFFIX: legacy/OAuth-callback path that sets cookies
+    //    directly on the hosted proxy domain.
+    //  - LOCAL (127.0.0.1): primary path when Clerk traffic flows
+    //    through VITE_CLERK_PROXY_URL (/api/__clerk) — Set-Cookie comes
+    //    back rewritten to the local origin, never touching the proxy
+    //    host.
+    if (cookie.name === "__session") {
+      const domain = cookie.domain ?? "";
+      const isProxyDomain = domain.endsWith(PROXY_HOST_SUFFIX);
+      const isLocalDomain =
+        domain === SERVER_HOST ||
+        domain === `.${SERVER_HOST}` ||
+        domain === "localhost" ||
+        domain === ".localhost" ||
+        // Some Electron/Chromium versions report host-only cookies with
+        // an empty domain string instead of the host. Treat those as
+        // local-origin __session events too.
+        (domain === "" && cookie.hostOnly === true);
+      if (isProxyDomain || isLocalDomain) {
+        const isRealRemoval =
+          removed && (cause === "explicit" || cause === "expired");
+        const nextValue = isRealRemoval ? "" : cookie.value;
+        maybeBroadcastAuthChange(nextValue);
+      }
     }
   });
 }
@@ -809,13 +826,21 @@ async function syncAllClerkCookiesFromProxy(): Promise<void> {
     name.startsWith("__clerk");
   try {
     const existing = await cookies.get({ domain: PROXY_HOST_SUFFIX });
-    // Seed the auth-change baseline from whatever was already in the cookie
-    // jar at startup so the FIRST real sign-in/out edge after launch is
-    // detected. Without this, a fresh install's first sign-in is silently
-    // swallowed as "baseline seed" and the overlay never gets notified.
+    // Seed the auth-change baseline from whatever __session is already in
+    // the cookie jar at startup so the FIRST real sign-in/out edge after
+    // launch is detected. Check BOTH origins — Clerk via /api/__clerk
+    // sets cookies on local origin, OAuth callback sets them on proxy.
     if (lastSessionValue === null) {
-      const sessionCookie = existing.find((c) => c.name === "__session");
-      lastSessionValue = sessionCookie?.value ?? "";
+      const proxySession = existing.find((c) => c.name === "__session");
+      let localSession: Electron.Cookie | undefined;
+      try {
+        const local = await cookies.get({ url: LOCAL_URL });
+        localSession = local.find((c) => c.name === "__session");
+      } catch {
+        // ignore
+      }
+      lastSessionValue =
+        localSession?.value ?? proxySession?.value ?? "";
     }
     let synced = 0;
     for (const c of existing) {
