@@ -809,6 +809,14 @@ async function syncAllClerkCookiesFromProxy(): Promise<void> {
     name.startsWith("__clerk");
   try {
     const existing = await cookies.get({ domain: PROXY_HOST_SUFFIX });
+    // Seed the auth-change baseline from whatever was already in the cookie
+    // jar at startup so the FIRST real sign-in/out edge after launch is
+    // detected. Without this, a fresh install's first sign-in is silently
+    // swallowed as "baseline seed" and the overlay never gets notified.
+    if (lastSessionValue === null) {
+      const sessionCookie = existing.find((c) => c.name === "__session");
+      lastSessionValue = sessionCookie?.value ?? "";
+    }
     let synced = 0;
     for (const c of existing) {
       if (!isClerkCookie(c.name)) continue;
