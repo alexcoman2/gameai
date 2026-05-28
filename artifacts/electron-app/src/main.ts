@@ -806,11 +806,44 @@ function maybeBroadcastAuthChange(nextValue: string): void {
   if (authBroadcastTimer) clearTimeout(authBroadcastTimer);
   authBroadcastTimer = setTimeout(() => {
     authBroadcastTimer = null;
-    appendServerLog(
-      `[main] auth-changed: notifying overlay (signed ${nextSignedIn ? "in" : "out"})\n`,
-    );
+    // Destroy the overlay window outright instead of asking the renderer
+    // to reload. A renderer-side window.location.reload() can rehydrate
+    // stale Clerk state from localStorage/sessionStorage and end up
+    // showing the same "signed out" UI even after the cookies changed.
+    // Destroying the BrowserWindow guarantees the next overlay show
+    // mounts a fresh React tree with a fresh clerk-js init against the
+    // current cookie jar. If the overlay isn't currently open, this is
+    // a no-op — the next hotkey press already creates a fresh window.
     if (overlayWindow && !overlayWindow.isDestroyed()) {
-      overlayWindow.webContents.send("auth-changed");
+      const wasVisible = overlayWindow.isVisible();
+      appendServerLog(
+        `[main] auth-changed: destroying overlay (signed ${nextSignedIn ? "in" : "out"}, wasVisible=${wasVisible})\n`,
+      );
+      overlayWindow.destroy();
+      overlayWindow = null;
+      // If the user had the overlay open, recreate it immediately so
+      // they don't lose context. The fresh window will bootstrap Clerk
+      // against the new cookies and show the correct signed-in/out UI.
+      if (wasVisible) {
+        createOverlayWindow();
+        // ready-to-show is wired inside createOverlayWindow → showOverlay
+        // path; just call show to surface it once the renderer is ready.
+        if (overlayWindow) {
+          const ow = overlayWindow as BrowserWindow;
+          const reveal = () => {
+            if (!ow.isDestroyed()) ow.show();
+          };
+          if ((ow as BrowserWindow).webContents.isLoading()) {
+            ow.once("ready-to-show", reveal);
+          } else {
+            reveal();
+          }
+        }
+      }
+    } else {
+      appendServerLog(
+        `[main] auth-changed: no overlay window to destroy (signed ${nextSignedIn ? "in" : "out"})\n`,
+      );
     }
   }, 300);
 }
