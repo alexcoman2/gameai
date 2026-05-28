@@ -776,22 +776,24 @@ function installClerkCookieMirror(): void {
   });
 }
 
-// Last known __session value (empty string = signed out). Used to debounce
-// the auth-changed broadcast so we only fire on real sign-in/out edges,
-// not on every cookie re-set storm Chromium produces (which can fire
-// 5-10 events per single Clerk login).
-let lastSessionValue: string | null = null;
+// Last known auth state as a boolean (true = signed in, false = signed out,
+// null = not yet observed). We deliberately do NOT track the raw JWT value
+// because Clerk rotates __session every ~50s for refresh; comparing JWT
+// strings would treat every rotation as a sign-in/out edge and reload the
+// overlay on a loop, wiping any text the user is typing.
+let lastSignedIn: boolean | null = null;
 let authBroadcastTimer: NodeJS.Timeout | null = null;
 function maybeBroadcastAuthChange(nextValue: string): void {
-  if (lastSessionValue === null) {
+  const nextSignedIn = nextValue.length > 0;
+  if (lastSignedIn === null) {
     // First observation. Seed the baseline without broadcasting — the
     // overlay was created from scratch and already saw whatever cookies
     // existed at load time.
-    lastSessionValue = nextValue;
+    lastSignedIn = nextSignedIn;
     return;
   }
-  if (lastSessionValue === nextValue) return;
-  lastSessionValue = nextValue;
+  if (lastSignedIn === nextSignedIn) return;
+  lastSignedIn = nextSignedIn;
   // Coalesce bursts: Clerk's sign-in flow rewrites __session a few times
   // in quick succession (cookie domain variants, JWT refreshes). Wait a
   // beat and only reload once.
@@ -799,7 +801,7 @@ function maybeBroadcastAuthChange(nextValue: string): void {
   authBroadcastTimer = setTimeout(() => {
     authBroadcastTimer = null;
     appendServerLog(
-      `[main] auth-changed: notifying overlay (signed ${nextValue ? "in" : "out"})\n`,
+      `[main] auth-changed: notifying overlay (signed ${nextSignedIn ? "in" : "out"})\n`,
     );
     if (overlayWindow && !overlayWindow.isDestroyed()) {
       overlayWindow.webContents.send("auth-changed");
@@ -830,7 +832,7 @@ async function syncAllClerkCookiesFromProxy(): Promise<void> {
     // the cookie jar at startup so the FIRST real sign-in/out edge after
     // launch is detected. Check BOTH origins — Clerk via /api/__clerk
     // sets cookies on local origin, OAuth callback sets them on proxy.
-    if (lastSessionValue === null) {
+    if (lastSignedIn === null) {
       const proxySession = existing.find((c) => c.name === "__session");
       let localSession: Electron.Cookie | undefined;
       try {
@@ -839,8 +841,9 @@ async function syncAllClerkCookiesFromProxy(): Promise<void> {
       } catch {
         // ignore
       }
-      lastSessionValue =
+      const seedValue =
         localSession?.value ?? proxySession?.value ?? "";
+      lastSignedIn = seedValue.length > 0;
     }
     let synced = 0;
     for (const c of existing) {
