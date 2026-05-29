@@ -21,10 +21,27 @@
 
 import { createProxyMiddleware } from "http-proxy-middleware";
 import type { RequestHandler } from "express";
-import type { IncomingHttpHeaders } from "http";
+import type { IncomingHttpHeaders, IncomingMessage } from "http";
+import { logger } from "../lib/logger.js";
 
 const CLERK_FAPI = "https://frontend-api.clerk.dev";
 export const CLERK_PROXY_PATH = "/api/__clerk";
+
+// TEMP DIAGNOSTIC (desktop sign-in debugging). Read-only: never logs cookie
+// values, tokens, or the secret key — only safe derived facts (counts, cookie
+// NAMES, and Clerk's own non-sensitive error headers). Matches the auth steps
+// that are failing in production (sign_ins create + first-factor + the OAuth
+// callback) so we can see exactly why FAPI returns 401. Remove once resolved.
+const CLERK_DIAG = /\/v1\/client\/sign_ins|first_factor|oauth_callback/;
+
+function countCookie(cookieHeader: string | undefined, name: string): number {
+  if (!cookieHeader) return 0;
+  let count = 0;
+  for (const part of cookieHeader.split(";")) {
+    if (part.trim().startsWith(`${name}=`)) count += 1;
+  }
+  return count;
+}
 
 /**
  * Returns the first effective public hostname for the given request,
@@ -115,6 +132,51 @@ export function clerkProxyMiddleware(): RequestHandler {
         if (clientIp) {
           proxyReq.setHeader("X-Forwarded-For", clientIp);
         }
+
+        // TEMP DIAGNOSTIC — see note at top of file.
+        const url = req.url ?? "";
+        if (CLERK_DIAG.test(url)) {
+          const cookie = req.headers["cookie"];
+          const cookieStr = Array.isArray(cookie) ? cookie.join("; ") : cookie;
+          logger.info(
+            {
+              clerkDiag: "req",
+              method: req.method,
+              url,
+              clientCount: countCookie(cookieStr, "__client"),
+              clientUatCount: countCookie(cookieStr, "__client_uat"),
+              sessionCount: countCookie(cookieStr, "__session"),
+              hasOrigin: typeof req.headers["origin"] === "string",
+              hasReferer: typeof req.headers["referer"] === "string",
+              originRewritten:
+                isLocalDesktopUrl(req.headers["origin"]) ||
+                isLocalDesktopUrl(req.headers["referer"]),
+              proxyOrigin,
+            },
+            "clerk-proxy request",
+          );
+        }
+      },
+      proxyRes: (proxyRes, req: IncomingMessage) => {
+        // TEMP DIAGNOSTIC — see note at top of file.
+        const url = req.url ?? "";
+        if (!CLERK_DIAG.test(url)) return;
+        const rawSetCookie = proxyRes.headers["set-cookie"];
+        const setCookieNames = (
+          Array.isArray(rawSetCookie) ? rawSetCookie : rawSetCookie ? [rawSetCookie] : []
+        ).map((c) => String(c).split("=")[0]?.trim());
+        logger.info(
+          {
+            clerkDiag: "res",
+            method: req.method,
+            url,
+            status: proxyRes.statusCode,
+            setCookieNames,
+            clerkAuthReason: proxyRes.headers["x-clerk-auth-reason"] ?? null,
+            clerkAuthMessage: proxyRes.headers["x-clerk-auth-message"] ?? null,
+          },
+          "clerk-proxy response",
+        );
       },
     },
   }) as RequestHandler;

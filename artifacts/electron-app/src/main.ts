@@ -934,7 +934,13 @@ ipcMain.handle("start-desktop-sign-in", async () => {
   try {
     const nonce = randomUUID();
     pendingDesktopAuthState = nonce;
-    const url = `${HOSTED_WEB_ORIGIN}/desktop/auth?state=${encodeURIComponent(nonce)}`;
+    // NOTE: the nonce is passed as `desktop_state`, NOT `state`. `state` is a
+    // reserved query parameter Clerk uses internally for its OAuth/CSRF
+    // handshake — putting our own value there collides with Clerk's on the
+    // Google round-trip and invalidates the sign-in context (prepare_first_factor
+    // then 401s). The unstuck:// deep link below still uses `state` because that
+    // custom scheme is ours and Clerk never sees it.
+    const url = `${HOSTED_WEB_ORIGIN}/desktop/auth?desktop_state=${encodeURIComponent(nonce)}`;
     await shell.openExternal(url);
     appendServerLog(`[main] start-desktop-sign-in → opened browser\n`);
     return true;

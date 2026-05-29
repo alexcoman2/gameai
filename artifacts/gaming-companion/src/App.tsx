@@ -146,18 +146,43 @@ function DesktopAuthPage() {
   const { isLoaded, isSignedIn } = useAuth();
   const search =
     typeof window !== "undefined" ? window.location.search : "";
-  const state = new URLSearchParams(search).get("state") ?? "";
+  // Read the desktop nonce. New desktop builds pass it as `desktop_state`;
+  // older installed builds (≤2.0.63) still pass it as `state`. We accept both,
+  // but we must NEVER let `state` reach clerk-js: `state` is reserved by
+  // Clerk's OAuth/CSRF handshake, and our value there collides on the Google
+  // round-trip and invalidates the sign-in context — that is what makes
+  // prepare_first_factor 401 on this page but not on /sign-in.
+  const params = new URLSearchParams(search);
+  const desktopState =
+    params.get("desktop_state") ?? params.get("state") ?? "";
   const selfUrl = `${window.location.origin}${basePath}/desktop/auth${
-    state ? `?state=${encodeURIComponent(state)}` : ""
+    desktopState ? `?desktop_state=${encodeURIComponent(desktopState)}` : ""
   }`;
+
+  // Strip the reserved `state` param out of the address bar on load so
+  // clerk-js never observes it (covers older desktop builds that open this
+  // page with ?state=<nonce>). The nonce is already captured above.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const p = new URLSearchParams(window.location.search);
+    if (!p.has("state")) return;
+    p.delete("state");
+    if (desktopState) p.set("desktop_state", desktopState);
+    const qs = p.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${qs ? `?${qs}` : ""}`,
+    );
+  }, [desktopState]);
 
   useEffect(() => {
     if (!isLoaded || !isSignedIn) return;
     const tokenUrl = `${basePath}/api/desktop/token${
-      state ? `?state=${encodeURIComponent(state)}` : ""
+      desktopState ? `?desktop_state=${encodeURIComponent(desktopState)}` : ""
     }`;
     window.location.href = tokenUrl;
-  }, [isLoaded, isSignedIn, state]);
+  }, [isLoaded, isSignedIn, desktopState]);
 
   if (isLoaded && isSignedIn) {
     return (

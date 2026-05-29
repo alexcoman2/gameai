@@ -21,8 +21,11 @@ if (IS_HOSTED) {
     const userId = req.userId!;
     // Echo the caller-supplied opaque nonce straight back to the app so the
     // Electron main process can verify the ticket belongs to the sign-in it
-    // initiated. We never interpret it server-side.
-    const rawState = req.query.state;
+    // initiated. We never interpret it server-side. The browser-facing param is
+    // `desktop_state` (NOT `state`, which is reserved by Clerk's OAuth handshake
+    // and collides on /desktop/auth); the deep link below still uses `state`
+    // because that is our own custom scheme the Electron main process reads.
+    const rawState = req.query.desktop_state ?? req.query.state;
     const state = typeof rawState === "string" ? rawState : "";
     try {
       const token = await clerkClient.signInTokens.createSignInToken({
