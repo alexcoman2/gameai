@@ -260,13 +260,26 @@ function DesktopAuthTicketBridge() {
       if (!ticket) return;
       void (async () => {
         // Signal-based custom flow: ticket() drives the SignIn resource to
-        // `complete`, then finalize() promotes it to the active session
-        // (updating useUser / useAuth everywhere). Errors are returned, not
-        // thrown — an expired/used ticket just leaves the user to retry.
+        // `complete` (ticket sign-in is single-step), then finalize() promotes
+        // it to the active session (writing __session, updating useUser /
+        // useAuth everywhere). Errors are returned, not thrown — an
+        // expired/used ticket just leaves the user to retry.
+        //
+        // We must NOT gate finalize() on `signIn.status` here: `signIn` is the
+        // render-closure snapshot captured when the effect ran, and after
+        // `await ticket()` it has NOT observed the signal update yet, so
+        // `signIn.status` is stale (still pre-ticket). Reading it skipped
+        // finalize() entirely, which is why the ticket exchange returned 200
+        // but the app stayed signed out. finalize() validates completion
+        // internally, so calling it directly after a successful ticket() is
+        // both safe and correct.
         const { error } = await signIn.ticket({ ticket });
         if (error) return;
-        if (signIn.status === "complete") {
-          await signIn.finalize();
+        // Surface (don't swallow) an activation failure — a finalize() error
+        // means the session was NOT promoted, so the user must retry.
+        const { error: finalizeError } = await signIn.finalize();
+        if (finalizeError) {
+          console.error("[desktop-auth] finalize failed", finalizeError);
         }
       })();
     });
