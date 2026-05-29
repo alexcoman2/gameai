@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider, useQueryClient } from "@tanstack/react-query";
-import { ClerkProvider, SignIn, SignUp, useClerk, useAuth, useSignIn } from "@clerk/react";
+import { ClerkProvider, SignIn, SignUp, useClerk, useAuth } from "@clerk/react";
 import { setAuthTokenGetter as setApiClientAuthTokenGetter } from "@workspace/api-client-react";
 import { setAuthTokenGetter } from "@/lib/auth-fetch";
 import { identifyUser, resetUser, trackPageview } from "@/lib/posthog";
@@ -245,9 +245,12 @@ function ClerkAuthTokenBridge() {
 // whole app (main window + overlay) becomes signed-in, with Clerk's cookies
 // written first-party through the /api/__clerk proxy.
 function DesktopAuthTicketBridge() {
-  const { signIn } = useSignIn();
+  const clerk = useClerk();
+  // Dedupe: the ticket is single-use, so processing it twice (StrictMode
+  // double-mount, or a main-process queue flush racing a direct send) would
+  // make the second create() fail on an already-consumed token.
+  const processedRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (!signIn) return;
     const api = (window as Window & {
       electronAPI?: {
         onDesktopAuthTicket?: (
@@ -256,35 +259,57 @@ function DesktopAuthTicketBridge() {
       };
     }).electronAPI;
     if (!api?.onDesktopAuthTicket) return;
+    // A cold-start deep link can deliver the ticket before clerk-js has
+    // finished loading its client. Poll briefly (up to ~10s) instead of
+    // dropping the single-use ticket on the first miss.
+    const waitForSignIn = async () => {
+      for (let i = 0; i < 100; i++) {
+        if (clerk.loaded && clerk.client?.signIn) return clerk.client.signIn;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      return clerk.client?.signIn ?? null;
+    };
     const off = api.onDesktopAuthTicket(({ ticket }) => {
       if (!ticket) return;
+      if (processedRef.current.has(ticket)) return;
+      processedRef.current.add(ticket);
       void (async () => {
-        // Signal-based custom flow: ticket() drives the SignIn resource to
-        // `complete` (ticket sign-in is single-step), then finalize() promotes
-        // it to the active session (writing __session, updating useUser /
-        // useAuth everywhere). Errors are returned, not thrown — an
-        // expired/used ticket just leaves the user to retry.
-        //
-        // We must NOT gate finalize() on `signIn.status` here: `signIn` is the
-        // render-closure snapshot captured when the effect ran, and after
-        // `await ticket()` it has NOT observed the signal update yet, so
-        // `signIn.status` is stale (still pre-ticket). Reading it skipped
-        // finalize() entirely, which is why the ticket exchange returned 200
-        // but the app stayed signed out. finalize() validates completion
-        // internally, so calling it directly after a successful ticket() is
-        // both safe and correct.
-        const { error } = await signIn.ticket({ ticket });
-        if (error) return;
-        // Surface (don't swallow) an activation failure — a finalize() error
-        // means the session was NOT promoted, so the user must retry.
-        const { error: finalizeError } = await signIn.finalize();
-        if (finalizeError) {
-          console.error("[desktop-auth] finalize failed", finalizeError);
+        // Canonical Clerk "sign in with a ticket" custom flow. We use the
+        // standard SignInResource via useClerk() (NOT the experimental
+        // signals useSignIn().ticket()/finalize(), which returned 200 from
+        // /v1/client/sign_ins but never drove the sign-in to `complete` —
+        // finalize() then threw "Cannot finalize sign-in without a created
+        // session" and the app stayed signed out):
+        //   1. create({ strategy: "ticket", ticket }) exchanges the
+        //      short-lived sign-in token for a completed SignIn carrying a
+        //      createdSessionId.
+        //   2. setActive({ session }) promotes it to the active session,
+        //      writing __session (first-party via /api/__clerk) and updating
+        //      useUser / useAuth everywhere.
+        const signIn = await waitForSignIn();
+        if (!signIn) {
+          console.error("[desktop-auth] Clerk never became ready; ticket dropped");
+          return;
+        }
+        try {
+          const res = await signIn.create({ strategy: "ticket", ticket });
+          if (res.status === "complete" && res.createdSessionId) {
+            await clerk.setActive({ session: res.createdSessionId });
+          } else {
+            // Not complete = unexpected for a single-step ticket sign-in
+            // (e.g. expired/used token). Leave the user to retry.
+            console.error(
+              "[desktop-auth] ticket sign-in not complete:",
+              res.status,
+            );
+          }
+        } catch (err) {
+          console.error("[desktop-auth] ticket sign-in failed", err);
         }
       })();
     });
     return off;
-  }, [signIn]);
+  }, [clerk]);
   return null;
 }
 
