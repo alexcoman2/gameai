@@ -36,6 +36,13 @@ const clerkPubKey = isLocalHost
 const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, "");
 
+// True only inside the bundled Electron desktop app (preload injects
+// electronAPI.isElectron). Used to keep web-only Clerk behavior canonical
+// while still enabling the desktop-specific bearer-token transport.
+const isElectron = !!(
+  window as Window & { electronAPI?: { isElectron?: boolean } }
+).electronAPI?.isElectron;
+
 // In Electron (and any non-proxy host), Clerk's OAuth flow defaults to using
 // the FAPI/proxy origin (game-companion-ai.replit.app) as the post-sign-in
 // redirect target. That sends the Electron window permanently to the hosted
@@ -106,6 +113,7 @@ function SignInPage() {
         routing="path"
         path={`${basePath}/sign-in`}
         signUpUrl={`${basePath}/sign-up`}
+        oauthFlow="redirect"
         forceRedirectUrl={postAuthRedirectUrl}
         fallbackRedirectUrl={postAuthRedirectUrl}
       />
@@ -120,6 +128,7 @@ function SignUpPage() {
         routing="path"
         path={`${basePath}/sign-up`}
         signInUrl={`${basePath}/sign-in`}
+        oauthFlow="redirect"
         forceRedirectUrl={postAuthRedirectUrl}
         fallbackRedirectUrl={postAuthRedirectUrl}
       />
@@ -170,6 +179,7 @@ function DesktopAuthPage() {
         routing="path"
         path={`${basePath}/desktop/auth`}
         signUpUrl={`${basePath}/sign-up`}
+        oauthFlow="redirect"
         forceRedirectUrl={selfUrl}
         fallbackRedirectUrl={selfUrl}
       />
@@ -180,6 +190,11 @@ function DesktopAuthPage() {
 function ClerkAuthTokenBridge() {
   const { getToken, isLoaded } = useAuth();
   useEffect(() => {
+    // Web uses Clerk session cookies sent automatically by the browser, so
+    // wiring a bearer-token getter on web is non-canonical and adds failure
+    // modes. Only the Electron renderer (separate 127.0.0.1 origin, no shared
+    // cookie jar with the hosted API) needs the explicit bearer transport.
+    if (!isElectron) return;
     if (!isLoaded) return;
     const getter = async () => {
       try {
