@@ -11,8 +11,8 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.97.1",
-    "@clerk/express": "^2.1.20",
-    "@clerk/shared": "^4.13.0",
+    "@clerk/express": "^2.1.22",
+    "@clerk/shared": "^4.14.0",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/instrumentation": "^0.218.0",
     "@paddle/paddle-node-sdk": "^3.8.0",

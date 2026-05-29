@@ -79,12 +79,33 @@ export function clerkProxyMiddleware(): RequestHandler {
         proxyReq.setHeader("Clerk-Secret-Key", secretKey);
 
         // Clerk Production keys validate that the incoming Origin header
-        // matches (or is a subdomain of) the proxy URL. When the request
-        // comes from a desktop client (e.g. Electron at 127.0.0.1), the
-        // browser-supplied Origin won't match. Rewrite Origin and Referer
-        // to the proxy's own origin so FAPI accepts the call.
-        proxyReq.setHeader("Origin", proxyOrigin);
-        proxyReq.setHeader("Referer", `${proxyOrigin}/`);
+        // matches (or is a subdomain of) the proxy URL. A normal browser
+        // request is already first-party on the proxy host, so its Origin
+        // matches and we must leave it untouched — this is the canonical
+        // behavior that makes web sign-in work in production.
+        //
+        // The ONLY exception is a desktop client: clerk-js running inside
+        // Electron at http://127.0.0.1:<port> forwards its requests through
+        // the local passthrough to this hosted proxy, carrying an Origin/
+        // Referer of 127.0.0.1/localhost which FAPI would reject. For those
+        // (and only those) requests, rewrite Origin/Referer to the proxy's
+        // own origin. We check BOTH headers because some clerk-js calls
+        // (e.g. GET /v1/client) omit Origin but still send a localhost
+        // Referer. We deliberately do NOT touch normal browser or
+        // top-level-navigation requests, keeping this middleware canonical
+        // for the web flow.
+        const isLocalDesktopUrl = (value: unknown): boolean =>
+          typeof value === "string" &&
+          /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\])(:\d+)?(\/|$)/i.test(
+            value,
+          );
+        if (
+          isLocalDesktopUrl(req.headers["origin"]) ||
+          isLocalDesktopUrl(req.headers["referer"])
+        ) {
+          proxyReq.setHeader("Origin", proxyOrigin);
+          proxyReq.setHeader("Referer", `${proxyOrigin}/`);
+        }
 
         const xff = req.headers["x-forwarded-for"];
         const clientIp =
@@ -93,40 +114,6 @@ export function clerkProxyMiddleware(): RequestHandler {
           "";
         if (clientIp) {
           proxyReq.setHeader("X-Forwarded-For", clientIp);
-        }
-      },
-      proxyRes: (proxyRes, req) => {
-        // We rewrote the upstream Origin to satisfy Clerk's same-origin
-        // check, so FAPI's CORS response headers come back addressed to
-        // the proxy domain — which the browser will reject as a mismatch
-        // against its own (different) Origin. Rewrite the CORS headers
-        // back to the original client Origin so the browser accepts them.
-        const clientOrigin = req.headers["origin"];
-        if (clientOrigin) {
-          proxyRes.headers["access-control-allow-origin"] = clientOrigin;
-          proxyRes.headers["access-control-allow-credentials"] = "true";
-          const vary = proxyRes.headers["vary"];
-          const varyStr = Array.isArray(vary) ? vary.join(", ") : vary || "";
-          if (!/\borigin\b/i.test(varyStr)) {
-            proxyRes.headers["vary"] = varyStr
-              ? `${varyStr}, Origin`
-              : "Origin";
-          }
-        }
-
-        // Clerk's FAPI sets cookies with `Domain=clerk.<…>` and
-        // `Domain=.<something>.clerk.dev`. The browser sees the response
-        // coming back from our proxy host (e.g. game-companion-ai.replit.app)
-        // and REJECTS those cookies as a domain mismatch — so the
-        // `__client` and `__session` cookies never get stored, and the
-        // user is signed out the moment the Clerk JWT expires (or the app
-        // is relaunched). Strip the Domain attribute so the browser scopes
-        // each cookie to the proxy host instead.
-        const setCookie = proxyRes.headers["set-cookie"];
-        if (setCookie && Array.isArray(setCookie)) {
-          proxyRes.headers["set-cookie"] = setCookie.map((c) =>
-            c.replace(/;\s*Domain=[^;]+/gi, ""),
-          );
         }
       },
     },
